@@ -1,0 +1,2 @@
+[workspace]
+members = ["menu", "tests", "menu-derive"]
