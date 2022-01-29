@@ -1,55 +1,63 @@
-use menu::Menu;
 //use std::io::{stdin, stdout, Write};
 
-fn play() {}
+use menu::Menu;
+use std::str::FromStr;
+
+mod test_inits {
+    pub fn play() {}
+}
 fn exit() {}
 
 #[derive(Menu)]
-#[main(msg = "Hello this is a test menu")]
-pub enum MyMenu {
-    #[field(msg = "Play now", init = test::play)]
+pub struct MyStructMenu {
+    #[field(msg = "Give the author name")]
+    pub author: String,
+    #[field(msg = "Give the type of the license")]
+    pub t: Type,
+}
+
+#[derive(Debug)]
+pub enum Type {
+    MIT,
+    GPL,
+    BSD,
+}
+
+// this should be expanded by macro too
+impl FromStr for Type {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mit" | "MIT" => Ok(Self::MIT),
+            "gpl" | "GPL" => Ok(Self::GPL),
+            "bsd" | "BSD" => Ok(Self::BSD),
+            _ => Err(()),
+        }
+    }
+}
+
+//#[derive(menu::Menu)]
+pub enum MyEnumMenu {
+    //#[menu(msg = "Play now", init = test_inits::play)]
     Play,
-    #[field(init = exit)]
+    //#[menu(init = exit)]
     Exit,
 }
 
-/*
-impl MyMenu {
-    pub fn run() {
-        use std::io::{stdin, stdout, Write};
-        let mut stdout = stdout();
-        let stdin = stdin();
-        println!("{}", "Hello this is a test menu");
-
-        let msgs = ["Play", "Exit"];
-        for (i, msg) in msgs.iter().enumerate() {
-            println!("{} - {}", i + 1, msg);
-        }
-
-        let i = loop {
-            println!(">> ");
-            stdout.flush().expect("Unable to flush stdout");
-            let mut buf = String::new();
-            stdin.read_line(&mut buf).expect("Unable to read line");
-            match buf.parse::<usize>() {
-                Ok(x) if (1..=msgs.len()).contains(&x) => break x,
-                _ => continue,
-            }
-        };
-        match i {
-            1 => play(),
-            2 => exit(),
-            _ => unreachable!(),
-        };
-    }
-}
-*/
 #[cfg(test)]
 mod tests {
-    use crate::MyMenu;
+    use super::*;
 
     #[test]
     fn call_run() {
-        MyMenu::run();
+        //MyMenu::run();
+        //MyMenu::loltest();
+    }
+
+    #[test]
+    fn struct_base() {
+        println!("test");
+        let values = MyStructMenu::from_fields();
     }
 }

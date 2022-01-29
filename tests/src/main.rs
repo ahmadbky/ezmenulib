@@ -1,5 +1,10 @@
-use tests::MyMenu;
+use menu::Menu;
+use tests::*;
 
 fn main() {
-    MyMenu::run();
+    //MyEnumMenu::run();
+    let values = MyStructMenu::from_fields();
+
+    println!("you entered as author name: {}", values.author);
+    println!("and as license type: {:?}", values.t);
 }
