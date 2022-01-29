@@ -1,18 +1,25 @@
 //use std::io::{stdin, stdout, Write};
 
-use menu::Menu;
+pub use menu::Menu;
 use std::str::FromStr;
 
 mod test_inits {
-    pub fn play() {}
+    pub fn play(name: &String) {
+        if name.to_lowercase() == "ahmad" {
+            println!("oh i know u");
+        }
+    }
 }
-fn exit() {}
+
+fn exit(_t: &Type) {
+    println!("lol ok exit")
+}
 
 #[derive(Menu)]
 pub struct MyStructMenu {
-    #[field(msg = "Give the author name")]
+    #[field(msg = "Give the author name", then = test_inits::play)]
     pub author: String,
-    #[field(msg = "Give the type of the license")]
+    #[field(msg = "Give the type of the license", then = exit)]
     pub t: Type,
 }
 
@@ -58,6 +65,6 @@ mod tests {
     #[test]
     fn struct_base() {
         println!("test");
-        let values = MyStructMenu::from_fields();
+        let values = MyStructMenu::from_menu();
     }
 }

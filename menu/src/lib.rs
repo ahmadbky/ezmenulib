@@ -5,7 +5,11 @@ use std::str::FromStr;
 
 /// Function that asks the user a value, then returns it.
 /// It prints the text according to the parameters formatting.
-pub fn ask<T: FromStr>(stdin: &Stdin, stdout: &mut Stdout, msg: &str) -> T {
+pub fn ask<T, F>(stdin: &Stdin, stdout: &mut Stdout, msg: &str, then: F) -> T
+where
+    T: FromStr,
+    F: FnOnce(&T),
+{
     //loops while incorrect input
     loop {
         print!("- {}: ", msg);
@@ -20,7 +24,10 @@ pub fn ask<T: FromStr>(stdin: &Stdin, stdout: &mut Stdout, msg: &str) -> T {
 
         // user input type checking
         match out.trim().parse::<T>() {
-            Ok(t) => break t,
+            Ok(t) => {
+                then(&t);
+                break t;
+            }
             Err(_) => continue,
         }
     }
@@ -29,5 +36,5 @@ pub fn ask<T: FromStr>(stdin: &Stdin, stdout: &mut Stdout, msg: &str) -> T {
 /// A trait used to construct a menu from a struct fields
 pub trait Menu {
     /// Constructs the struct menu from its fields
-    fn from_fields() -> Self;
+    fn from_menu() -> Self;
 }
