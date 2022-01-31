@@ -3,14 +3,14 @@
 version = 3
 
 [[package]]
-name = "menu"
+name = "ezmenu"
 version = "0.1.0"
 dependencies = [
- "menu-derive",
+ "ezmenu-derive",
 ]
 
 [[package]]
-name = "menu-derive"
+name = "ezmenu-derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro-error",
@@ -70,13 +70,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
-]
-
-[[package]]
-name = "tests"
-version = "0.1.0"
-dependencies = [
- "menu",
 ]
 
 [[package]]
