@@ -1,2 +1,15 @@
-[workspace]
-members = ["menu", "tests", "menu-derive"]
+[package]
+name = "ezmenu"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
+documentation = "https://docs.rs/ezmenu-derive"
+description = "Builds a CLI menu with a derive."
+repository = "https://github.com/ahbalbk/ezmenu"
+categories = ["command-line-interface"]
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ezmenu-derive = { path = "./ezmenu-derive" }

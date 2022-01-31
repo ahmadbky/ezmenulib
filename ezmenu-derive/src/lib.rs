@@ -5,7 +5,7 @@ use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Lit, LitStr, Meta,
-    MetaList, MetaNameValue, NestedMeta, Path,
+    MetaList, MetaNameValue, NestedMeta, Path, Type,
 };
 
 #[proc_macro_derive(Menu, attributes(field, all))]
@@ -36,7 +36,8 @@ fn first_seg_val(path: &Path) -> String {
 }
 
 /// Struct used to contain information on a menu field
-/// It contains all optional values because values can be omitted in the attribute
+/// It contains all optional values because values
+/// or the whole attribute can be omitted
 #[derive(Default)]
 struct FieldDesc {
     msg: Option<LitStr>,
@@ -118,8 +119,6 @@ fn build_struct(name: Ident, fields: FieldsNamed) -> TokenStream {
         })
         .collect::<Vec<FieldDesc>>();
 
-    // TODO: use unzip method maybe
-
     let f_ident = fields.iter().map(|f| f.ident.as_ref().unwrap());
     let f_inner = f_ident.clone();
     let f_type = fields.iter().map(|f| &f.ty);
@@ -139,13 +138,13 @@ fn build_struct(name: Ident, fields: FieldsNamed) -> TokenStream {
     });
 
     quote! {
-        impl ::menu::Menu for #name {
+        impl #name {
             fn from_menu() -> Self {
                 let stdin = ::std::io::stdin();
                 let mut stdout = ::std::io::stdout();
 
-                #(let #f_ident = ::menu::ask::<#f_type, _>(
-                    &stdin,
+                #(let #f_ident: #f_type = ::ezmenu::ask(
+                    &mut stdin.lock(),
                     &mut stdout,
                     #f_msg,
                     #f_then,
