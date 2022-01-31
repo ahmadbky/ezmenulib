@@ -1,5 +1,4 @@
 pub use menu_derive::*;
-use std::fmt::Debug;
 use std::io::{Stdin, Stdout, Write};
 use std::str::FromStr;
 

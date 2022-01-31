@@ -17,9 +17,7 @@ fn exit(_t: &Type) {
 
 #[derive(Menu)]
 pub struct MyStructMenu {
-    #[field(msg = "Give the author name", then = test_inits::play)]
     pub author: String,
-    #[field(msg = "Give the type of the license", then = exit)]
     pub t: Type,
 }
 
@@ -35,10 +33,11 @@ impl FromStr for Type {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "mit" | "MIT" => Ok(Self::MIT),
-            "gpl" | "GPL" => Ok(Self::GPL),
-            "bsd" | "BSD" => Ok(Self::BSD),
+        let s = s.to_lowercase();
+        match s.as_str() {
+            "mit" => Ok(Self::MIT),
+            "gpl" => Ok(Self::GPL),
+            "bsd" => Ok(Self::BSD),
             _ => Err(()),
         }
     }
