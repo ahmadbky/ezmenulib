@@ -8,8 +8,9 @@ description = "Builds a CLI menu with a derive."
 repository = "https://github.com/ahbalbk/ezmenu"
 categories = ["command-line-interface"]
 license = "MIT"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ezmenu-derive = { path = "./ezmenu-derive" }
+ezmenu-derive = { version = "0.1.0", path = "./ezmenu-derive" }
