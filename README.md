@@ -17,7 +17,7 @@ Here is an example of how to use it:
 use ezmenu::Menu;
 
 fn check(n: &i32) {
-    if n == 0 {
+    if *n == 0 {
         println!("yo respect me plz :'(");
     } else {
         println!("good. :)");
@@ -32,16 +32,21 @@ struct MyMenu {
 }
 ```
 
-To display the menu, you construct the struct by calling its `from_menu` method:
+To display the menu, you instantiate the struct by calling its `from_menu` method:
 ```rust
-let values = MyMenu::from_menu();
-println!("values provided: author={}, number={}", values.author, values.number);
+let MyMenu { author, number } = MyMenu::from_menu();
+println!("values provided: author={}, number={}", author, number);
 ```
 
 This sample code prints the standard menu like above:
 ```
 - author: Ahmad
-- Give a positive number: -43
-well that's not positive but anyway.
-values provided: author=Ahmad, number=-43
+- Give a nonzero number: 0
+yo respect me plz :'(
+values provided: author=Ahmad, number=0
 ```
+
+## WIP
+
+This project is not finished yet, and is at its first release.
+You can check the [EZMenu project](https://github.com/users/ahbalbk/projects/4) to see all the next features.
