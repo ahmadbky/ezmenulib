@@ -11,15 +11,13 @@ where
     R: BufRead,
     W: Write,
 {
-    write!(writer, "- {}: ", msg).expect("Unable to write");
+    write!(writer, "- {}: ", msg)?;
     // flushes writer so it prints the prefix
-    writer.flush().expect("Unable to flush stdout");
+    writer.flush()?;
 
     // read the user input
     let mut out = String::new();
-    reader
-        .read_line(&mut out)
-        .expect("Unable to read line from stdin");
+    reader.read_line(&mut out)?;
 
     Ok(out)
 }

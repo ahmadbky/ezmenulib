@@ -1,7 +1,7 @@
 extern crate proc_macro;
 
 use proc_macro2::{Ident, TokenStream};
-use proc_macro_error::{abort_call_site, proc_macro_error};
+use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::quote;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Lit, LitStr, Meta,
@@ -44,10 +44,8 @@ struct FieldDesc {
     then: Option<Path>,
 }
 
-// TODO: better error handling
 impl From<Meta> for FieldDesc {
     fn from(m: Meta) -> Self {
-        dbg!("{:#?}", &m);
         // values modified at each iteration
         // (if the user provided them multiple times)
         let mut msg = None;
@@ -61,39 +59,60 @@ impl From<Meta> for FieldDesc {
                     // like a path to a function, or a string literal for a message
                     NestedMeta::Meta(Meta::List(MetaList { path, nested, .. })) => {
                         // get the first nested meta inside parenthesis
-                        let nested = nested.first().expect("value missing");
+                        let nested = nested.first();
+                        let nested = match nested {
+                            Some(n) => n,
+                            _ => abort!(path, "value definition missing"),
+                        };
                         match first_seg_val(&path).as_str() {
-                            "msg" => if let NestedMeta::Lit(Lit::Str(lit)) = nested {
-                                msg = Some(lit.clone());
-                            } else {
-                                abort_call_site!("string literal value expected for `msg` attribute");
-                            },
-                            "then" => if let NestedMeta::Meta(Meta::Path(path)) = nested {
-                                then = Some(path.clone());
-                            } else {
-                                abort_call_site!("path to function expected for `then` attribute");
+                            "msg" => {
+                                if let NestedMeta::Lit(Lit::Str(lit)) = nested {
+                                    msg = Some(lit.clone());
+                                } else {
+                                    abort!(
+                                        nested,
+                                        "invalid literal type for `msg` attribute";
+                                        help = "try surrounding: `msg(\"...\")`"
+                                    );
+                                }
                             }
-                            s => abort_call_site!("incorrect name: `{}`", s),
+                            "then" => {
+                                if let NestedMeta::Meta(Meta::Path(path)) = nested {
+                                    then = Some(path.clone());
+                                } else {
+                                    abort!(
+                                        nested,
+                                        "path to function expected for `then` attribute"
+                                    );
+                                }
+                            }
+                            s => abort!(path, "invalid argument name: `{}`", s),
                         }
                     }
                     // deconstructing to a path and a literal
-                    // here i don't check in the pattern of the lit type is a string literal
+                    // here i don't check in the pattern if the lit type is a string literal
                     // for future features maybe
                     NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
                         match first_seg_val(&path).as_str() {
-                            "msg" => if let Lit::Str(l_str) = lit {
-                                msg = Some(l_str);
-                            } else {
-                                abort_call_site!("invalid literal type for `msg` attribute");
-                            },
-                            s => abort_call_site!("incorrect name: `{}`", s),
+                            "msg" => {
+                                if let Lit::Str(l_str) = lit {
+                                    msg = Some(l_str);
+                                } else {
+                                    abort!(
+                                        lit,
+                                        "invalid literal type for `msg` attribute";
+                                        help = "try surrounding: `msg = \"...\"`"
+                                    );
+                                }
+                            }
+                            s => abort!(path, "invalid argument name: `{}`", s),
                         }
                     }
-                    _ => abort_call_site!("identifier - value attributes must be formatted like this: msg(\"literal\") or msg = \"literal\""),
+                    _ => abort!(nm, "expected value definition"),
                 }
             }
         } else {
-            abort_call_site!("incorrect definition of field attribute");
+            abort!(m, "incorrect definition of field attribute");
         }
         Self { msg, then }
     }
