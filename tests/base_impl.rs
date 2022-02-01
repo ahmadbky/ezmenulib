@@ -19,15 +19,3 @@ use ezmenu::Menu;
 fn init_struct() {
     // ...
 }
-
-#[derive(Menu)]
-struct Person {
-    name: String,
-    age: u8,
-}
-
-// used as testing for now
-fn main() {
-    let Person { name, age } = Person::from_menu();
-    println!("name={}, age={}", name, age);
-}
