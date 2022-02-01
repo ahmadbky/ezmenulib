@@ -40,7 +40,7 @@
 //! ```
 
 pub use ezmenu_derive::*;
-use std::io::{BufRead, Stdin, Stdout, Write};
+use std::io::{BufRead, Write};
 use std::str::FromStr;
 
 /// Prompts an input and returns the string value
