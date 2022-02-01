@@ -7,7 +7,7 @@ fn play(_: &u8) {
 #[derive(Menu)]
 struct Person {
     name: String,
-    #[field(msg(45), then(play))]
+    #[field(msg("45"), then(play))]
     age: u8,
 }
 
