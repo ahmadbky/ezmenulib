@@ -1,6 +1,6 @@
 [package]
 name = "ezmenu"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenu"
@@ -17,4 +17,3 @@ exclude = [
 
 [dependencies]
 ezmenu-derive = { path = "ezmenu-derive", version = "=0.1.0"}
-
