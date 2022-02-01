@@ -6,9 +6,9 @@ authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenu-derive"
 description = "Builds a CLI menu with a derive."
 repository = "https://github.com/ahbalbk/ezmenu"
+keywords = ["cli", "derive", "menu", "interface"]
 categories = ["command-line-interface"]
 license = "MIT"
-readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
