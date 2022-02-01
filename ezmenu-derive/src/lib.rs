@@ -8,7 +8,7 @@ use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::quote;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Lit, LitStr, Meta,
-    MetaList, MetaNameValue, NestedMeta, Path, Type,
+    MetaList, MetaNameValue, NestedMeta, Path,
 };
 
 #[proc_macro_derive(Menu, attributes(field, all))]
