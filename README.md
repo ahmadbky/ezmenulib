@@ -39,7 +39,7 @@ println!("values provided: author={}, number={}", values.author, values.number);
 ```
 
 This sample code prints the standard menu like above:
-```shell
+```
 - author: Ahmad
 - Give a positive number: -43
 well that's not positive but anyway.
