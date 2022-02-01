@@ -17,18 +17,18 @@ Here is an example of how to use it:
 use ezmenu::Menu;
 
 fn check(n: &i32) {
-    if n < 0 {
-        println!("well that's not positive but anyway.");
+    if n == 0 {
+        println!("yo respect me plz :'(");
     } else {
-        println!("good :)");
+        println!("good. :)");
     }
 }
 
 #[derive(Menu)]
 struct MyMenu {
     author: String,
-    #[field(msg = "Give a positive number", then(check))]
-    number: i32,
+    #[field(msg = "Give a nonzero number", then(check))]
+    number: u32,
 }
 ```
 
