@@ -1,3 +1,6 @@
+//! This crate is a derive procedural macro for `EZMenu` crate.
+//! It should not be used directly. You must use the [`ezmenu`](https://docs.rs/ezmenu) crate.
+
 extern crate proc_macro;
 
 use proc_macro2::{Ident, TokenStream};
