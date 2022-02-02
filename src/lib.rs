@@ -39,50 +39,198 @@
 //! values provided: author=Ahmad, number=0
 //! ```
 
+#[cfg(test)]
+mod tests;
+
 pub use ezmenu_derive::*;
+use std::fmt::Debug;
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 
-/// Prompts an input and returns the string value
-fn prompt<R, W>(reader: &mut R, writer: &mut W, msg: &str) -> Result<String, std::io::Error>
-where
-    R: BufRead,
-    W: Write,
-{
-    write!(writer, "- {}: ", msg)?;
-    // flushes writer so it prints the prefix
-    writer.flush()?;
-
-    // read the user input
-    let mut out = String::new();
-    reader.read_line(&mut out)?;
-
-    Ok(out)
+struct MainFormatting<'a> {
+    title: Option<&'a str>,
+    pos: TitlePos,
+    prefix: &'a str,
+    new_line: bool,
+    defaults: bool,
 }
 
-/// Asks the user a value, then returns it.
-/// It prints the text according to the given parameters formatting.
-pub fn ask<T, R, W, F>(reader: &mut R, writer: &mut W, msg: &str, then: F) -> T
-where
-    T: FromStr,
-    R: BufRead,
-    W: Write,
-    F: FnOnce(&T),
-{
-    //loops while incorrect input
-    loop {
-        let out = match prompt(reader, writer, msg) {
-            Ok(s) => s,
-            Err(e) => panic!("An error occurred while prompting input: {:?}", e),
-        };
-
-        // user input type checking
-        match out.trim().parse::<T>() {
-            Ok(t) => {
-                then(&t);
-                break t;
-            }
-            _ => continue,
+impl Default for MainFormatting<'_> {
+    fn default() -> Self {
+        Self {
+            title: None,
+            pos: Default::default(),
+            prefix: ": ",
+            new_line: false,
+            defaults: true,
         }
     }
+}
+
+#[derive(Clone)]
+struct FieldFormatting<'a> {
+    chip: Option<&'a str>,
+    prefix: Option<&'a str>,
+    new_line: bool,
+    default: bool,
+}
+
+impl<'a> Default for FieldFormatting<'a> {
+    fn default() -> Self {
+        Self {
+            chip: Some("* "),
+            prefix: Some(": "),
+            new_line: false,
+            default: true,
+        }
+    }
+}
+
+pub struct Field<'a, T> {
+    msg: &'a str,
+    fmt: FieldFormatting<'a>,
+    default: Option<&'a str>,
+    then: Option<Box<dyn FnOnce(&T)>>,
+}
+
+impl<'a, T> From<&'a str> for Field<'a, T> {
+    fn from(msg: &'a str) -> Self {
+        Self {
+            msg,
+            fmt: Default::default(),
+            default: None,
+            then: None,
+        }
+    }
+}
+
+/// Constructor methods
+impl<'a, T> Field<'a, T> {
+    /// Define the chip at the left of the message displayed
+    /// (default: "* ").
+    pub fn chip(mut self, chip: Option<&'a str>) -> Self {
+        self.fmt.chip = chip;
+        self
+    }
+
+    /// Define the prefix for the prompt (default: ": ").
+    pub fn prefix(mut self, prefix: Option<&'a str>) -> Self {
+        self.fmt.prefix = prefix;
+        self
+    }
+
+    /// Set the prefix and user input on a new line (false by default).
+    pub fn new_line(mut self, new_line: bool) -> Self {
+        self.fmt.new_line = new_line;
+        self
+    }
+
+    /// Displays default values or not (true by default).
+    pub fn display_default(mut self, default: bool) -> Self {
+        self.fmt.default = default;
+        self
+    }
+
+    /// Sets the default value as a &str.
+    pub fn default_value(mut self, default: &'a str) -> Self {
+        self.default = Some(default);
+        self
+    }
+
+    pub fn then<F: 'static + FnOnce(&T)>(mut self, then: F) -> Self {
+        self.then = Some(Box::new(then));
+        self
+    }
+}
+
+impl<'a, T> Field<'a, T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    /// Builds the field.
+    /// It prints the message according to its formatting, then returns the corresponding value.
+    pub fn build<R, W>(self, reader: &mut R, writer: &mut W) -> T
+    where
+        R: BufRead,
+        W: Write,
+    {
+        /// Function that parses the default value without checking.
+        /// It it useful to break the loop if there is some default value,
+        /// and no value was provided, or if the value is incorrect.
+        #[inline]
+        fn unchecked_default_parse<T>(default: Option<&str>) -> T
+        where
+            T: FromStr,
+            <T as FromStr>::Err: Debug,
+        {
+            let default = default.unwrap();
+            default
+                .parse()
+                .unwrap_or_else(|e| panic!("Invalid default value `{}`. Error: {:?}", default, e))
+        }
+
+        // loops while incorrect value
+        loop {
+            prompt_fmt(writer, self.msg, self.default, &self.fmt)
+                .unwrap_or_else(|e| panic!("An error occurred while prompting a value: {:?}", e));
+
+            // read input to string
+            let mut out = String::new();
+            reader.read_line(&mut out).expect("Unable to read line");
+            let out = out.trim();
+
+            if out.is_empty() && self.default.is_some() {
+                break unchecked_default_parse(self.default);
+            }
+
+            // try to parse to T, else repeat
+            match out.parse() {
+                Ok(t) => {
+                    if let Some(func) = self.then {
+                        func(&t);
+                    }
+                    break t;
+                }
+                // TODO: feature allowing control over default values behavior
+                Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
+                _ => continue,
+            }
+        }
+    }
+}
+
+pub enum TitlePos {
+    Top,
+    Bottom,
+}
+
+impl Default for TitlePos {
+    fn default() -> Self {
+        Self::Top
+    }
+}
+
+/// Prompts an input according to the formatting options of the field
+fn prompt_fmt<W: Write>(
+    writer: &mut W,
+    msg: &str,
+    default: Option<&str>,
+    fmt: &FieldFormatting<'_>,
+) -> Result<(), std::io::Error> {
+    write!(
+        writer,
+        "{chip}{msg}{def}{nl}{prefix}",
+        chip = fmt.chip.unwrap_or(""),
+        msg = msg,
+        def = if fmt.default {
+            format!(" (default: {})", default.unwrap_or("none"))
+        } else {
+            "".to_owned()
+        },
+        nl = if fmt.new_line { "\n" } else { "" },
+        prefix = fmt.prefix.unwrap_or("")
+    )?;
+    // flushes writer so it prints the message if it's on the same line
+    writer.flush()
 }
