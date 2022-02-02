@@ -40,7 +40,7 @@
 //! ```
 
 #[cfg(test)]
-mod tests;
+mod field_tests;
 
 pub use ezmenu_derive::*;
 use std::fmt::Debug;
@@ -90,7 +90,7 @@ pub struct Field<'a, T> {
     msg: &'a str,
     fmt: FieldFormatting<'a>,
     default: Option<&'a str>,
-    then: Option<Box<dyn FnOnce(&T)>>,
+    then: Option<Box<dyn FnOnce(&T, &mut dyn Write)>>,
 }
 
 impl<'a, T> From<&'a str> for Field<'a, T> {
@@ -137,7 +137,7 @@ impl<'a, T> Field<'a, T> {
         self
     }
 
-    pub fn then<F: 'static + FnOnce(&T)>(mut self, then: F) -> Self {
+    pub fn then<F: 'static + FnOnce(&T, &mut dyn Write)>(mut self, then: F) -> Self {
         self.then = Some(Box::new(then));
         self
     }
@@ -178,22 +178,39 @@ where
             // read input to string
             let mut out = String::new();
             reader.read_line(&mut out).expect("Unable to read line");
+
+            // if testing, append input to output
+            if cfg!(test) {
+                writeln!(writer, "{}", out)
+                    .expect("An error occurred while appending input to output for testing");
+            }
+
             let out = out.trim();
 
             if out.is_empty() && self.default.is_some() {
-                break unchecked_default_parse(self.default);
+                let out = unchecked_default_parse(self.default);
+                if let Some(func) = self.then {
+                    func(&out, writer);
+                }
+                break out;
             }
 
             // try to parse to T, else repeat
             match out.parse() {
                 Ok(t) => {
                     if let Some(func) = self.then {
-                        func(&t);
+                        func(&t, writer);
                     }
                     break t;
                 }
                 // TODO: feature allowing control over default values behavior
-                Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
+                Err(_) if self.default.is_some() => {
+                    let out = unchecked_default_parse(self.default);
+                    if let Some(func) = self.then {
+                        func(&out, writer);
+                    }
+                    break out;
+                }
                 _ => continue,
             }
         }
