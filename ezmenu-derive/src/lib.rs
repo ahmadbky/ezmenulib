@@ -134,7 +134,9 @@ fn build_struct(name: Ident, fields: FieldsNamed) -> TokenStream {
                 .cloned()
                 .map(|attr| {
                     attr.parse_meta()
-                        .expect("incorrect definition of field attribute")
+                        .unwrap_or_else(|e| {
+                            abort!("incorrect definition of field attribute: {:?}", e)
+                        })
                         .into()
                 })
                 .unwrap_or(FieldDesc::default())
