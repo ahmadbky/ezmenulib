@@ -1,11 +1,10 @@
 use crate::Field;
-use std::io::Write;
 
 macro_rules! test_field {
     ($ident:ident: $ty:ty, $input:literal) => {{
         let mut input = $input.as_bytes();
         let mut output = Vec::new();
-        let value: $ty = $ident.build(&mut input, &mut output);
+        let _: $ty = $ident.build(&mut input, &mut output);
 
         String::from_utf8(output).unwrap()
     }};
@@ -21,7 +20,6 @@ fn test_fields() {
                     .expect("Unable to write the message after providing the last name");
             }
         })
-        .display_default(false)
         .chip(Some("Now, "))
         .prefix(Some(">> "))
         .new_line(true);
