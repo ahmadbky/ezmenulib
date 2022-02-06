@@ -6,7 +6,7 @@ macro_rules! test_field {
     ($ident:ident: $ty:ty, $input:literal) => {{
         let mut input = $input.as_bytes();
         let mut output = Vec::new();
-        let _: $ty = $ident.build(&mut input, &mut output);
+        let _: $ty = $ident.build(&mut input, &mut output).unwrap();
 
         String::from_utf8(output).unwrap()
     }};

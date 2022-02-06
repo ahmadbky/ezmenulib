@@ -23,12 +23,15 @@ fn basic_menu() {
             default: false,
         }));
 
-    let name: String = menu.next_with(|s: &String, w| {
-        if s.to_lowercase() == "ahmad" {
-            writeln!(w, "omg jte connais").expect("oops");
-        }
-    });
-    let age: u8 = menu.next();
+    let name: String = menu
+        .next_map(|s: String, w| {
+            if s.to_lowercase() == "ahmad" {
+                writeln!(w, "omg jte connais")?;
+            }
+            Ok(s)
+        })
+        .unwrap();
+    let age: u8 = menu.next().unwrap();
 
     println!("name={}, age={}", name, age);
 }
@@ -52,10 +55,13 @@ fn inherited_style() {
         )
         .with_field(StructField::from("give a second number"));
 
-    let first: i32 = menu.next();
-    let _second: i32 = menu.next_with(|n: &i32, w| {
-        if *n == first {
-            writeln!(w, "you entered the same number: {}", n).expect("oops");
-        }
-    });
+    let first: i32 = menu.next().unwrap();
+    let _second: i32 = menu
+        .next_map(|n, w| {
+            if n == first {
+                writeln!(w, "you entered the same number: {}", n)?;
+            }
+            Ok(n)
+        })
+        .unwrap();
 }
