@@ -22,11 +22,12 @@ use std::str::FromStr;
 /// - `<...>` means a given string slice
 /// - `{...}` means the value inside is displayed or not (boolean)
 /// - `[...]` means the value inside is displayed if it is available
-struct FieldFormatting<'a> {
-    chip: Option<&'a str>,
-    prefix: Option<&'a str>,
-    new_line: bool,
-    default: bool,
+#[derive(Clone)]
+pub struct StructFieldFormatting<'a> {
+    pub chip: &'a str,
+    pub prefix: &'a str,
+    pub new_line: bool,
+    pub default: bool,
 }
 
 /// Default formatting for a field is "* " as a chip and ": " as prefix.
@@ -35,11 +36,11 @@ struct FieldFormatting<'a> {
 /// ```md
 /// * <message>[ (default: <default>)]:
 /// ```
-impl<'a> Default for FieldFormatting<'a> {
+impl<'a> Default for StructFieldFormatting<'a> {
     fn default() -> Self {
         Self {
-            chip: Some("* "),
-            prefix: Some(": "),
+            chip: "* ",
+            prefix: ": ",
             new_line: false,
             default: true,
         }
@@ -55,143 +56,85 @@ impl<'a> Default for FieldFormatting<'a> {
 /// - the default value
 /// - the function to execute after the user provided a value
 ///
-/// ## Example
+/// # Examples
 ///
 /// For a make-license CLI program for example, you can use
-/// ```rust
+/// ```
 /// use std::io::{stdin, stdout};
 /// let author: String = Field::from("Give the author of the license")
-///     .then(|s, _| println!("what a beautiful name!"))
 ///     .build(&mut stdin().lock(), &mut stdout());
 /// ```
-pub struct Field<'a, T> {
+pub struct StructField<'a> {
     msg: &'a str,
-    fmt: FieldFormatting<'a>,
+    // TODO: use Cow<'m, StructFieldFormatting<'a>>
+    // for arrangement between inherited or owned fmt
+    fmt: StructFieldFormatting<'a>,
+    // used by StructMenu to know if we inherit fmt or not
+    pub(crate) custom_fmt: bool,
     default: Option<&'a str>,
-    then: Option<Box<dyn FnOnce(&T, &mut dyn Write)>>,
 }
 
-impl<'a, T> From<&'a str> for Field<'a, T> {
+impl<'a> From<&'a str> for StructField<'a> {
     fn from(msg: &'a str) -> Self {
         Self {
             msg,
             fmt: Default::default(),
+            custom_fmt: false,
             default: None,
-            then: None,
         }
     }
 }
 
 /// Constructor methods defining how the field behaves
-impl<'a, T> Field<'a, T> {
-    /// Define the chip at the left of the message displayed
-    /// (default: "* ").
-    /// The chip is the small string that acts as a list style attribute.
-    /// If you don't want any chip for your prompt, you can pass None as value.
-    pub fn chip(mut self, chip: Option<&'a str>) -> Self {
-        self.fmt.chip = chip;
+impl<'a> StructField<'a> {
+    /// Give a custom formatting for the field.
+    pub fn fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
+        self.fmt = fmt;
+        self.custom_fmt = true;
         self
     }
 
-    /// Define the prefix for the prompt (default: ": ").
-    /// The prefix is displayed just before the user input.
-    /// If you don't want any prefix for you prompt, you can pass None as value.
-    pub fn prefix(mut self, prefix: Option<&'a str>) -> Self {
-        self.fmt.prefix = prefix;
+    /// Give an inherited fmt from a menu for example.
+    /// In the future versions, this method will take a reference as parameter.
+    pub fn inherit_fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
+        self.fmt = fmt;
+        self.custom_fmt = false;
         self
     }
 
-    /// Set the prefix and user input on a new line (false by default).
-    pub fn new_line(mut self, new_line: bool) -> Self {
-        self.fmt.new_line = new_line;
-        self
-    }
-
-    /// Displays default values or not (true by default).
-    /// Default values are displayed after the message like this:
-    /// ```md
-    /// <message> (default: <default>)
-    /// ```
-    pub fn display_default(mut self, default: bool) -> Self {
-        self.fmt.default = default;
-        self
-    }
-
-    /// Sets the default value as a &str.
-    /// If a default value is provided, it will, by default, by displayed with the message.
-    /// For example, this code:
-    /// ```rust
-    /// let field = Field::from("give a number")
-    ///     .default_value("0");
-    /// ```
-    /// will display the field like below:
-    /// ```md
-    /// - give a number (default: 0):
-    /// ```
-    /// If you want to disable this behavior, you can set "display_default" method to false:
-    /// ```rust
-    /// let field = Field::from("give a number")
-    ///     .default_value("0")
-    ///     .display_default(false);
-    /// ```
-    /// And the default value will be skipped at printing, but still available
-    /// if the user hasn't provided any correct value.
-    // TODO: use a T type for default value instead of &str
-    pub fn default_value(mut self, default: &'a str) -> Self {
+    /// Give the default value accepted by the field.
+    /// If the value type is incorrect, the program will panic at the building.
+    pub fn default(mut self, default: &'a str) -> Self {
         self.default = Some(default);
         self
     }
 
-    /// Sets the function to call once, after the user provided an input.
-    /// This function takes :
-    /// - a `&T` depending of the value type
-    /// - a `&mut dyn std::io::Write`, to write the output on it
-    ///
-    /// ## Example
-    ///
-    /// Here is an example of how to implement the `then` function:
-    /// ```rust
-    /// let field = Field::from("author")
-    ///     .then(|s: &String, w| {
-    ///         if s == "ahmed" {
-    ///             writeln!(w, "what a beautiful name");
-    ///         }
-    ///     });
-    /// ```
-    ///
-    /// ## Behavior
-    ///
-    /// The function is also called if the field contains a default value,
-    /// and the user did not provide any value, or provided an incorrect one.
-    pub fn then<F: 'static + FnOnce(&T, &mut dyn Write)>(mut self, then: F) -> Self {
-        self.then = Some(Box::new(then));
-        self
-    }
-}
-
-impl<'a, T> Field<'a, T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Debug,
-{
+    // TODO: use "custom_io" feature to enable polymorphic IO
     /// Builds the field.
     /// It prints the message according to its formatting, then returns the corresponding value.
     /// You need to provide the reader for the input, and the writer for the output.
     ///
+    /// # Examples
+    ///
     /// If you want to use the standard input and output stream,
     /// you can do so:
-    /// ```rust
+    /// ```
     /// use std::io::{stdin, stdout};
     /// let author: String = Field::from("author")
     ///     .build(&mut stdin().lock(), &mut stdout());
     /// ```
     /// The `lock()` method returns an `impl BufRead` for monomorphism purposes.
-    /// Then, you don't need to use the `&mut dyn Write` parameter for you `then` function.
-    /// You can directly use the `println!` macro.
-    pub fn build<R, W>(self, reader: &mut R, writer: &mut W) -> T
+    ///
+    /// # Panics
+    ///
+    /// This method may panic if the default value type is invalid, or if
+    /// it has encountered an IO problem.
+    pub fn build<T, R, W>(self, reader: &mut R, writer: &mut W) -> T
     where
         R: BufRead,
         W: Write,
+        T: FromStr,
+        <T as FromStr>::Err: Debug,
     {
         /// Function that parses the default value without checking.
         /// It it useful to break the loop if there is some default value,
@@ -217,38 +160,23 @@ where
             let mut out = String::new();
             reader.read_line(&mut out).expect("Unable to read line");
 
+            let out = out.trim();
+
             // if testing, append input to output
             if cfg!(test) {
                 writeln!(writer, "{}", out)
                     .expect("An error occurred while appending input to output for testing");
             }
 
-            let out = out.trim();
-
             if out.is_empty() && self.default.is_some() {
-                let out = unchecked_default_parse(self.default);
-                if let Some(func) = self.then {
-                    func(&out, writer);
-                }
-                break out;
+                break unchecked_default_parse(self.default);
             }
 
             // try to parse to T, else repeat
             match out.parse() {
-                Ok(t) => {
-                    if let Some(func) = self.then {
-                        func(&t, writer);
-                    }
-                    break t;
-                }
+                Ok(t) => break t,
                 // TODO: feature allowing control over default values behavior
-                Err(_) if self.default.is_some() => {
-                    let out = unchecked_default_parse(self.default);
-                    if let Some(func) = self.then {
-                        func(&out, writer);
-                    }
-                    break out;
-                }
+                Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
                 _ => continue,
             }
         }
@@ -260,19 +188,19 @@ fn prompt_fmt<W: Write>(
     writer: &mut W,
     msg: &str,
     default: Option<&str>,
-    fmt: &FieldFormatting<'_>,
+    fmt: &StructFieldFormatting<'_>,
 ) -> Result<(), std::io::Error> {
     write!(
         writer,
         "{chip}{msg}{def}{nl}{prefix}",
-        chip = fmt.chip.unwrap_or(""),
+        chip = fmt.chip,
         msg = msg,
         def = match default {
-            Some(val) if fmt.default => format!(" (default: {}", val),
+            Some(val) if fmt.default => format!(" (default: {})", val),
             _ => "".to_owned(),
         },
         nl = if fmt.new_line { "\n" } else { "" },
-        prefix = fmt.prefix.unwrap_or("")
+        prefix = fmt.prefix,
     )?;
     // flushes writer so it prints the message if it's on the same line
     writer.flush()
