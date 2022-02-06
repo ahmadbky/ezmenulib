@@ -45,4 +45,5 @@ mod menu;
 /// Menu derive macro
 pub use ezmenu_derive::Menu;
 
-pub use field::Field;
+pub use field::{StructField, StructFieldFormatting};
+pub use menu::{Menu, StructMenu};
