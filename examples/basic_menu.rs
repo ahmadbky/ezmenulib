@@ -1,6 +1,6 @@
 use ezmenu::Menu;
 
-mod mymod {
+mod my_mod {
     pub fn check_firstname(s: &String) {
         if s == "Ahmad" {
             println!("oh you got the same name");
@@ -27,7 +27,7 @@ fn check_age(age: &u8) {
 struct Person {
     #[field(msg = "What is your last name", then(check_lastname))]
     lastname: String,
-    #[field(msg = "What is your first name", then(mymod::check_firstname))]
+    #[field(msg = "What is your first name", then(my_mod::check_firstname))]
     firstname: String,
     #[field(msg("How old are you"), then(check_age))]
     age: u8,
