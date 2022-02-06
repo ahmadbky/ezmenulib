@@ -2,6 +2,7 @@
 #[path = "tests/field.rs"]
 mod field;
 
+use crate::{MenuError, MenuResult};
 use std::fmt::Debug;
 use std::io::{BufRead, Write};
 use std::str::FromStr;
@@ -62,7 +63,7 @@ impl<'a> Default for StructFieldFormatting<'a> {
 /// ```
 /// use std::io::{stdin, stdout};
 /// let author: String = Field::from("Give the author of the license")
-///     .build(&mut stdin().lock(), &mut stdout());
+///     .build(&mut stdin().lock(), &mut stdout()).unwrap();
 /// ```
 pub struct StructField<'a> {
     msg: &'a str,
@@ -103,7 +104,8 @@ impl<'a> StructField<'a> {
     }
 
     /// Give the default value accepted by the field.
-    /// If the value type is incorrect, the program will panic at the building.
+    /// If the value type is incorrect, the `StructField::build` method will return an `Err` value,
+    /// emphasizing that the default value type is incorrect.
     pub fn default(mut self, default: &'a str) -> Self {
         self.default = Some(default);
         self
@@ -113,6 +115,7 @@ impl<'a> StructField<'a> {
     /// Builds the field.
     /// It prints the message according to its formatting, then returns the corresponding value.
     /// You need to provide the reader for the input, and the writer for the output.
+    /// It returns a MenuResult if there was an IO error, or if the default value type is incorrect.
     ///
     /// # Examples
     ///
@@ -121,51 +124,44 @@ impl<'a> StructField<'a> {
     /// ```
     /// use std::io::{stdin, stdout};
     /// let author: String = Field::from("author")
-    ///     .build(&mut stdin().lock(), &mut stdout());
+    ///     .build(&mut stdin().lock(), &mut stdout()).unwrap();
     /// ```
     /// The `lock()` method returns an `impl BufRead` for monomorphism purposes.
-    ///
-    /// # Panics
-    ///
-    /// This method may panic if the default value type is invalid, or if
-    /// it has encountered an IO problem.
-    pub fn build<T, R, W>(self, reader: &mut R, writer: &mut W) -> T
+    pub fn build<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
     where
         R: BufRead,
         W: Write,
         T: FromStr,
-        <T as FromStr>::Err: Debug,
+        <T as FromStr>::Err: 'static + Debug,
     {
         /// Function that parses the default value without checking.
         /// It it useful to break the loop if there is some default value,
         /// and no value was provided, or if the value is incorrect.
         #[inline]
-        fn unchecked_default_parse<T>(default: Option<&str>) -> T
+        fn unchecked_default_parse<T>(default: Option<&str>) -> MenuResult<T>
         where
             T: FromStr,
-            <T as FromStr>::Err: Debug,
+            <T as FromStr>::Err: 'static + Debug,
         {
             let default = default.unwrap();
             default
                 .parse()
-                .unwrap_or_else(|e| panic!("Invalid default value `{}`. Error: {:?}", default, e))
+                .map_err(|e| MenuError::WrongType(Box::new(e)))
         }
 
         // loops while incorrect value
         loop {
-            prompt_fmt(writer, self.msg, self.default, &self.fmt)
-                .unwrap_or_else(|e| panic!("An error occurred while prompting a value: {:?}", e));
+            prompt_fmt(writer, self.msg, self.default, &self.fmt)?;
 
             // read input to string
             let mut out = String::new();
-            reader.read_line(&mut out).expect("Unable to read line");
+            reader.read_line(&mut out)?;
 
             let out = out.trim();
 
             // if testing, append input to output
             if cfg!(test) {
-                writeln!(writer, "{}", out)
-                    .expect("An error occurred while appending input to output for testing");
+                writeln!(writer, "{}", out)?;
             }
 
             if out.is_empty() && self.default.is_some() {
@@ -174,7 +170,7 @@ impl<'a> StructField<'a> {
 
             // try to parse to T, else repeat
             match out.parse() {
-                Ok(t) => break t,
+                Ok(t) => break Ok(t),
                 // TODO: feature allowing control over default values behavior
                 Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
                 _ => continue,
