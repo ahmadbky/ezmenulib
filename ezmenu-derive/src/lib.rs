@@ -11,6 +11,7 @@ use syn::{
     MetaList, MetaNameValue, NestedMeta, Path,
 };
 
+// TODO: impl new ezmenu lib
 #[proc_macro_derive(Menu, attributes(field, all))]
 #[proc_macro_error]
 pub fn build_menu(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -93,7 +94,7 @@ impl From<Meta> for FieldDesc {
                         }
                     }
                     // deconstructing to a path and a literal
-                    // here i don't check in the pattern if the lit type is a string literal
+                    // here we don't check in the pattern if the lit type is a string literal
                     // for future features maybe
                     NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
                         match first_seg_val(&path).as_str() {
