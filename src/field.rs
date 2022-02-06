@@ -146,7 +146,7 @@ impl<'a> StructField<'a> {
             let default = default.unwrap();
             default
                 .parse()
-                .map_err(|e| MenuError::WrongType(Box::new(e)))
+                .map_err(|e| MenuError::IncorrectType(Box::new(e)))
         }
 
         // loops while incorrect value
