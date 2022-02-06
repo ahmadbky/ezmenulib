@@ -3,7 +3,7 @@
 mod menu;
 
 use crate::field::StructFieldFormatting;
-use crate::StructField;
+use crate::{MenuError, MenuResult, StructField};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, BufRead, Stdin, Stdout, Write};
@@ -42,13 +42,13 @@ use std::str::FromStr;
 ///         })
 ///     );
 ///
-/// let name: String = menu.next_with(|s: &String, w| {
+/// let name: String = menu.next_map(|s: &String, w| {
 ///     if s.to_lowercase() == "ahmad" {
-///         w.write(b"Nice name!!").expect("unable to pat :/");
+///         w.write(b"Nice name!!")?;
 ///     }
-/// });
-/// let proj_name: String = menu.next();
-/// let proj_year: i64 = menu.next();
+/// }).unwrap();
+/// let proj_name: String = menu.next().unwrap();
+/// let proj_year: i64 = menu.next().unwrap();
 /// ```
 ///
 /// The example below will display this menu:
@@ -133,13 +133,13 @@ impl<'a, R, W> StructMenu<'a, R, W> {
 
 impl<'a, R, W: Write> StructMenu<'a, R, W> {
     /// Returns the next field to print when building the menu.
-    fn get_next_field(&mut self) -> StructField<'a> {
+    fn get_next_field(&mut self) -> MenuResult<StructField<'a>> {
         // prints the menu title or not
         if !self.first_popped {
-            writeln!(self.writer, "{}", self.title).expect("Unable to print title");
+            writeln!(self.writer, "{}", self.title)?;
             self.first_popped = true;
         }
-        self.fields.pop_front().expect("no more field in menu")
+        self.fields.pop_front().ok_or(MenuError::NoMoreField)
     }
 }
 
@@ -150,17 +150,23 @@ where
     <Output as FromStr>::Err: Debug,
 {
     /// Returns the next output from the reader.
-    fn next(&mut self) -> Output;
+    fn next(&mut self) -> MenuResult<Output>;
 
     /// Returns the output at the current state.
     fn get_output(&mut self) -> &mut W;
 
-    // TODO: use a result as return type for F
-    /// Method used to return the user output after applied a function on it.
-    fn next_with<F: FnOnce(&Output, &mut W)>(&mut self, f: F) -> Output {
-        let val = self.next();
-        f(&val, &mut self.get_output());
-        val
+    /// Returns the value mapped by the function specified as argument.
+    ///
+    /// The function takes `(Output, &mut W)` as argument, where `Output` is the type of the output,
+    /// and `W` is the type of the writer (`Stdout` generally).
+    ///
+    /// It returns a `MenuResult<Output>` to prevent from any error or return a custom error, with:
+    /// `MenuError::Custom(Box<dyn std::error::Error>)`.
+    fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
+    where
+        F: FnOnce(Output, &mut W) -> MenuResult<Output>,
+    {
+        f(self.next()?, &mut self.get_output())
     }
 }
 
@@ -175,13 +181,9 @@ where
     <Output as FromStr>::Err: Debug,
 {
     /// Returns the next field output with the correct type.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if there is no more value to output.
-    fn next(&mut self) -> Output {
-        let field = self.get_next_field();
-        field.build(&mut self.reader.lock(), &mut self.writer)
+    fn next(&mut self) -> MenuResult<Output> {
+        self.get_next_field()?
+            .build(&mut self.reader.lock(), &mut self.writer)
     }
 
     fn get_output(&mut self) -> &mut Stdout {
@@ -195,16 +197,12 @@ where
     R: BufRead,
     W: Write,
     Output: FromStr,
-    <Output as FromStr>::Err: Debug,
+    <Output as FromStr>::Err: 'static + Debug,
 {
     /// Returns the next field output with the correct type.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if there is no more value to output.
-    fn next(&mut self) -> Output {
-        let field = self.get_next_field();
-        field.build(&mut self.reader, &mut self.writer)
+    fn next(&mut self) -> MenuResult<Output> {
+        self.get_next_field()?
+            .build(&mut self.reader, &mut self.writer)
     }
 
     fn get_output(&mut self) -> &mut W {
