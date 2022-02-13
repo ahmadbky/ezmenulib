@@ -6,7 +6,7 @@ use crate::field::StructFieldFormatting;
 use crate::{MenuError, MenuResult, StructField};
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::io::{stdin, stdout, BufRead, Stdin, Stdout, Write};
+use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::str::FromStr;
 
 /// Represents a menu describing a struct.
@@ -152,8 +152,11 @@ where
     /// Returns the next output from the reader.
     fn next(&mut self) -> MenuResult<Output>;
 
-    /// Returns the output at the current state.
-    fn get_output(&mut self) -> &mut W;
+    /// Returns the output as a reference at the current state.
+    fn get_output(&self) -> &W;
+
+    /// Return the output as a mutable reference at the current state.
+    fn get_output_mut(&mut self) -> &mut W;
 
     /// Returns the value mapped by the function specified as argument.
     ///
@@ -166,7 +169,7 @@ where
     where
         F: FnOnce(Output, &mut W) -> MenuResult<Output>,
     {
-        f(self.next()?, &mut self.get_output())
+        f(self.next()?, self.get_output_mut())
     }
 }
 
@@ -178,23 +181,26 @@ where
 impl<'a, Output> Menu<Output, Stdin, Stdout> for StructMenu<'a, Stdin, Stdout>
 where
     Output: FromStr,
-    <Output as FromStr>::Err: Debug,
+    <Output as FromStr>::Err: 'static + Debug,
 {
     /// Returns the next field output with the correct type.
     fn next(&mut self) -> MenuResult<Output> {
-        self.get_next_field()?
-            .build(&mut self.reader.lock(), &mut self.writer)
+        self.get_next_field()?.build(&self.reader, &mut self.writer)
     }
 
-    fn get_output(&mut self) -> &mut Stdout {
+    fn get_output(&self) -> &Stdout {
+        &self.writer
+    }
+
+    fn get_output_mut(&mut self) -> &mut Stdout {
         &mut self.writer
     }
 }
 
-#[cfg(any(feature = "custom_io", test))]
+#[cfg(feature = "custom_io")]
 impl<'a, Output, R, W> Menu<Output, R, W> for StructMenu<'a, R, W>
 where
-    R: BufRead,
+    R: std::io::BufRead,
     W: Write,
     Output: FromStr,
     <Output as FromStr>::Err: 'static + Debug,
@@ -202,10 +208,14 @@ where
     /// Returns the next field output with the correct type.
     fn next(&mut self) -> MenuResult<Output> {
         self.get_next_field()?
-            .build(&mut self.reader, &mut self.writer)
+            .build_with(&mut self.reader, &mut self.writer)
     }
 
-    fn get_output(&mut self) -> &mut W {
+    fn get_output(&self) -> &W {
+        &self.writer
+    }
+
+    fn get_output_mut(&mut self) -> &mut W {
         &mut self.writer
     }
 }

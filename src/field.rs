@@ -4,7 +4,7 @@ mod field;
 
 use crate::{MenuError, MenuResult};
 use std::fmt::Debug;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Stdin, Stdout, Write};
 use std::str::FromStr;
 
 /// Defines the formatting of a menu field.
@@ -67,7 +67,7 @@ impl<'a> Default for StructFieldFormatting<'a> {
 /// ```
 pub struct StructField<'a> {
     msg: &'a str,
-    // TODO: use Cow<'m, StructFieldFormatting<'a>>
+    // FIXME: use for<'m: 'a> Cow<'m, StructFieldFormatting<'a>>
     // for arrangement between inherited or owned fmt
     fmt: StructFieldFormatting<'a>,
     // used by StructMenu to know if we inherit fmt or not
@@ -111,7 +111,18 @@ impl<'a> StructField<'a> {
         self
     }
 
-    // TODO: use "custom_io" feature to enable polymorphic IO
+    /// Builds the field with custom reader and writer types.
+    #[cfg(feature = "custom_io")]
+    pub fn build_with<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+        <T as FromStr>::Err: 'static + Debug,
+    {
+        self.ask_output(reader, writer)
+    }
+
     /// Builds the field.
     /// It prints the message according to its formatting, then returns the corresponding value.
     /// You need to provide the reader for the input, and the writer for the output.
@@ -124,10 +135,17 @@ impl<'a> StructField<'a> {
     /// ```
     /// use std::io::{stdin, stdout};
     /// let author: String = Field::from("author")
-    ///     .build(&mut stdin().lock(), &mut stdout()).unwrap();
+    ///     .build(&stdin(), &mut stdout()).unwrap();
     /// ```
-    /// The `lock()` method returns an `impl BufRead` for monomorphism purposes.
-    pub fn build<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
+    pub fn build<T>(self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: 'static + Debug,
+    {
+        self.ask_output(&mut reader.lock(), writer)
+    }
+
+    fn ask_output<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
     where
         R: BufRead,
         W: Write,
@@ -157,19 +175,13 @@ impl<'a> StructField<'a> {
             let mut out = String::new();
             reader.read_line(&mut out)?;
 
-            let out = out.trim();
-
-            // if testing, append input to output
-            if cfg!(test) {
-                writeln!(writer, "{}", out)?;
-            }
-
-            if out.is_empty() && self.default.is_some() {
-                break unchecked_default_parse(self.default);
+            // if not asking from stdin, then append to stdout
+            if cfg!(feature = "custom_io") {
+                write!(writer, "{}", out)?;
             }
 
             // try to parse to T, else repeat
-            match out.parse() {
+            match out.trim().parse() {
                 Ok(t) => break Ok(t),
                 // TODO: feature allowing control over default values behavior
                 Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
