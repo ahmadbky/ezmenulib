@@ -1,22 +1,19 @@
 use crate::field::StructFieldFormatting;
 use crate::StructField;
 
-// uses &[u8] instead of Stdin and Vec<u8> instead of Stdout
+// uses &[u8] instead of Stdin
 macro_rules! test_field {
     ($ident:ident: $ty:ty, $input:literal) => {{
+        use std::io::stdout;
         let mut input = $input.as_bytes();
-        let mut output = Vec::new();
-        let _: $ty = $ident.build(&mut input, &mut output).unwrap();
-
-        String::from_utf8(output).unwrap()
+        let _: $ty = $ident.build_with(&mut input, &mut stdout()).unwrap();
     }};
 }
 
 #[test]
 fn basic_field() {
     let age = StructField::from("how old are you");
-    let output = test_field!(age: u8, "aaa\n34");
-    println!("{}", output);
+    test_field!(age: u8, "aaa\n34\n");
 }
 
 #[test]
@@ -29,6 +26,5 @@ fn custom_fmt() {
         ..Default::default()
     });
 
-    let output = test_field!(lastname: String, "baAlBaKy");
-    println!("{}", output);
+    test_field!(lastname: String, "baAlBaKy\n");
 }

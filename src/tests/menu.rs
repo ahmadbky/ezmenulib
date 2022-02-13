@@ -38,7 +38,7 @@ fn basic_menu() {
 
 #[test]
 fn inherited_style() {
-    let input = "13\n13";
+    let input = "13\n13\n";
     let mut menu = StructMenu::new(input.as_bytes(), stdout())
         .title("give 2 random numbers")
         .fmt(StructFieldFormatting {
