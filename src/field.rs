@@ -62,8 +62,8 @@ impl<'a> Default for StructFieldFormatting<'a> {
 /// For a make-license CLI program for example, you can use
 /// ```
 /// use std::io::{stdin, stdout};
-/// let author: String = Field::from("Give the author of the license")
-///     .build(&mut stdin().lock(), &mut stdout()).unwrap();
+/// let author: String = StructField::from("Give the author of the license")
+///     .build(&stdin(), &mut stdout()).unwrap();
 /// ```
 pub struct StructField<'a> {
     msg: &'a str,

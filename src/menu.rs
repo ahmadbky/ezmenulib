@@ -42,10 +42,11 @@ use std::str::FromStr;
 ///         })
 ///     );
 ///
-/// let name: String = menu.next_map(|s: &String, w| {
+/// let name: String = menu.next_map(|s: String, w| {
 ///     if s.to_lowercase() == "ahmad" {
 ///         w.write(b"Nice name!!")?;
 ///     }
+///     Ok(s)
 /// }).unwrap();
 /// let proj_name: String = menu.next().unwrap();
 /// let proj_year: i64 = menu.next().unwrap();
@@ -177,7 +178,7 @@ where
 /// to use the `Stdin::lock` method for polymorphism purposes, because we need
 /// an `impl BufRead` to read the next line input.
 /// In the future versions, this will not be necessary because `Stdin` will implement `BufRead`.
-#[cfg(not(any(feature = "custom_io", test)))]
+#[cfg(not(feature = "custom_io"))]
 impl<'a, Output> Menu<Output, Stdin, Stdout> for StructMenu<'a, Stdin, Stdout>
 where
     Output: FromStr,
