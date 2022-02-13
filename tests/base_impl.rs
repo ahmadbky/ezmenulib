@@ -26,7 +26,7 @@ struct MyMenu {
 
 #[test]
 fn base_impl() {
-    let input = b"Ahmad\nBaalbaky\n598\n" as &[u8];
+    let input = "Ahmad\nBaalbaky\n598\n".as_bytes();
     let menu = MyMenu::from_io(input, stdout()).unwrap();
     println!("{:?}", menu);
 }
