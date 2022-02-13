@@ -1,21 +1,32 @@
 use ezmenu::Menu;
+use std::io::stdout;
 
-// TODO: testings
-/// FIXME: find a way to test input and output without using stdin and stdout
-/// the idea is to do something like:
-/// ```rust
-/// #[derive(Menu)]
-/// struct Person {
-///     #[field::test(b"Ahmad")]
-///     name: String,
-///     #[field::test(b"19")]
-///     age: u8,
-/// }
-///
-/// let output = Person::from_menu();
-/// assert_eq!(output, "- name: Ahmad\n- age: 19\n");
-/// ```
+mod test {
+    use ezmenu::MenuResult;
+    use std::io::Write;
+
+    pub fn check_age(age: u8, writer: &mut impl Write) -> MenuResult<u8> {
+        if age == 19 {
+            writer.write(b"omg just like me\n")?;
+        }
+        Ok(age)
+    }
+}
+
+#[derive(Menu, Debug)]
+#[menu(title = "bonjour", chip("- "), prefix(">> "), new_line(true))]
+#[allow(dead_code)]
+struct MyMenu {
+    #[menu(msg = "your first name plz", prefix = ": ")]
+    firstname: String,
+    lastname: String,
+    #[menu(msg("how old are u"), default = 4, then(test::check_age))]
+    age: u8,
+}
+
 #[test]
-fn init_struct() {
-    // ...
+fn base_impl() {
+    let input = b"Ahmad\nBaalbaky\n598\n" as &[u8];
+    let menu = MyMenu::from_io(input, stdout()).unwrap();
+    println!("{:?}", menu);
 }
