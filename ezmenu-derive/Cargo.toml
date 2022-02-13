@@ -1,6 +1,6 @@
 [package]
 name = "ezmenu-derive"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenu-derive"
@@ -14,6 +14,9 @@ license = "MIT"
 
 [lib]
 proc-macro = true
+
+[features]
+custom_io = []
 
 [dependencies]
 syn = { version = "1.0.86", features = ["extra-traits"] }
