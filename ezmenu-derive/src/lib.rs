@@ -4,15 +4,15 @@
 mod struct_field;
 mod struct_impl;
 
-extern crate proc_macro;
+extern crate proc_macro as pm;
 
 use crate::struct_field::{FieldFormatting, FieldMenuInit};
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::{quote, ToTokens};
 use syn::{
-    parse_macro_input, Attribute, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Meta,
-    Path,
+    parse_macro_input, Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed,
+    Ident, Meta, Path,
 };
 
 macro_rules! run {
@@ -36,9 +36,57 @@ macro_rules! run {
 use crate::struct_impl::MenuInit;
 pub(crate) use run;
 
+// TODO: parser attribute
+#[proc_macro_attribute]
+#[proc_macro_error]
+pub fn parser(_attr: pm::TokenStream, _ts: pm::TokenStream) -> pm::TokenStream {
+    pm::TokenStream::new()
+}
+
+#[proc_macro_attribute]
+#[proc_macro_error]
+pub fn parsed(_attr: pm::TokenStream, ts: pm::TokenStream) -> pm::TokenStream {
+    let input = parse_macro_input!(ts as DeriveInput);
+    if let Data::Enum(e) = &input.data {
+        build_parsed_enum(&input, e)
+    } else {
+        abort!(
+            input,
+            "ezmenu::parsed macro attribute only works on unit-like enums."
+        )
+    }
+    .into()
+}
+
+fn build_parsed_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream {
+    let ident = &input.ident;
+
+    let inputs = data.variants.iter().map(|var| {
+        let val = var.ident.to_string().to_lowercase();
+        quote!(#val)
+    });
+    let outputs = data.variants.iter().map(|var| &var.ident);
+
+    quote! {
+        #input
+        impl ::std::str::FromStr for #ident {
+            type Err = ::ezmenu::MenuError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s.to_lowercase().as_str() {
+                    #(#inputs => Ok(Self::#outputs),)*
+                    _ => Err(::ezmenu::MenuError::Custom(
+                        // necessary to provide error because default value can be provided
+                        Box::new(format!("unrecognized input for `{}`", s))))
+                }
+            }
+        }
+    }
+}
+
 #[proc_macro_derive(Menu, attributes(menu))]
 #[proc_macro_error]
-pub fn build_menu(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn build_menu(ts: pm::TokenStream) -> pm::TokenStream {
     let input = parse_macro_input!(ts as DeriveInput);
     match input.data {
         Data::Enum(_e) => todo!("derive on enum soon"),
@@ -46,7 +94,7 @@ pub fn build_menu(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
             fields: Fields::Named(fields),
             ..
         }) => build_struct(input.ident, input.attrs, fields),
-        _ => abort_call_site!("Menu derive supports only non-tuple structs and enums."),
+        _ => abort_call_site!("Menu derive supports only non-tuple structs and unit-like enums."),
     }
     .into()
 }
@@ -105,14 +153,10 @@ fn path_to_string(from: &Path) -> String {
 
 fn get_meta_attr(attrs: Vec<Attribute>) -> Option<Meta> {
     attrs.into_iter().find_map(|attr| {
-        if attr.path.is_ident("menu") {
-            let meta = attr
-                .parse_meta()
-                .unwrap_or_else(|e| abort!(attr, "incorrect definition of menu attribute: {}", e));
-            Some(meta)
-        } else {
-            None
-        }
+        attr.path.is_ident("menu").then(|| {
+            attr.parse_meta()
+                .unwrap_or_else(|e| abort!(attr, "incorrect definition of menu attribute: {}", e))
+        })
     })
 }
 
