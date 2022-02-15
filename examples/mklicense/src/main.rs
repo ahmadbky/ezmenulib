@@ -1,5 +1,6 @@
-use ezmenu::{Menu, StructField};
+use ezmenu::{Menu, MenuVec};
 
+#[derive(Debug)]
 #[ezmenu::parsed]
 enum Type {
     MIT,
@@ -9,14 +10,11 @@ enum Type {
 
 #[derive(Menu)]
 struct License {
-    #[menu(msg("Author"))]
-    author: String,
-    #[menu(msg("Project name"))]
+    authors: MenuVec<String>,
     proj_name: String,
-    #[menu(msg("Type"))]
     ty: Type,
 }
 
 fn main() {
-    let license: u8 = StructField::from("hello").init_build().unwrap();
+    let _l = License::from_menu_unwrap();
 }
