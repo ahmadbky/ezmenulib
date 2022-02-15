@@ -75,7 +75,7 @@ fn build_parsed_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s.to_lowercase().as_str() {
                     #(#inputs => Ok(Self::#outputs),)*
-                    _ => Err(::ezmenu::MenuError::Custom(
+                    _ => Err(::ezmenu::MenuError::Other(
                         // necessary to provide error because default value can be provided
                         Box::new(format!("unrecognized input for `{}`", s))))
                 }
@@ -108,6 +108,11 @@ fn def_init<'a>(menu_desc: MenuInit) -> TokenStream {
             Ok(Self {#(
                 #fields
             )*})
+        }
+
+        pub fn from_menu_unwrap() -> Self {
+            Self::from_menu()
+                .expect("An error occurred while processing menu")
         }
     }
 }
