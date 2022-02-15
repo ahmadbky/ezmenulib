@@ -14,31 +14,11 @@ exclude = [
 ]
 
 [features]
-default = ["derive"]
-custom_io = ["ezmenu-derive/custom_io"]
+default = ["derive", "parsed_attr"]
+parsed_attr = []
 derive = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ezmenu-derive = { path = "ezmenu-derive", version = "0.2.3"}
-
-[[test]]
-name = "base_impl"
-path = "tests/base_impl.rs"
-required-features = ["custom_io"]
-
-[[test]]
-name = "menu_attr"
-path = "tests/menu_attr.rs"
-required-features = ["custom_io"]
-
-[[test]]
-name = "structmenu"
-path = "src/tests/menu.rs"
-required-features = ["custom_io"]
-
-[[test]]
-name = "structfield"
-path = "src/tests/field.rs"
-required-features = ["custom_io"]

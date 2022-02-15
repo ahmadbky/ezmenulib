@@ -15,9 +15,6 @@ license = "MIT"
 [lib]
 proc-macro = true
 
-[features]
-custom_io = []
-
 [dependencies]
 syn = { version = "1.0.86", features = ["extra-traits"] }
 proc-macro-error = "1.0.4"
