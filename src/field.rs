@@ -4,7 +4,7 @@ mod field;
 
 use crate::{MenuError, MenuResult};
 use std::fmt::Debug;
-use std::io::{BufRead, Stdin, Stdout, Write};
+use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::str::FromStr;
 
 /// Defines the formatting of a menu field.
@@ -111,16 +111,74 @@ impl<'a> StructField<'a> {
         self
     }
 
-    /// Builds the field with custom reader and writer types.
-    #[cfg(feature = "custom_io")]
-    pub fn build_with<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
+    /// Builds the field without specifying input and output streams.
+    /// It initializes instance of `Stdin` and `Stdout`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use ezmenu::{MenuResult, StructField};
+    /// let age: MenuResult<u8> = StructField::from("How old are you")
+    ///     .init_build();
+    /// ```
+    #[inline]
+    pub fn init_build<T>(self) -> MenuResult<T>
     where
-        R: BufRead,
-        W: Write,
         T: FromStr,
-        <T as FromStr>::Err: 'static + Debug,
+        T::Err: 'static + Debug,
     {
-        self.ask_output(reader, writer)
+        self.build(&stdin(), &mut stdout())
+    }
+
+    /// Builds the field without specifying input and output streams,
+    /// and return directly the value provided.
+    ///
+    /// ## Panic
+    ///
+    /// This method panics if an error occurred. (See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html))
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use ezmenu::StructField;
+    /// let age: u8 = StructField::from("How old are you?").unwrap_init_build();
+    /// ```
+    #[inline]
+    pub fn unwrap_init_build<T>(self) -> T
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+    {
+        self.init_build()
+            .expect("An error occurred while prompting a value")
+    }
+
+    /// Builds the field by specifying input and output streams.
+    /// It directly returns the value provided.
+    ///
+    /// ## Panic
+    ///
+    /// This method panics if an error occurred while prompting the field.
+    /// (See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html))
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use std::io::{stdin, stdout};
+    /// use ezmenu::{MenuResult, StructField};
+    /// let stdin = stdin();
+    /// let mut stdout = stdout();
+    /// let age: MenuResult<u8>  = StructField::from("How old are you?")
+    ///     .unwrap_build(&stdin, &mut stdout);
+    /// ```
+    #[inline]
+    pub fn unwrap_build<T>(self, reader: &Stdin, writer: &mut Stdout) -> T
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+    {
+        self.build(reader, writer)
+            .expect("An error occurred while prompting a value")
     }
 
     /// Builds the field.
@@ -140,23 +198,12 @@ impl<'a> StructField<'a> {
     pub fn build<T>(self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
     where
         T: FromStr,
-        <T as FromStr>::Err: 'static + Debug,
-    {
-        self.ask_output(&mut reader.lock(), writer)
-    }
-
-    fn ask_output<T, R, W>(self, reader: &mut R, writer: &mut W) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        <T as FromStr>::Err: 'static + Debug,
+        T::Err: 'static + Debug,
     {
         /// Function that parses the default value without checking.
         /// It it useful to break the loop if there is some default value,
         /// and no value was provided, or if the value is incorrect.
-        #[inline]
-        fn unchecked_default_parse<T>(default: Option<&str>) -> MenuResult<T>
+        fn default_parse<T>(default: Option<&str>) -> MenuResult<T>
         where
             T: FromStr,
             <T as FromStr>::Err: 'static + Debug,
@@ -175,16 +222,11 @@ impl<'a> StructField<'a> {
             let mut out = String::new();
             reader.read_line(&mut out)?;
 
-            // if not asking from stdin, then append to stdout
-            if cfg!(feature = "custom_io") {
-                write!(writer, "{}", out)?;
-            }
-
             // try to parse to T, else repeat
             match out.trim().parse() {
                 Ok(t) => break Ok(t),
                 // TODO: feature allowing control over default values behavior
-                Err(_) if self.default.is_some() => break unchecked_default_parse(self.default),
+                Err(_) if self.default.is_some() => break default_parse(self.default),
                 _ => continue,
             }
         }
