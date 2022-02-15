@@ -171,7 +171,7 @@
 //! use std::io::{stdin, stdout};
 //! use ezmenu::StructField;
 //! let age: u8 = StructField::from("How old are you?")
-//! .build(&stdin(), &mut stdout()).unwrap();
+//!    .build(&stdin(), &mut stdout()).unwrap();
 //! ```
 //!
 //! If you want to build a menu with all the previous features (default values, formatting rules...),
@@ -179,37 +179,41 @@
 //! ```rust
 //! use ezmenu::{StructField, StructFieldFormatting};
 //! let mut menu = StructMenu::default()
-//! .title("-- Mklicense --")
-//! .fmt(StructFieldFormatting {
-//! chip: "* Give the ",
-//! ..Default::default()
-//! })
-//! .with_field(StructField::from("project author name"))
-//! .with_field(StructField::from("project name"))
-//! .with_field(StructField::from("Give the year of the license")
-//! .default("2022")
-//! .fmt(StructFieldFormatting {
-//! prefix: ">> ",
-//! new_line: true,
-//! ..Default::default()
-//! })
+//!     .title("-- Mklicense --")
+//!     .fmt(StructFieldFormatting {
+//!         chip: "* Give the ",
+//!        ..Default::default()
+//!     })
+//!     .with_field(StructField::from("project author name"))
+//!     .with_field(StructField::from("project name"))
+//!     .with_field(StructField::from("Give the year of the license")
+//!     .default("2022")
+//!     .fmt(StructFieldFormatting {
+//!         prefix: ">> ",
+//!         new_line: true,
+//!         ..Default::default()
+//!     })
 //! );
 //!
 //! let name: String = menu.next_map(|s: String, w| {
-//! if s.to_lowercase() == "ahmad" {
-//! w.write(b"Nice name!!")?;
-//! }
-//! Ok(s)
-//! }).unwrap();
+//!     if s.to_lowercase() == "ahmad" {
+//!         w.write(b"Nice name!!")?;
+//!     }
+//!     Ok(s)
+//!     }).unwrap();
 //! let proj_name: String = menu.next().unwrap();
 //! let proj_year: i64 = menu.next().unwrap();
 //! ```
 mod field;
 mod menu;
+mod menuvec;
 
 /// Menu derive macro
 #[cfg(feature = "derive")]
-pub use ezmenu_derive::*;
+pub use ezmenu_derive::Menu;
+
+#[cfg(feature = "parsed_attr")]
+pub use ezmenu_derive::parsed;
 
 pub use field::{StructField, StructFieldFormatting};
 pub use menu::{Menu, StructMenu};
