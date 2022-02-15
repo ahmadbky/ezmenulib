@@ -1,7 +1,3 @@
-#[cfg(test)]
-#[path = "tests/menu.rs"]
-mod menu;
-
 use crate::field::StructFieldFormatting;
 use crate::{MenuError, MenuResult, StructField};
 use std::collections::VecDeque;

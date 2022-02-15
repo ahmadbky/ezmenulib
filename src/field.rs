@@ -1,7 +1,3 @@
-#[cfg(test)]
-#[path = "tests/field.rs"]
-mod field;
-
 use crate::{MenuError, MenuResult};
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
