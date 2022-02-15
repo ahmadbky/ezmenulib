@@ -204,9 +204,9 @@
 //! let proj_name: String = menu.next().unwrap();
 //! let proj_year: i64 = menu.next().unwrap();
 //! ```
+mod customs;
 mod field;
 mod menu;
-mod menuvec;
 
 /// Menu derive macro
 #[cfg(feature = "derive")]
@@ -215,6 +215,7 @@ pub use ezmenu_derive::Menu;
 #[cfg(feature = "parsed_attr")]
 pub use ezmenu_derive::parsed;
 
+pub use customs::{MenuBool, MenuVec};
 pub use field::{StructField, StructFieldFormatting};
 pub use menu::{Menu, StructMenu};
 
@@ -235,7 +236,7 @@ pub enum MenuError {
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
     /// by returning an `Err(MenuError::Custom(...))`
-    Custom(Box<dyn Debug>),
+    Other(Box<dyn Debug>),
 }
 
 impl From<io::Error> for MenuError {
