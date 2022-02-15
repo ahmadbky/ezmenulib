@@ -61,25 +61,32 @@ use std::str::FromStr;
 /// * Give the year of the license (default: 2022)
 /// >> 2018
 /// ```
-pub struct StructMenu<'a, R, W> {
+pub struct StructMenu<'a> {
     title: &'a str,
     fmt: StructFieldFormatting<'a>,
     fields: VecDeque<StructField<'a>>,
-    reader: R,
-    writer: W,
+    reader: Stdin,
+    writer: Stdout,
     // used to know when to print the title
     first_popped: bool,
 }
 
 /// The default menu uses `Stdin` as reader and `Stdout` as writer.
-impl<'a> Default for StructMenu<'a, Stdin, Stdout> {
+impl<'a> Default for StructMenu<'a> {
     fn default() -> Self {
-        Self::new(stdin(), stdout())
+        Self {
+            title: "",
+            fmt: Default::default(),
+            fields: VecDeque::new(),
+            reader: stdin(),
+            writer: stdout(),
+            first_popped: false,
+        }
     }
 }
 
 /// The default menu uses `Stdin` as reader and `Stdout` as writer.
-impl<'a> From<&'a str> for StructMenu<'a, Stdin, Stdout> {
+impl<'a> From<&'a str> for StructMenu<'a> {
     fn from(title: &'a str) -> Self {
         Self {
             title,
@@ -89,21 +96,7 @@ impl<'a> From<&'a str> for StructMenu<'a, Stdin, Stdout> {
 }
 
 /// Methods used to construct a menu describing a struct.
-impl<'a, R, W> StructMenu<'a, R, W> {
-    /// Builds a new menu by defining its reader and writer.
-    /// The reader must implement `std::io::BufRead`
-    /// and the writer must implement `std::io::Write`, at the menu building.
-    pub fn new(reader: R, writer: W) -> Self {
-        Self {
-            title: "",
-            fmt: Default::default(),
-            fields: Default::default(),
-            reader,
-            writer,
-            first_popped: false,
-        }
-    }
-
+impl<'a> StructMenu<'a> {
     /// Give the global formatting applied to all the fields the menu contains.
     /// If a field has a custom formatting, it will uses the formatting rules of the field
     /// when printing to the writer.
@@ -132,7 +125,7 @@ impl<'a, R, W> StructMenu<'a, R, W> {
     }
 }
 
-impl<'a, R, W: Write> StructMenu<'a, R, W> {
+impl<'a> StructMenu<'a> {
     /// Returns the next field to print when building the menu.
     fn get_next_field(&mut self) -> MenuResult<StructField<'a>> {
         // prints the menu title or not
@@ -145,19 +138,13 @@ impl<'a, R, W: Write> StructMenu<'a, R, W> {
 }
 
 /// Trait used to return the next output of the menu.
-pub trait Menu<Output, R, W>
+pub trait Menu<Output>: AsRef<Stdout> + AsMut<Stdout>
 where
     Output: FromStr,
     <Output as FromStr>::Err: Debug,
 {
     /// Returns the next output from the reader.
     fn next(&mut self) -> MenuResult<Output>;
-
-    /// Returns the output as a reference at the current state.
-    fn get_output(&self) -> &W;
-
-    /// Return the output as a mutable reference at the current state.
-    fn get_output_mut(&mut self) -> &mut W;
 
     /// Returns the value mapped by the function specified as argument.
     ///
@@ -168,56 +155,32 @@ where
     /// `MenuError::Custom(Box<dyn std::error::Error>)`.
     fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
     where
-        F: FnOnce(Output, &mut W) -> MenuResult<Output>,
+        F: FnOnce(Output, &mut Stdout) -> MenuResult<Output>,
     {
-        f(self.next()?, self.get_output_mut())
+        f(self.next()?, self.as_mut())
     }
 }
 
-/// The implementation of the Menu trait using `Stdin` as reader requires
-/// to use the `Stdin::lock` method for polymorphism purposes, because we need
-/// an `impl BufRead` to read the next line input.
-/// In the future versions, this will not be necessary because `Stdin` will implement `BufRead`.
-#[cfg(not(feature = "custom_io"))]
-impl<'a, Output> Menu<Output, Stdin, Stdout> for StructMenu<'a, Stdin, Stdout>
-where
-    Output: FromStr,
-    <Output as FromStr>::Err: 'static + Debug,
-{
-    /// Returns the next field output with the correct type.
-    fn next(&mut self) -> MenuResult<Output> {
-        self.get_next_field()?.build(&self.reader, &mut self.writer)
-    }
-
-    fn get_output(&self) -> &Stdout {
+impl<'a> AsRef<Stdout> for StructMenu<'a> {
+    fn as_ref(&self) -> &Stdout {
         &self.writer
     }
+}
 
-    fn get_output_mut(&mut self) -> &mut Stdout {
+impl<'a> AsMut<Stdout> for StructMenu<'a> {
+    fn as_mut(&mut self) -> &mut Stdout {
         &mut self.writer
     }
 }
 
-#[cfg(feature = "custom_io")]
-impl<'a, Output, R, W> Menu<Output, R, W> for StructMenu<'a, R, W>
+impl<'a, Output> Menu<Output> for StructMenu<'a>
 where
-    R: std::io::BufRead,
-    W: Write,
-    Output: FromStr,
     <Output as FromStr>::Err: 'static + Debug,
+    Output: FromStr,
 {
-    /// Returns the next field output with the correct type.
     fn next(&mut self) -> MenuResult<Output> {
         self.get_next_field()?
-            .build_with(&mut self.reader, &mut self.writer)
-    }
-
-    fn get_output(&self) -> &W {
-        &self.writer
-    }
-
-    fn get_output_mut(&mut self) -> &mut W {
-        &mut self.writer
+            .build(&mut self.reader, &mut self.writer)
     }
 }
 
