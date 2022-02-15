@@ -61,10 +61,10 @@ pub fn parsed(_attr: pm::TokenStream, ts: pm::TokenStream) -> pm::TokenStream {
 fn build_parsed_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream {
     let ident = &input.ident;
 
-    let inputs = data.variants.iter().map(|var| {
-        let val = var.ident.to_string().to_lowercase();
-        quote!(#val)
-    });
+    let inputs = data
+        .variants
+        .iter()
+        .map(|var| var.ident.to_string().to_lowercase());
     let outputs = data.variants.iter().map(|var| &var.ident);
 
     quote! {
@@ -99,25 +99,6 @@ pub fn build_menu(ts: pm::TokenStream) -> pm::TokenStream {
     .into()
 }
 
-#[cfg(feature = "custom_io")]
-fn def_init<'a>(menu_desc: MenuInit) -> TokenStream {
-    let fields = menu_desc.fields.iter().map(|field| &field.kind);
-    quote! {
-        pub fn from_io<R, W>(reader: R, writer: W) -> ::ezmenu::MenuResult<Self>
-        where
-            R: ::std::io::BufRead,
-            W: ::std::io::Write,
-        {
-            let mut menu = ::ezmenu::StructMenu::new(reader, writer)
-                #menu_desc;
-            Ok(Self {#(
-                #fields
-            )*})
-        }
-    }
-}
-
-#[cfg(not(any(feature = "custom_io", test)))]
 fn def_init<'a>(menu_desc: MenuInit) -> TokenStream {
     let fields = menu_desc.fields.iter().map(|field| &field.kind);
     quote! {
