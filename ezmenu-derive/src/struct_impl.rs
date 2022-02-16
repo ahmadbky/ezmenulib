@@ -131,7 +131,7 @@ impl From<Meta> for AllMenuInit {
     fn from(meta: Meta) -> Self {
         // wrapping to "tokenable" values
         let desc = MetaMenuDesc::from(meta);
-        let title = desc.title.map(|lit| MenuTitle(lit));
+        let title = desc.title.map(MenuTitle);
 
         Self {
             title,
@@ -160,7 +160,7 @@ impl ToTokens for MenuInit {
 impl MenuInit {
     pub fn new(struct_attr: Option<Meta>, fields: Vec<FieldMenuInit>) -> Self {
         Self {
-            all: struct_attr.map(|attr| AllMenuInit::from(attr)),
+            all: struct_attr.map(AllMenuInit::from),
             fields,
         }
     }

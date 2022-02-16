@@ -254,8 +254,8 @@ impl From<Field> for FieldMenuInit {
 
         let msg = desc
             .msg
-            .unwrap_or(LitStr::new(format!("{}", ident).as_str(), ident.span()));
-        let default = desc.default.map(|lit| DefaultValue(lit));
+            .unwrap_or_else(|| LitStr::new(format!("{}", ident).as_str(), ident.span()));
+        let default = desc.default.map(DefaultValue);
         let kind = match desc.then {
             Some(func) => FieldMenuInitKind::Mapped(ident, func),
             _ => FieldMenuInitKind::Simple(ident),
