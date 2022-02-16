@@ -235,7 +235,7 @@ pub enum MenuError {
     NoMoreField,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
-    /// by returning an `Err(MenuError::Custom(...))`
+    /// by returning an `Err(MenuError::Other(...))`
     Other(Box<dyn Debug>),
 }
 

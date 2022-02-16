@@ -4,37 +4,21 @@
 mod struct_field;
 mod struct_impl;
 
+mod utils;
+
 extern crate proc_macro as pm;
 
 use crate::struct_field::{FieldFormatting, FieldMenuInit};
+use crate::struct_impl::MenuInit;
+pub(crate) use utils::*;
+
 use proc_macro2::TokenStream;
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{
     parse_macro_input, Attribute, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed,
-    Ident, Meta, Path,
+    Ident,
 };
-
-macro_rules! run {
-    (nested: $id:ident, $var:ident, $nested:expr, $s:expr) => {
-        if let NestedMeta::Lit(Lit::$var(lit)) = $nested {
-            $id = Some(lit.clone());
-        } else {
-            abort_invalid_type($nested, $s);
-        }
-    };
-
-    ($id:ident, $var:ident, $lit:expr, $s:expr) => {
-        if let Lit::$var(lit) = $lit {
-            $id = Some(lit.clone());
-        } else {
-            abort_invalid_type($lit, $s);
-        }
-    };
-}
-
-use crate::struct_impl::MenuInit;
-pub(crate) use run;
 
 // TODO: parser attribute
 #[proc_macro_attribute]
@@ -117,36 +101,6 @@ fn def_init(menu_desc: MenuInit) -> TokenStream {
                 .expect("An error occurred while processing menu")
         }
     }
-}
-
-#[inline(never)]
-fn abort_invalid_type(span: impl ToTokens, s: &str) -> ! {
-    abort!(span, "invalid literal type for `{}` attribute", s)
-}
-
-#[inline(never)]
-fn abort_invalid_arg_name(span: impl ToTokens, s: &str) -> ! {
-    abort!(span, "invalid argument name: `{}`", s)
-}
-
-#[inline]
-fn path_to_string(from: &Path) -> String {
-    // meta attribute parsing makes path always start with an ident
-    from.get_ident().unwrap().to_string()
-}
-
-fn get_meta_attr(attrs: Vec<Attribute>) -> Option<Meta> {
-    attrs.into_iter().find_map(|attr| {
-        attr.path
-            .segments
-            .first()
-            .filter(|seg| seg.ident == "menu")
-            .map(|_| {
-                attr.parse_meta().unwrap_or_else(|e| {
-                    abort!(attr, "incorrect definition of field attribute: {}", e)
-                })
-            })
-    })
 }
 
 fn build_struct(name: Ident, attrs: Vec<Attribute>, fields: FieldsNamed) -> TokenStream {

@@ -148,7 +148,7 @@ where
     /// and `W` is the type of the writer (`Stdout` generally).
     ///
     /// It returns a `MenuResult<Output>` to prevent from any error or return a custom error, with:
-    /// `MenuError::Custom(Box<dyn std::error::Error>)`.
+    /// `MenuError::Other(Box<dyn std::error::Debug>)`.
     fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
     where
         F: FnOnce(Output, &mut Stdout) -> MenuResult<Output>,
@@ -175,8 +175,7 @@ where
     Output: FromStr,
 {
     fn next(&mut self) -> MenuResult<Output> {
-        self.get_next_field()?
-            .build(&mut self.reader, &mut self.writer)
+        self.get_next_field()?.build(&self.reader, &mut self.writer)
     }
 }
 

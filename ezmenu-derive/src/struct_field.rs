@@ -1,8 +1,8 @@
-use crate::{abort_invalid_arg_name, abort_invalid_type, get_meta_attr, path_to_string, run};
+use crate::*;
+
 use proc_macro2::{Ident, TokenStream};
-use proc_macro_error::abort;
 use quote::{quote, ToTokens};
-use syn::{Field, Lit, LitBool, LitStr, Meta, MetaList, MetaNameValue, NestedMeta, Path};
+use syn::{Field, Lit, LitBool, LitStr, Meta, NestedMeta, Path};
 
 /// Wrapper used for the expansion of the `StructFieldFormatting` struct instantiation.
 pub(crate) struct FieldFormatting {
@@ -97,14 +97,14 @@ pub(crate) enum FieldMenuInitKind {
 
 impl ToTokens for FieldMenuInitKind {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Self::Simple(ident) => tokens.extend(quote! {
+        tokens.extend(match self {
+            Self::Simple(ident) => quote! {
                 #ident: menu.next()?,
-            }),
-            Self::Mapped(ident, func) => tokens.extend(quote! {
+            },
+            Self::Mapped(ident, func) => quote! {
                 #ident: menu.next_map(#func)?,
-            }),
-        }
+            },
+        })
     }
 }
 
@@ -117,85 +117,99 @@ struct MetaFieldDesc {
     fmt: FieldFormatting,
 }
 
+/// Binds the argument of a list meta attribute to one
+/// of the fields of the output MetaFieldDesc.
+///
+/// It is not the same as a name-value attribute because
+/// the name-value accepts only literal values, so cannot build
+/// the `then` argument for example. Moreover, the argument is
+/// represented by a NestedMeta.
+fn parse_arg_nested(
+    MetaFieldDesc {
+        ref mut msg,
+        ref mut default,
+        ref mut then,
+        fmt:
+            FieldFormatting {
+                ref mut chip,
+                ref mut prefix,
+                ref mut new_line,
+                default: ref mut disp_default,
+                ..
+            },
+    }: &mut MetaFieldDesc,
+    arg: String,
+    nested: &NestedMeta,
+) {
+    match arg.as_str() {
+        s @ "msg" => run_nested_str(s, nested, msg),
+        s @ "default" => run_nested(s, nested, default),
+        s @ "then" => run_nested_path(s, nested, then),
+        s @ "chip" => run_nested_str(s, nested, chip),
+        s @ "prefix" => run_nested_str(s, nested, prefix),
+        s @ "new_line" => run_nested_bool(s, nested, new_line),
+        s @ "display_default" => run_nested_bool(s, nested, disp_default),
+        s => abort_invalid_arg_name(nested, s),
+    }
+}
+
+/// Binds the argument of a name-value meta attribute to one
+/// of the fields of the output MetaFieldDesc.
+///
+/// It is not the same as a list meta attribute, because
+/// it only accepts literal values.
+fn parse_arg_nv(
+    MetaFieldDesc {
+        ref mut msg,
+        ref mut default,
+        fmt:
+            FieldFormatting {
+                ref mut chip,
+                ref mut prefix,
+                ref mut new_line,
+                default: ref mut disp_default,
+                ..
+            },
+        ..
+    }: &mut MetaFieldDesc,
+    arg: String,
+    lit: Lit,
+) {
+    match arg.as_str() {
+        s @ "msg" => run_nv_str(s, lit, msg),
+        "default" => *default = Some(lit),
+        s @ "chip" => run_nv_str(s, lit, chip),
+        s @ "prefix" => run_nv_str(s, lit, prefix),
+        s @ "new_line" => run_nv_bool(s, lit, new_line),
+        s @ "display_default" => run_nv_bool(s, lit, disp_default),
+        s => abort_invalid_arg_name(s, s),
+    }
+}
+
 /// Implementation used to parse the inner parameters
 /// of a `menu` attribute
-/// into the description of the menu
-// FIXME: disable duplication of meta parsing for field and struct attributes
+/// into the description of the menu.
 impl From<Meta> for MetaFieldDesc {
     fn from(meta: Meta) -> Self {
-        // values edited at each iteration
-        // (if the user provided them multiple times)
+        let mut desc = MetaFieldDesc::default();
+
+        parse(&mut desc, parse_arg_nested, parse_arg_nv, meta);
+
         let MetaFieldDesc {
-            mut msg,
-            mut default,
-            mut then,
+            msg,
+            default,
+            then,
             fmt:
                 FieldFormatting {
-                    mut chip,
-                    mut prefix,
-                    mut new_line,
-                    default: mut disp_default,
+                    chip,
+                    prefix,
+                    new_line,
+                    default: disp_default,
                     ..
                 },
-        } = Default::default();
+        } = desc;
 
-        // root meta must be a list
-        if let Meta::List(MetaList { nested, .. }) = meta {
-            for nm in nested {
-                match nm {
-                    // in inner metas, if the meta type is a list,
-                    // then it should contain only 1 nested meta as value
-                    // like a path to a function, or a string literal for a message
-                    NestedMeta::Meta(Meta::List(MetaList { path, nested, .. })) => {
-                        // get the first nested meta inside parenthesis
-                        let nested = nested.first();
-                        let nested = match nested {
-                            Some(nm) => nm,
-                            _ => abort!(path, "value definition missing"),
-                        };
-
-                        match path_to_string(&path).as_str() {
-                            s @ "msg" => run!(nested: msg, Str, nested, s),
-                            s @ "default" => {
-                                if let NestedMeta::Lit(lit) = nested {
-                                    default = Some(lit.clone());
-                                } else {
-                                    abort_invalid_type(nested, s);
-                                }
-                            }
-                            s @ "then" => {
-                                if let NestedMeta::Meta(Meta::Path(path)) = nested {
-                                    then = Some(path.clone());
-                                } else {
-                                    abort_invalid_type(nested, s);
-                                }
-                            }
-                            s @ "chip" => run!(nested: chip, Str, nested, s),
-                            s @ "prefix" => run!(nested: prefix, Str, nested, s),
-                            s @ "new_line" => run!(nested: new_line, Bool, nested, s),
-                            s @ "display_default" => run!(nested: disp_default, Bool, nested, s),
-                            s => abort_invalid_arg_name(path, s),
-                        }
-                    }
-                    // deconstructing to a path and a literal
-                    NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
-                        match path_to_string(&path).as_str() {
-                            s @ "msg" => run!(msg, Str, lit, s),
-                            "default" => default = Some(lit.clone()),
-                            s @ "chip" => run!(chip, Str, lit, s),
-                            s @ "prefix" => run!(prefix, Str, lit, s),
-                            s @ "new_line" => run!(new_line, Bool, lit, s),
-                            s @ "display_default" => run!(disp_default, Bool, lit, s),
-                            s => abort_invalid_arg_name(path, s),
-                        }
-                    }
-                    _ => abort!(nm, "expected value definition"),
-                }
-            }
-        } else {
-            abort!(meta, "incorrect definition of menu attribute");
-        }
-
+        // we need to declare variables here so fmt params are not moved
         let custom_fmt =
             chip.is_some() || prefix.is_some() || new_line.is_some() || disp_default.is_some();
         let some_omitted =

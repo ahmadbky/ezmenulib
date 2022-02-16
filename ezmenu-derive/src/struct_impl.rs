@@ -1,10 +1,7 @@
-use crate::{
-    abort_invalid_arg_name, abort_invalid_type, path_to_string, run, FieldFormatting, FieldMenuInit,
-};
+use crate::*;
 use proc_macro2::TokenStream;
-use proc_macro_error::abort;
 use quote::{quote, ToTokens};
-use syn::{Lit, LitStr, Meta, MetaList, MetaNameValue, NestedMeta};
+use syn::{Lit, LitStr, Meta, NestedMeta};
 
 /// Wrapper used for the expansion of the `StructMenu::title` method call.
 struct MenuTitle(LitStr);
@@ -25,72 +22,82 @@ struct MetaMenuDesc {
     fmt: FieldFormatting,
 }
 
+fn parse_arg_nested(
+    MetaMenuDesc {
+        ref mut title,
+        fmt:
+            FieldFormatting {
+                ref mut chip,
+                ref mut prefix,
+                ref mut new_line,
+                default: ref mut disp_default,
+                ..
+            },
+    }: &mut MetaMenuDesc,
+    arg: String,
+    nested: &NestedMeta,
+) {
+    match arg.as_str() {
+        s @ "title" => run_nested_str(s, nested, title),
+        s @ "chip" => run_nested_str(s, nested, chip),
+        s @ "prefix" => run_nested_str(s, nested, prefix),
+        s @ "new_line" => run_nested_bool(s, nested, new_line),
+        s @ "display_default" => run_nested_bool(s, nested, disp_default),
+        s => abort_invalid_arg_name(nested, s),
+    }
+}
+
+fn parse_arg_nv(
+    MetaMenuDesc {
+        ref mut title,
+        fmt:
+            FieldFormatting {
+                ref mut chip,
+                ref mut prefix,
+                ref mut new_line,
+                default: ref mut disp_default,
+                ..
+            },
+    }: &mut MetaMenuDesc,
+    arg: String,
+    lit: Lit,
+) {
+    match arg.as_str() {
+        s @ "title" => run_nv_str(s, lit, title),
+        s @ "chip" => run_nv_str(s, lit, chip),
+        s @ "prefix" => run_nv_str(s, lit, prefix),
+        s @ "new_line" => run_nv_bool(s, lit, new_line),
+        s @ "display_default" => run_nv_bool(s, lit, disp_default),
+        s => abort_invalid_arg_name(s, s),
+    }
+}
+
 /// Implementation used to parse the inner parameters
 /// of a `menu` attribute
 /// into the description of the menu
-// FIXME: disable duplication of meta parsing for field and struct attributes
 impl From<Meta> for MetaMenuDesc {
     fn from(meta: Meta) -> Self {
-        // values edited at each iteration
-        // (if the user provided them multiple times)
+        let mut desc = MetaMenuDesc::default();
+
+        parse(&mut desc, parse_arg_nested, parse_arg_nv, meta);
+
         let MetaMenuDesc {
-            mut title,
+            title,
             fmt:
                 FieldFormatting {
-                    mut chip,
-                    mut prefix,
-                    mut new_line,
-                    mut default,
+                    chip,
+                    prefix,
+                    new_line,
+                    default: disp_default,
                     ..
                 },
-        } = Default::default();
+        } = desc;
 
-        // root meta must be a list
-        if let Meta::List(MetaList { nested, .. }) = meta {
-            for nm in nested {
-                match nm {
-                    // in inner metas, if the meta type is a list,
-                    // then it should contain only 1 nested meta as value
-                    // like a path to a function, or a string literal for a message
-                    NestedMeta::Meta(Meta::List(MetaList { path, nested, .. })) => {
-                        // get the first nested meta inside parenthesis
-                        let nested = nested.first();
-                        let nested = match nested {
-                            Some(nm) => nm,
-                            _ => abort!(path, "value definition missing"),
-                        };
-
-                        match path_to_string(&path).as_str() {
-                            s @ "title" => run!(nested: title, Str, nested, s),
-                            s @ "chip" => run!(nested: chip, Str, nested, s),
-                            s @ "prefix" => run!(nested: prefix, Str, nested, s),
-                            s @ "new_line" => run!(nested: new_line, Bool, nested, s),
-                            s @ "display_default" => run!(nested: default, Bool, nested, s),
-                            s => abort_invalid_arg_name(path, s),
-                        }
-                    }
-                    // deconstructing to a path and a literal
-                    NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
-                        match path_to_string(&path).as_str() {
-                            s @ "title" => run!(title, Str, lit, s),
-                            s @ "chip" => run!(chip, Str, lit, s),
-                            s @ "prefix" => run!(prefix, Str, lit, s),
-                            s @ "new_line" => run!(new_line, Bool, lit, s),
-                            s @ "display_default" => run!(default, Bool, lit, s),
-                            s => abort_invalid_arg_name(path, s),
-                        }
-                    }
-                    _ => abort!(nm, "expected value definition"),
-                }
-            }
-        } else {
-            abort!(meta, "incorrect definition of menu attribute");
-        }
-
+        // we need to declare variables here so fmt params are not moved
         let custom_fmt =
-            chip.is_some() || prefix.is_some() || new_line.is_some() || default.is_some();
+            chip.is_some() || prefix.is_some() || new_line.is_some() || disp_default.is_some();
         let some_omitted =
-            !(chip.is_some() && prefix.is_some() && new_line.is_some() && default.is_some());
+            !(chip.is_some() && prefix.is_some() && new_line.is_some() && disp_default.is_some());
 
         Self {
             title,
@@ -98,7 +105,7 @@ impl From<Meta> for MetaMenuDesc {
                 chip,
                 prefix,
                 new_line,
-                default,
+                default: disp_default,
                 custom_fmt,
                 some_omitted,
             },
