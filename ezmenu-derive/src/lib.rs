@@ -43,6 +43,7 @@ pub fn parser(_attr: pm::TokenStream, _ts: pm::TokenStream) -> pm::TokenStream {
     pm::TokenStream::new()
 }
 
+#[cfg(feature = "parsed_attr")]
 #[proc_macro_attribute]
 #[proc_macro_error]
 pub fn parsed(_attr: pm::TokenStream, ts: pm::TokenStream) -> pm::TokenStream {
@@ -84,6 +85,7 @@ fn build_parsed_enum(input: &DeriveInput, data: &DataEnum) -> TokenStream {
     }
 }
 
+#[cfg(feature = "derive")]
 #[proc_macro_derive(Menu, attributes(menu))]
 #[proc_macro_error]
 pub fn build_menu(ts: pm::TokenStream) -> pm::TokenStream {
@@ -99,7 +101,7 @@ pub fn build_menu(ts: pm::TokenStream) -> pm::TokenStream {
     .into()
 }
 
-fn def_init<'a>(menu_desc: MenuInit) -> TokenStream {
+fn def_init(menu_desc: MenuInit) -> TokenStream {
     let fields = menu_desc.fields.iter().map(|field| &field.kind);
     quote! {
         pub fn from_menu() -> ::ezmenu::MenuResult<Self> {
@@ -119,11 +121,7 @@ fn def_init<'a>(menu_desc: MenuInit) -> TokenStream {
 
 #[inline(never)]
 fn abort_invalid_type(span: impl ToTokens, s: &str) -> ! {
-    abort!(
-        span,
-        "invalid literal type for `{}` attribute", s;
-        help = "try surrounding: `{}(\"...\")`", s
-    )
+    abort!(span, "invalid literal type for `{}` attribute", s)
 }
 
 #[inline(never)]
@@ -139,10 +137,15 @@ fn path_to_string(from: &Path) -> String {
 
 fn get_meta_attr(attrs: Vec<Attribute>) -> Option<Meta> {
     attrs.into_iter().find_map(|attr| {
-        attr.path.is_ident("menu").then(|| {
-            attr.parse_meta()
-                .unwrap_or_else(|e| abort!(attr, "incorrect definition of menu attribute: {}", e))
-        })
+        attr.path
+            .segments
+            .first()
+            .filter(|seg| seg.ident == "menu")
+            .map(|_| {
+                attr.parse_meta().unwrap_or_else(|e| {
+                    abort!(attr, "incorrect definition of field attribute: {}", e)
+                })
+            })
     })
 }
 
@@ -150,11 +153,7 @@ fn build_struct(name: Ident, attrs: Vec<Attribute>, fields: FieldsNamed) -> Toke
     // optional menu attr of the struct
     let struct_attr = get_meta_attr(attrs);
     // fields of the struct mapped to menu fields description
-    let fields = fields
-        .named
-        .into_iter()
-        .map(|field| FieldMenuInit::from(field))
-        .collect();
+    let fields = fields.named.into_iter().map(FieldMenuInit::from).collect();
 
     let init = def_init(MenuInit::new(struct_attr, fields));
 
