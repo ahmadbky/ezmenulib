@@ -1,6 +1,6 @@
 [package]
 name = "ezmenu-derive"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenu-derive"
@@ -9,6 +9,11 @@ repository = "https://github.com/ahbalbk/ezmenu"
 keywords = ["cli", "derive", "menu", "interface"]
 categories = ["command-line-interface"]
 license = "MIT"
+
+[features]
+default = ["derive", "parsed_attr"]
+derive = []
+parsed_attr = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

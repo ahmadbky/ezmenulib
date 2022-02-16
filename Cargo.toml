@@ -1,6 +1,6 @@
 [package]
 name = "ezmenu"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenu"
@@ -15,8 +15,8 @@ exclude = [
 
 [features]
 default = ["derive", "parsed_attr"]
-parsed_attr = []
-derive = []
+parsed_attr = ["ezmenu-derive/parsed_attr"]
+derive = ["ezmenu-derive/derive"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
