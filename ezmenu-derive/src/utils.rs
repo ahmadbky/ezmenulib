@@ -11,31 +11,32 @@ pub fn parse<T, MatchNested, MatchNameValue>(
     func_nv: MatchNameValue,
     input: Meta,
 ) where
-    MatchNested: Fn(&mut T, String, &NestedMeta),
-    MatchNameValue: Fn(&mut T, String, Lit),
+    MatchNested: Fn(&mut T, String, &NestedMeta, NestedMeta),
+    MatchNameValue: Fn(&mut T, String, Lit, NestedMeta),
 {
-    match input {
-        Meta::List(MetaList { nested, .. }) => {
-            for nm in nested {
-                match nm {
-                    // #[menu(arg("..."), ...)]
-                    // in inner metas, if the meta type is a list,
-                    // then it should contain only 1 nested meta as value
-                    // like a path to a function, or a string literal for a message
-                    NestedMeta::Meta(Meta::List(MetaList { path, nested, .. })) => {
-                        let nested = get_first_nested(&nested);
-                        func_nested(desc, path_to_string(&path), nested);
-                    }
-                    // #[menu(arg = "...", ...)]
-                    // deconstructing to a path and a literal
-                    NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
-                        func_nv(desc, path_to_string(&path), lit)
-                    }
-                    _ => abort!(nm, "expected value definition"),
+    // #[menu(meta0, meta1, ...)]
+    if let Meta::List(MetaList { nested, .. }) = input {
+        for nm in nested {
+            let nm_clone = nm.clone();
+            match nm {
+                // #[menu(arg("..."), ...)]
+                // in inner metas, if the meta type is a list,
+                // then it should contain only 1 nested meta as value
+                // like a path to a function, or a string literal for a message
+                NestedMeta::Meta(Meta::List(MetaList { path, nested, .. })) => {
+                    let nested = get_first_nested(&nested);
+                    func_nested(desc, path_to_string(&path), nested, nm_clone);
                 }
+                // #[menu(arg = "...", ...)]
+                // deconstructing to a path and a literal
+                NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
+                    func_nv(desc, path_to_string(&path), lit, nm_clone)
+                }
+                _ => abort!(nm, "expected value definition"),
             }
         }
-        _ => abort_incorrect_def(&input),
+    } else {
+        abort_incorrect_def(&input);
     }
 }
 

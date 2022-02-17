@@ -36,6 +36,7 @@ fn parse_arg_nested(
     }: &mut MetaMenuDesc,
     arg: String,
     nested: &NestedMeta,
+    span: NestedMeta,
 ) {
     match arg.as_str() {
         s @ "title" => run_nested_str(s, nested, title),
@@ -43,7 +44,7 @@ fn parse_arg_nested(
         s @ "prefix" => run_nested_str(s, nested, prefix),
         s @ "new_line" => run_nested_bool(s, nested, new_line),
         s @ "display_default" => run_nested_bool(s, nested, disp_default),
-        s => abort_invalid_arg_name(nested, s),
+        s => abort_invalid_arg_name(span, s),
     }
 }
 
@@ -61,6 +62,7 @@ fn parse_arg_nv(
     }: &mut MetaMenuDesc,
     arg: String,
     lit: Lit,
+    span: NestedMeta,
 ) {
     match arg.as_str() {
         s @ "title" => run_nv_str(s, lit, title),
@@ -68,7 +70,7 @@ fn parse_arg_nv(
         s @ "prefix" => run_nv_str(s, lit, prefix),
         s @ "new_line" => run_nv_bool(s, lit, new_line),
         s @ "display_default" => run_nv_bool(s, lit, disp_default),
-        s => abort_invalid_arg_name(s, s),
+        s => abort_invalid_arg_name(span, s),
     }
 }
 

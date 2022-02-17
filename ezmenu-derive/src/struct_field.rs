@@ -34,8 +34,8 @@ impl Default for FieldFormatting {
 }
 
 macro_rules! map_to_ts {
-    ($self:expr, $id:ident) => {
-        let $id = $self.$id.as_ref().map(|lit| quote!($id: #lit,));
+    ($self:expr, $($id:ident)*) => {
+        $(let $id = $self.$id.as_ref().map(|lit| quote!($id: #lit,));)*
     }
 }
 
@@ -45,10 +45,7 @@ impl ToTokens for FieldFormatting {
             return;
         }
 
-        map_to_ts!(self, chip);
-        map_to_ts!(self, prefix);
-        map_to_ts!(self, new_line);
-        map_to_ts!(self, default);
+        map_to_ts!(self, chip prefix new_line default);
 
         let call_default = if self.some_omitted {
             quote!(..Default::default())
@@ -140,6 +137,7 @@ fn parse_arg_nested(
     }: &mut MetaFieldDesc,
     arg: String,
     nested: &NestedMeta,
+    span: NestedMeta,
 ) {
     match arg.as_str() {
         s @ "msg" => run_nested_str(s, nested, msg),
@@ -149,7 +147,7 @@ fn parse_arg_nested(
         s @ "prefix" => run_nested_str(s, nested, prefix),
         s @ "new_line" => run_nested_bool(s, nested, new_line),
         s @ "display_default" => run_nested_bool(s, nested, disp_default),
-        s => abort_invalid_arg_name(nested, s),
+        s => abort_invalid_arg_name(span, s),
     }
 }
 
@@ -174,6 +172,7 @@ fn parse_arg_nv(
     }: &mut MetaFieldDesc,
     arg: String,
     lit: Lit,
+    span: NestedMeta,
 ) {
     match arg.as_str() {
         s @ "msg" => run_nv_str(s, lit, msg),
@@ -182,7 +181,7 @@ fn parse_arg_nv(
         s @ "prefix" => run_nv_str(s, lit, prefix),
         s @ "new_line" => run_nv_bool(s, lit, new_line),
         s @ "display_default" => run_nv_bool(s, lit, disp_default),
-        s => abort_invalid_arg_name(s, s),
+        s => abort_invalid_arg_name(span, s),
     }
 }
 
