@@ -5,11 +5,6 @@
 //! This crate provides a `derive(Menu)` procedural macro to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
 //!
-//! ## Documentation
-//!
-//! You can find all the crate documentation on [Docs.rs](https://docs.rs/ezmenu).
-//! You can also check the [examples](examples) to learn with a practical way.
-//!
 //! ## Example
 //!
 //! Here is an example of how to use it:
@@ -186,21 +181,24 @@
 //!     })
 //!     .with_field(StructField::from("project author name"))
 //!     .with_field(StructField::from("project name"))
-//!     .with_field(StructField::from("Give the year of the license")
-//!     .default("2022")
-//!     .fmt(StructFieldFormatting {
-//!         prefix: ">> ",
-//!         new_line: true,
-//!         ..Default::default()
-//!     })
-//! );
+//!     .with_field(
+//!         StructField::from("Give the year of the license")
+//!             .default("2022")
+//!             .fmt(StructFieldFormatting {
+//!                 prefix: ">> ",
+//!                 new_line: true,
+//!                 ..Default::default()
+//!             }),
+//!     );
 //!
-//! let name: String = menu.next_map(|s: String, w| {
-//!     if s.to_lowercase() == "ahmad" {
-//!         w.write(b"Nice name!!")?;
-//!     }
-//!     Ok(s)
+//! let name: String = menu
+//!     .next_map(|s: String, w| {
+//!         if s.to_lowercase() == "ahmad" {
+//!             w.write(b"Nice name!!")?;
+//!         }
+//!         Ok(s)
 //!     }).unwrap();
+//!
 //! let proj_name: String = menu.next().unwrap();
 //! let proj_year: i64 = menu.next().unwrap();
 //! ```
@@ -208,10 +206,11 @@ mod customs;
 mod field;
 mod menu;
 
-/// Menu derive macro
+/// The `derive(Menu)` macro
 #[cfg(feature = "derive")]
 pub use ezmenu_derive::Menu;
 
+/// The `ezmenu::parsed` attribute macro
 #[cfg(feature = "parsed_attr")]
 pub use ezmenu_derive::parsed;
 
@@ -231,7 +230,7 @@ pub enum MenuError {
     IncorrectType(Box<dyn Debug>),
     /// There is no more field to call for an output.
     /// This error appears when calling `<StructMenu as Menu>::next` method whereas
-    /// the menu building has finished.
+    /// the menu building has finished for example.
     NoMoreField,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
