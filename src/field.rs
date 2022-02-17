@@ -65,6 +65,10 @@ pub struct StructField<'a> {
     msg: &'a str,
     // FIXME: use for<'m: 'a> Cow<'m, StructFieldFormatting<'a>>
     // for arrangement between inherited or owned fmt
+    // and memory space optimization.
+    // problem is that we can't give an immutable reference from a StructMenu
+    // because it needs to be mutable so it can fill its inner fields VecDeque :/
+    // for now we're cloning it.
     fmt: StructFieldFormatting<'a>,
     // used by StructMenu to know if we inherit fmt or not
     pub(crate) custom_fmt: bool,
