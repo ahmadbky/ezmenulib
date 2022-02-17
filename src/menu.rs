@@ -119,13 +119,11 @@ impl<'a> StructMenu<'a> {
         });
         self
     }
-}
 
-impl<'a> StructMenu<'a> {
     /// Returns the next field to print when building the menu.
     fn get_next_field(&mut self) -> MenuResult<StructField<'a>> {
         // prints the menu title or not
-        if !self.first_popped {
+        if !self.first_popped && !self.title.is_empty() {
             writeln!(self.writer, "{}", self.title)?;
             self.first_popped = true;
         }
@@ -137,7 +135,7 @@ impl<'a> StructMenu<'a> {
 pub trait Menu<Output>: AsRef<Stdout> + AsMut<Stdout>
 where
     Output: FromStr,
-    <Output as FromStr>::Err: Debug,
+    Output::Err: Debug,
 {
     /// Returns the next output from the reader.
     fn next(&mut self) -> MenuResult<Output>;
@@ -171,8 +169,8 @@ impl<'a> AsMut<Stdout> for StructMenu<'a> {
 
 impl<'a, Output> Menu<Output> for StructMenu<'a>
 where
-    <Output as FromStr>::Err: 'static + Debug,
     Output: FromStr,
+    Output::Err: 'static + Debug,
 {
     fn next(&mut self) -> MenuResult<Output> {
         self.get_next_field()?.build(&self.reader, &mut self.writer)

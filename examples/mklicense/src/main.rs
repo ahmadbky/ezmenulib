@@ -10,8 +10,8 @@ enum Type {
 
 #[derive(Menu)]
 #[menu(
-    title = "Describe the license you want to build:",
-    chip = "--> ",
+    title("Describe the license you want to build"),
+    chip("--> "),
     prefix = ">> ",
     new_line = true
 )]
@@ -33,6 +33,7 @@ fn main() {
         ty,
         year,
     } = License::from_menu_unwrap();
+
     println!("authors: {:?}", authors);
     println!("project name: {:?}", proj_name);
     println!("type: {:?}", ty);
