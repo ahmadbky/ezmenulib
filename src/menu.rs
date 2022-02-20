@@ -1,20 +1,14 @@
 use crate::field::StructFieldFormatting;
 use crate::{MenuError, MenuResult, StructField};
-use std::collections::VecDeque;
+use std::array;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
+use std::rc::Rc;
 use std::str::FromStr;
 
 /// Represents a menu describing a struct.
 ///
 /// It has a global formatting applied to the fields it contains.
-/// The menu uses an R reader and W writer for polymorphism purposes.
-/// By default, it uses Stdin and Stdout. For custom reader and writer types,
-/// use the `custom_io` feature in your `Cargo.toml`:
-/// ```toml
-/// [dependencies]
-/// ezmenu = { features = ["custom_io"], ... }
-/// ```
 ///
 /// # Examples
 ///
@@ -57,10 +51,10 @@ use std::str::FromStr;
 /// * Give the year of the license (default: 2022)
 /// >> 2018
 /// ```
-pub struct StructMenu<'a> {
+pub struct StructMenu<'a, const N: usize> {
     title: &'a str,
-    fmt: StructFieldFormatting<'a>,
-    fields: VecDeque<StructField<'a>>,
+    fmt: Rc<StructFieldFormatting<'a>>,
+    fields: array::IntoIter<StructField<'a>, N>,
     reader: Stdin,
     writer: Stdout,
     // used to know when to print the title
@@ -68,12 +62,12 @@ pub struct StructMenu<'a> {
 }
 
 /// The default menu uses `Stdin` as reader and `Stdout` as writer.
-impl<'a> Default for StructMenu<'a> {
-    fn default() -> Self {
+impl<'a, const N: usize> From<[StructField<'a>; N]> for StructMenu<'a, N> {
+    fn from(fields: [StructField<'a>; N]) -> Self {
         Self {
+            fields: fields.into_iter(),
             title: "",
-            fmt: Default::default(),
-            fields: VecDeque::new(),
+            fmt: Rc::default(),
             reader: stdin(),
             writer: stdout(),
             first_popped: false,
@@ -81,23 +75,18 @@ impl<'a> Default for StructMenu<'a> {
     }
 }
 
-/// The default menu uses `Stdin` as reader and `Stdout` as writer.
-impl<'a> From<&'a str> for StructMenu<'a> {
-    fn from(title: &'a str) -> Self {
-        Self {
-            title,
-            ..Default::default()
-        }
-    }
-}
-
 /// Methods used to construct a menu describing a struct.
-impl<'a> StructMenu<'a> {
+impl<'a, const N: usize> StructMenu<'a, N> {
     /// Give the global formatting applied to all the fields the menu contains.
     /// If a field has a custom formatting, it will uses the formatting rules of the field
     /// when printing to the writer.
     pub fn fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
-        self.fmt = fmt;
+        self.fmt = Rc::new(fmt);
+        for field in self.fields.as_mut_slice() {
+            if !field.custom_fmt {
+                field.inherit_fmt(self.fmt.clone());
+            }
+        }
         self
     }
 
@@ -106,28 +95,6 @@ impl<'a> StructMenu<'a> {
     pub fn title(mut self, title: &'a str) -> Self {
         self.title = title;
         self
-    }
-
-    /// Append a new field to the menu.
-    /// You can chain them and they will be printed according to the order
-    /// you instantiated them.
-    pub fn with_field(mut self, field: StructField<'a>) -> Self {
-        self.fields.push_back(if field.custom_fmt {
-            field
-        } else {
-            field.inherit_fmt(self.fmt.clone())
-        });
-        self
-    }
-
-    /// Returns the next field to print when building the menu.
-    fn get_next_field(&mut self) -> MenuResult<StructField<'a>> {
-        // prints the menu title or not
-        if !self.first_popped && !self.title.is_empty() {
-            writeln!(self.writer, "{}", self.title)?;
-            self.first_popped = true;
-        }
-        self.fields.pop_front().ok_or(MenuError::NoMoreField)
     }
 }
 
@@ -138,7 +105,7 @@ where
     Output::Err: Debug,
 {
     /// Returns the next output from the reader.
-    fn next(&mut self) -> MenuResult<Output>;
+    fn next_output(&mut self) -> MenuResult<Output>;
 
     /// Returns the value mapped by the function specified as argument.
     ///
@@ -147,33 +114,55 @@ where
     ///
     /// It returns a `MenuResult<Output>` to prevent from any error or return a custom error, with:
     /// `MenuError::Other(Box<dyn std::error::Debug>)`.
-    fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
+    fn next_output_map<F>(&mut self, f: F) -> MenuResult<Output>
     where
         F: FnOnce(Output, &mut Stdout) -> MenuResult<Output>,
     {
-        f(self.next()?, self.as_mut())
+        f(self.next_output()?, self.as_mut())
+    }
+
+    /// Returns the unwrapped next output from the reader.
+    ///
+    /// ## Panic
+    ///
+    /// This method panics if an error occurred while prompting a value.
+    /// See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html)
+    /// for more information.
+    fn next_output_unwrap(&mut self) -> Output {
+        self.next_output()
+            .expect("An error occurred while prompting a value")
     }
 }
 
-impl<'a> AsRef<Stdout> for StructMenu<'a> {
+impl<'a, const N: usize> AsRef<Stdout> for StructMenu<'a, N> {
     fn as_ref(&self) -> &Stdout {
         &self.writer
     }
 }
 
-impl<'a> AsMut<Stdout> for StructMenu<'a> {
+impl<'a, const N: usize> AsMut<Stdout> for StructMenu<'a, N> {
     fn as_mut(&mut self) -> &mut Stdout {
         &mut self.writer
     }
 }
 
-impl<'a, Output> Menu<Output> for StructMenu<'a>
+impl<'a, Output, const N: usize> Menu<Output> for StructMenu<'a, N>
 where
     Output: FromStr,
     Output::Err: 'static + Debug,
 {
-    fn next(&mut self) -> MenuResult<Output> {
-        self.get_next_field()?.build(&self.reader, &mut self.writer)
+    fn next_output(&mut self) -> MenuResult<Output> {
+        // prints the title
+        if !self.first_popped {
+            let title = self.title.to_owned() + "\n";
+            self.writer.write_all(title.as_bytes())?;
+            self.first_popped = true;
+        }
+
+        self.fields
+            .next()
+            .ok_or(MenuError::NoMoreField)?
+            .build(&self.reader, &mut self.writer)
     }
 }
 

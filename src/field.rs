@@ -1,6 +1,7 @@
 use crate::{MenuError, MenuResult};
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
+use std::rc::Rc;
 use std::str::FromStr;
 
 /// Defines the formatting of a menu field.
@@ -63,14 +64,7 @@ impl<'a> Default for StructFieldFormatting<'a> {
 /// ```
 pub struct StructField<'a> {
     msg: &'a str,
-    // FIXME: use for<'m: 'a> Cow<'m, StructFieldFormatting<'a>>
-    // for arrangement between inherited or owned fmt
-    // and memory space optimization.
-    // problem is that we can't give an immutable reference from a StructMenu
-    // because it needs to be mutable so it can fill its inner fields VecDeque :/
-    // for now we're cloning it.
-    fmt: StructFieldFormatting<'a>,
-    // used by StructMenu to know if we inherit fmt or not
+    fmt: Rc<StructFieldFormatting<'a>>,
     pub(crate) custom_fmt: bool,
     default: Option<&'a str>,
 }
@@ -79,7 +73,7 @@ impl<'a> From<&'a str> for StructField<'a> {
     fn from(msg: &'a str) -> Self {
         Self {
             msg,
-            fmt: Default::default(),
+            fmt: Rc::default(),
             custom_fmt: false,
             default: None,
         }
@@ -90,22 +84,23 @@ impl<'a> From<&'a str> for StructField<'a> {
 impl<'a> StructField<'a> {
     /// Give a custom formatting for the field.
     pub fn fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
-        self.fmt = fmt;
+        self.fmt = Rc::new(fmt);
         self.custom_fmt = true;
         self
     }
 
-    /// Give an inherited fmt from a menu for example.
-    /// In the future versions, this method will take a reference as parameter.
-    pub fn inherit_fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<StructFieldFormatting<'a>>) {
         self.fmt = fmt;
         self.custom_fmt = false;
-        self
     }
 
     /// Give the default value accepted by the field.
+    ///
     /// If the value type is incorrect, the `StructField::build` method will return an `Err` value,
     /// emphasizing that the default value type is incorrect.
+    ///
+    /// So when instantiating the field with a provided default value, it will not panic and it will
+    /// print the default value even if it is incorrect.
     pub fn default(mut self, default: &'a str) -> Self {
         self.default = Some(default);
         self
@@ -122,7 +117,7 @@ impl<'a> StructField<'a> {
     ///     .init_build();
     /// ```
     #[inline]
-    pub fn init_build<T>(self) -> MenuResult<T>
+    pub fn init_build<T>(&self) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -144,7 +139,7 @@ impl<'a> StructField<'a> {
     /// let age: u8 = StructField::from("How old are you?").unwrap_init_build();
     /// ```
     #[inline]
-    pub fn unwrap_init_build<T>(self) -> T
+    pub fn unwrap_init_build<T>(&self) -> T
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -172,7 +167,7 @@ impl<'a> StructField<'a> {
     ///     .unwrap_build(&stdin, &mut stdout);
     /// ```
     #[inline]
-    pub fn unwrap_build<T>(self, reader: &Stdin, writer: &mut Stdout) -> T
+    pub fn unwrap_build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> T
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -195,7 +190,7 @@ impl<'a> StructField<'a> {
     /// let author: String = Field::from("author")
     ///     .build(&stdin(), &mut stdout()).unwrap();
     /// ```
-    pub fn build<T>(self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
+    pub fn build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -216,7 +211,7 @@ impl<'a> StructField<'a> {
 
         // loops while incorrect value
         loop {
-            prompt_fmt(writer, self.msg, self.default, &self.fmt)?;
+            prompt_fmt(writer, self.msg, self.default, self.fmt.as_ref())?;
 
             // read input to string
             let mut out = String::new();
