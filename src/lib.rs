@@ -24,7 +24,7 @@
 //! #[menu(title = "Hello there!")]
 //! struct MyMenu {
 //!     author: String,
-//!     #[field(msg = "Give a number", then(map))]
+//!     #[menu(msg = "Give a number", then(map))]
 //!     number: u32,
 //! }
 //! ```
@@ -219,10 +219,9 @@ pub use field::{StructField, StructFieldFormatting};
 pub use menu::{Menu, StructMenu};
 
 use std::fmt::Debug;
-use std::io;
+use std::{fmt, io};
 
 /// The error type used by the menu builder.
-#[derive(Debug)]
 pub enum MenuError {
     /// An IO error, when flushing, reading or writing values,
     IOError(io::Error),
@@ -236,6 +235,26 @@ pub enum MenuError {
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
     /// by returning an `Err(MenuError::Other(...))`
     Other(Box<dyn Debug>),
+}
+
+impl fmt::Debug for MenuError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{}",
+            match self {
+                Self::IOError(e) => format!("IO error: {:?}", e),
+                Self::IncorrectType(e) => format!(
+                    "an incorrect value type has been used as default value: {:?}",
+                    *e
+                ),
+                Self::NoMoreField =>
+                    "attempted to get the next output while there is no more field in the menu"
+                        .to_owned(),
+                Self::Other(e) => format!("an error occurred: {:?}", e),
+            }
+        )
+    }
 }
 
 impl From<io::Error> for MenuError {

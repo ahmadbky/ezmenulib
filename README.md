@@ -29,7 +29,7 @@ fn map(val: u32, w: &mut impl Write) -> MenuResult<u32> {
 #[menu(title = "Hello there!")]
 struct MyMenu {
     author: String,
-    #[field(msg = "Give a number", then(map))]
+    #[menu(msg = "Give a number", then(map))]
     number: u32,
 }
 ```
