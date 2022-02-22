@@ -246,10 +246,9 @@ impl From<Field> for FieldMenuInit {
         // field is supposed to be named
         let ident = field.ident.unwrap();
 
-        let desc = match get_meta_attr(field.attrs) {
-            Some(meta) => MetaFieldDesc::from(meta),
-            _ => Default::default(),
-        };
+        let desc = get_meta_attr(field.attrs)
+            .map(MetaFieldDesc::from)
+            .unwrap_or_default();
 
         let msg = desc
             .msg
