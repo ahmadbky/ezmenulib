@@ -1,21 +1,17 @@
 use ezmenu::Menu;
 use ezmenu::ValueField;
 use ezmenu::ValueMenu;
+use std::error::Error;
 
-//#[derive(Menu)]
-//#[menu(title("Describe a person"))]
 struct Person {
     lastname: String,
     firstname: String,
     age: u8,
 }
 
-fn main() {
-    //let Person { firstname, .. } = Person::from_menu().unwrap();
-    let mut menu = ValueMenu::from([
-        ValueField::from("bonsoir"),
-        ValueField::from("yes"),
-    ]);
-    let age: u8 = menu.next_output().unwrap();
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut menu = ValueMenu::from([ValueField::from("bonsoir"), ValueField::from("yes")]);
+    let age: u8 = menu.next_output()?;
     println!("goodbye {}!", age);
+    Ok(())
 }
