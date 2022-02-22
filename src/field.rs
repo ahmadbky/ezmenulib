@@ -4,7 +4,7 @@ use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
-/// Defines the formatting of a menu field.
+/// Defines the formatting of a value-menu field.
 ///
 /// It manages:
 /// - the chip: the small string displayed before the message acting as a list style attribute
@@ -21,7 +21,7 @@ use std::str::FromStr;
 /// - `{...}` means the value inside is displayed or not (boolean)
 /// - `[...]` means the value inside is displayed if it is available
 #[derive(Clone)]
-pub struct StructFieldFormatting<'a> {
+pub struct ValueFieldFormatting<'a> {
     pub chip: &'a str,
     pub prefix: &'a str,
     pub new_line: bool,
@@ -34,7 +34,7 @@ pub struct StructFieldFormatting<'a> {
 /// ```md
 /// * <message>[ (default: <default>)]:
 /// ```
-impl<'a> Default for StructFieldFormatting<'a> {
+impl<'a> Default for ValueFieldFormatting<'a> {
     fn default() -> Self {
         Self {
             chip: "* ",
@@ -62,14 +62,14 @@ impl<'a> Default for StructFieldFormatting<'a> {
 /// let author: String = StructField::from("Give the author of the license")
 ///     .build(&stdin(), &mut stdout()).unwrap();
 /// ```
-pub struct StructField<'a> {
+pub struct ValueField<'a> {
     msg: &'a str,
-    fmt: Rc<StructFieldFormatting<'a>>,
+    fmt: Rc<ValueFieldFormatting<'a>>,
     pub(crate) custom_fmt: bool,
     default: Option<&'a str>,
 }
 
-impl<'a> From<&'a str> for StructField<'a> {
+impl<'a> From<&'a str> for ValueField<'a> {
     fn from(msg: &'a str) -> Self {
         Self {
             msg,
@@ -81,15 +81,15 @@ impl<'a> From<&'a str> for StructField<'a> {
 }
 
 /// Constructor methods defining how the field behaves
-impl<'a> StructField<'a> {
+impl<'a> ValueField<'a> {
     /// Give a custom formatting for the field.
-    pub fn fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
+    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
         self.fmt = Rc::new(fmt);
         self.custom_fmt = true;
         self
     }
 
-    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<StructFieldFormatting<'a>>) {
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
         self.fmt = fmt;
         self.custom_fmt = false;
     }
@@ -112,8 +112,8 @@ impl<'a> StructField<'a> {
     /// ## Example
     ///
     /// ```
-    /// use ezmenu::{MenuResult, StructField};
-    /// let age: MenuResult<u8> = StructField::from("How old are you")
+    /// use ezmenu::{MenuResult, ValueField};
+    /// let age: MenuResult<u8> = ValueField::from("How old are you")
     ///     .init_build();
     /// ```
     #[inline]
@@ -123,57 +123,6 @@ impl<'a> StructField<'a> {
         T::Err: 'static + Debug,
     {
         self.build(&stdin(), &mut stdout())
-    }
-
-    /// Builds the field without specifying input and output streams,
-    /// and return directly the value provided.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an error occurred. (See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html))
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use ezmenu::StructField;
-    /// let age: u8 = StructField::from("How old are you?").unwrap_init_build();
-    /// ```
-    #[inline]
-    pub fn unwrap_init_build<T>(&self) -> T
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-    {
-        self.init_build()
-            .expect("An error occurred while prompting a value")
-    }
-
-    /// Builds the field by specifying input and output streams.
-    /// It directly returns the value provided.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an error occurred while prompting the field.
-    /// (See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html))
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use std::io::{stdin, stdout};
-    /// use ezmenu::{MenuResult, StructField};
-    /// let stdin = stdin();
-    /// let mut stdout = stdout();
-    /// let age: MenuResult<u8>  = StructField::from("How old are you?")
-    ///     .unwrap_build(&stdin, &mut stdout);
-    /// ```
-    #[inline]
-    pub fn unwrap_build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> T
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-    {
-        self.build(reader, writer)
-            .expect("An error occurred while prompting a value")
     }
 
     /// Builds the field.
@@ -187,7 +136,7 @@ impl<'a> StructField<'a> {
     /// you can do so:
     /// ```
     /// use std::io::{stdin, stdout};
-    /// let author: String = Field::from("author")
+    /// let author: String = ValueField::from("author")
     ///     .build(&stdin(), &mut stdout()).unwrap();
     /// ```
     pub fn build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
@@ -233,7 +182,7 @@ fn prompt_fmt<W: Write>(
     writer: &mut W,
     msg: &str,
     default: Option<&str>,
-    fmt: &StructFieldFormatting<'_>,
+    fmt: &ValueFieldFormatting<'_>,
 ) -> Result<(), std::io::Error> {
     write!(
         writer,
