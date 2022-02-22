@@ -218,7 +218,8 @@ pub use customs::{MenuBool, MenuVec};
 pub use field::{ValueField, ValueFieldFormatting};
 pub use menu::{Menu, ValueMenu};
 
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, io};
 
 /// The error type used by the menu builder.
@@ -237,13 +238,20 @@ pub enum MenuError {
     Other(Box<dyn Debug>),
 }
 
+impl Error for MenuError {}
+
+impl Display for MenuError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as Debug>::fmt(self, f)
+    }
+}
+
 impl fmt::Debug for MenuError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
+        f.write_fmt(format_args!(
             "{}",
             match self {
-                Self::IOError(e) => format!("IO error: {:?}", e),
+                Self::IOError(e) => format!("IO error: {}", e),
                 Self::IncorrectType(e) => format!(
                     "an incorrect value type has been used as default value: {:?}",
                     *e
@@ -253,7 +261,7 @@ impl fmt::Debug for MenuError {
                         .to_owned(),
                 Self::Other(e) => format!("an error occurred: {:?}", e),
             }
-        )
+        ))
     }
 }
 
