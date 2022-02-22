@@ -164,27 +164,27 @@
 //!
 //! ```rust
 //! use std::io::{stdin, stdout};
-//! use ezmenu::StructField;
-//! let age: u8 = StructField::from("How old are you?")
+//! use ezmenu::ValueField;
+//! let age: u8 = ValueField::from("How old are you?")
 //!    .build(&stdin(), &mut stdout()).unwrap();
 //! ```
 //!
 //! If you want to build a menu with all the previous features (default values, formatting rules...),
 //! you can refer to this code below:
 //! ```rust
-//! use ezmenu::{StructField, StructFieldFormatting};
+//! use ezmenu::{ValueField, ValueFieldFormatting};
 //! let mut menu = StructMenu::default()
 //!     .title("-- Mklicense --")
-//!     .fmt(StructFieldFormatting {
+//!     .fmt(ValueFieldFormatting {
 //!         chip: "* Give the ",
 //!        ..Default::default()
 //!     })
-//!     .with_field(StructField::from("project author name"))
-//!     .with_field(StructField::from("project name"))
+//!     .with_field(ValueField::from("project author name"))
+//!     .with_field(ValueField::from("project name"))
 //!     .with_field(
-//!         StructField::from("Give the year of the license")
+//!         ValueField::from("Give the year of the license")
 //!             .default("2022")
-//!             .fmt(StructFieldFormatting {
+//!             .fmt(ValueFieldFormatting {
 //!                 prefix: ">> ",
 //!                 new_line: true,
 //!                 ..Default::default()
@@ -215,8 +215,8 @@ pub use ezmenu_derive::Menu;
 pub use ezmenu_derive::parsed;
 
 pub use customs::{MenuBool, MenuVec};
-pub use field::{StructField, StructFieldFormatting};
-pub use menu::{Menu, StructMenu};
+pub use field::{ValueField, ValueFieldFormatting};
+pub use menu::{Menu, ValueMenu};
 
 use std::fmt::Debug;
 use std::{fmt, io};

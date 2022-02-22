@@ -1,4 +1,4 @@
-use ezmenu::{Menu, MenuVec, StructField, StructFieldFormatting, StructMenu};
+use ezmenu::{Menu, MenuVec, ValueField, ValueFieldFormatting, ValueMenu};
 
 #[derive(Debug)]
 #[ezmenu::parsed]
@@ -41,16 +41,16 @@ struct License {
 // }
 
 fn main() {
-    let mut menu = StructMenu::from([
-        StructField::from("bonsoir").default("non"),
-        StructField::from("salut").fmt(StructFieldFormatting {
+    let mut menu = ValueMenu::from([
+        ValueField::from("bonsoir").default("non"),
+        ValueField::from("salut").fmt(ValueFieldFormatting {
             chip: "--> ",
             ..Default::default()
         }),
     ])
-    .fmt(StructFieldFormatting {
+    .fmt(ValueFieldFormatting {
         chip: "==> ",
         ..Default::default()
     });
-    let age: u8 = menu.next_output_unwrap();
+    let age: u8 = menu.next_output().unwrap();
 }

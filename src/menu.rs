@@ -1,5 +1,5 @@
-use crate::field::StructFieldFormatting;
-use crate::{MenuError, MenuResult, StructField};
+use crate::field::ValueFieldFormatting;
+use crate::{MenuError, MenuResult, ValueField};
 use std::array;
 use std::fmt::Debug;
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
@@ -14,18 +14,18 @@ use std::str::FromStr;
 ///
 /// For a make-licence CLI program for example, you can build the menu like above:
 /// ```
-/// use ezmenu::{StructField, StructFieldFormatting};
+/// use ezmenu::{ValueField, ValueFieldFormatting};
 /// let mut menu = StructMenu::default()
 ///     .title("-- Mklicense --")
-///     .fmt(StructFieldFormatting {
+///     .fmt(ValueFieldFormatting {
 ///         chip: "* Give the ",
 ///         ..Default::default()
 ///     })
-///     .with_field(StructField::from("project author name"))
-///     .with_field(StructField::from("project name"))
-///     .with_field(StructField::from("Give the year of the license")
+///     .with_field(ValueField::from("project author name"))
+///     .with_field(ValueField::from("project name"))
+///     .with_field(ValueField::from("Give the year of the license")
 ///         .default("2022")
-///         .fmt(StructFieldFormatting {
+///         .fmt(ValueFieldFormatting {
 ///             prefix: ">> ",
 ///             new_line: true,
 ///             ..Default::default()
@@ -51,10 +51,10 @@ use std::str::FromStr;
 /// * Give the year of the license (default: 2022)
 /// >> 2018
 /// ```
-pub struct StructMenu<'a, const N: usize> {
+pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,
-    fmt: Rc<StructFieldFormatting<'a>>,
-    fields: array::IntoIter<StructField<'a>, N>,
+    fmt: Rc<ValueFieldFormatting<'a>>,
+    fields: array::IntoIter<ValueField<'a>, N>,
     reader: Stdin,
     writer: Stdout,
     // used to know when to print the title
@@ -62,8 +62,8 @@ pub struct StructMenu<'a, const N: usize> {
 }
 
 /// The default menu uses `Stdin` as reader and `Stdout` as writer.
-impl<'a, const N: usize> From<[StructField<'a>; N]> for StructMenu<'a, N> {
-    fn from(fields: [StructField<'a>; N]) -> Self {
+impl<'a, const N: usize> From<[ValueField<'a>; N]> for ValueMenu<'a, N> {
+    fn from(fields: [ValueField<'a>; N]) -> Self {
         Self {
             fields: fields.into_iter(),
             title: "",
@@ -76,11 +76,11 @@ impl<'a, const N: usize> From<[StructField<'a>; N]> for StructMenu<'a, N> {
 }
 
 /// Methods used to construct a menu describing a struct.
-impl<'a, const N: usize> StructMenu<'a, N> {
+impl<'a, const N: usize> ValueMenu<'a, N> {
     /// Give the global formatting applied to all the fields the menu contains.
     /// If a field has a custom formatting, it will uses the formatting rules of the field
     /// when printing to the writer.
-    pub fn fmt(mut self, fmt: StructFieldFormatting<'a>) -> Self {
+    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
         self.fmt = Rc::new(fmt);
         for field in self.fields.as_mut_slice() {
             if !field.custom_fmt {
@@ -114,39 +114,27 @@ where
     ///
     /// It returns a `MenuResult<Output>` to prevent from any error or return a custom error, with:
     /// `MenuError::Other(Box<dyn std::error::Debug>)`.
-    fn next_output_map<F>(&mut self, f: F) -> MenuResult<Output>
+    fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
     where
         F: FnOnce(Output, &mut Stdout) -> MenuResult<Output>,
     {
         f(self.next_output()?, self.as_mut())
     }
-
-    /// Returns the unwrapped next output from the reader.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an error occurred while prompting a value.
-    /// See [`MenuError`](https://docs.rs/ezmenu/latest/ezmenu/enum.MenuError.html)
-    /// for more information.
-    fn next_output_unwrap(&mut self) -> Output {
-        self.next_output()
-            .expect("An error occurred while prompting a value")
-    }
 }
 
-impl<'a, const N: usize> AsRef<Stdout> for StructMenu<'a, N> {
+impl<'a, const N: usize> AsRef<Stdout> for ValueMenu<'a, N> {
     fn as_ref(&self) -> &Stdout {
         &self.writer
     }
 }
 
-impl<'a, const N: usize> AsMut<Stdout> for StructMenu<'a, N> {
+impl<'a, const N: usize> AsMut<Stdout> for ValueMenu<'a, N> {
     fn as_mut(&mut self) -> &mut Stdout {
         &mut self.writer
     }
 }
 
-impl<'a, Output, const N: usize> Menu<Output> for StructMenu<'a, N>
+impl<'a, Output, const N: usize> Menu<Output> for ValueMenu<'a, N>
 where
     Output: FromStr,
     Output::Err: 'static + Debug,
