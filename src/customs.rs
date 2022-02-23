@@ -5,6 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 /// Wrapper type used to handle multiple user input.
+///
 /// Its main feature is to implement FromStr trait,
 /// by splitting input by spaces.
 ///
@@ -49,8 +50,13 @@ impl<T> DerefMut for MenuVec<T> {
     }
 }
 
+/// The error type used for parsing user input into a [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuVec.html).
+///
+/// The `E` generic parameter means `<T as FromStr>::Err`.
 pub enum MenuVecParseError<E> {
+    /// The user input is empty.
     Empty,
+    /// An incorrect input has been provided among the values.
     ItemParsed(E),
 }
 
@@ -84,7 +90,8 @@ impl<T: FromStr> FromStr for MenuVec<T> {
     }
 }
 
-/// Wrapper type used to handle a boolean value.
+/// Wrapper type used to handle a boolean user input value.
+///
 /// Its main feature is to implemented `FromStr` trait,
 /// accepting "yes" or "no" input for example.
 ///
