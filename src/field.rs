@@ -45,22 +45,22 @@ impl<'a> Default for ValueFieldFormatting<'a> {
     }
 }
 
-/// Defines behavior for a menu field.
+/// Defines behavior for a value-menu field.
 ///
 /// It manages
 /// - its message
 /// - its formatting
 /// - the return value type
 /// - the default value
-/// - the function to execute after the user provided a value
 ///
 /// # Examples
 ///
 /// For a make-license CLI program for example, you can use
 /// ```
-/// use std::io::{stdin, stdout};
-/// let author: String = StructField::from("Give the author of the license")
-///     .build(&stdin(), &mut stdout()).unwrap();
+/// use ezmenu::ValueField;
+/// let author: String = ValueField::from("Give the author of the license")
+///     .init_build()
+///     .unwrap();
 /// ```
 pub struct ValueField<'a> {
     msg: &'a str,
@@ -89,6 +89,8 @@ impl<'a> ValueField<'a> {
         self
     }
 
+    /// Method used to make the field inherit from the formatting rules from a parent attribute
+    /// such as a `ValueMenu`.
     pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
         self.fmt = fmt;
         self.custom_fmt = false;
@@ -96,17 +98,18 @@ impl<'a> ValueField<'a> {
 
     /// Give the default value accepted by the field.
     ///
-    /// If the value type is incorrect, the `StructField::build` method will return an `Err` value,
-    /// emphasizing that the default value type is incorrect.
+    /// If the value type is incorrect, the `ValueField::build` or `ValueField::init_build`
+    /// method will return an `Err` value emphasizing that the default value type is incorrect.
     ///
     /// So when instantiating the field with a provided default value, it will not panic and it will
-    /// print the default value even if it is incorrect.
+    /// print the default value even if it is incorrect (if the format rule `default` is set to `true`).
     pub fn default(mut self, default: &'a str) -> Self {
         self.default = Some(default);
         self
     }
 
-    /// Builds the field without specifying input and output streams.
+    /// Builds the field without specifying standard input and output files.
+    ///
     /// It initializes instance of `Stdin` and `Stdout`.
     ///
     /// ## Example
@@ -125,19 +128,23 @@ impl<'a> ValueField<'a> {
         self.build(&stdin(), &mut stdout())
     }
 
-    /// Builds the field.
-    /// It prints the message according to its formatting, then returns the corresponding value.
+    /// Builds the field. It prints the message according to its formatting,
+    /// then returns the corresponding value.
+    ///
     /// You need to provide the reader for the input, and the writer for the output.
     /// It returns a MenuResult if there was an IO error, or if the default value type is incorrect.
     ///
-    /// # Examples
+    /// # Example
     ///
-    /// If you want to use the standard input and output stream,
-    /// you can do so:
+    /// Supposing you have declared your own `Stdin` and `Stdout` in your program, you can do so:
     /// ```
     /// use std::io::{stdin, stdout};
+    /// let stdin = stdin();
+    /// let mut stdout = stdout();
+    ///
     /// let author: String = ValueField::from("author")
-    ///     .build(&stdin(), &mut stdout()).unwrap();
+    ///     .build(&stdin(), &mut stdout())
+    ///     .unwrap();
     /// ```
     pub fn build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
     where
