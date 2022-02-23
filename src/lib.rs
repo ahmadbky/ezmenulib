@@ -158,7 +158,7 @@ use std::{fmt, io};
 
 /// The error type used by the menu builder.
 pub enum MenuError {
-    /// An IO error, when flushing, reading or writing values,
+    /// An IO error, when flushing, reading or writing values.
     IOError(io::Error),
     /// An incorrect type of value has been used as default value.
     IncorrectType(Box<dyn Debug>),
