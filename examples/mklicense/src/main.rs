@@ -2,15 +2,13 @@ use ezmenu::{Menu, MenuVec, ValueField, ValueFieldFormatting, ValueMenu};
 
 fn main() {
     let mut menu = ValueMenu::from([
-        ValueField::from("bonsoir").default("non"),
-        ValueField::from("salut").fmt(ValueFieldFormatting {
-            chip: "--> ",
-            ..Default::default()
-        }),
+        ValueField::from("Authors"),
+        ValueField::from("Project name"),
+        ValueField::from("Date").default("2022"),
     ])
     .fmt(ValueFieldFormatting {
         chip: "==> ",
         ..Default::default()
     });
-    let age: u8 = menu.next_output().unwrap();
+    let _authors: MenuVec<String> = menu.next_output().unwrap();
 }
