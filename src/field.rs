@@ -64,6 +64,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 /// ```
 pub struct ValueField<'a> {
     msg: &'a str,
+    // pointer to the parent fmt or its own fmt
     fmt: Rc<ValueFieldFormatting<'a>>,
     pub(crate) custom_fmt: bool,
     default: Option<&'a str>,
