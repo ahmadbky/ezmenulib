@@ -1,6 +1,6 @@
 use crate::MenuError;
 use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
@@ -49,12 +49,36 @@ impl<T> DerefMut for MenuVec<T> {
     }
 }
 
+pub enum MenuVecParseError<E> {
+    Empty,
+    ItemParsed(E),
+}
+
+impl<E> From<E> for MenuVecParseError<E> {
+    fn from(err: E) -> Self {
+        Self::ItemParsed(err)
+    }
+}
+
+impl<E: Debug> Debug for MenuVecParseError<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            Self::Empty => "empty vector".to_owned(),
+            Self::ItemParsed(e) => format!("parsing error: {:?}", e),
+        };
+        f.write_str(msg.as_str())
+    }
+}
+
 /// Wrapper implementation of FromStr for Output providing.
 impl<T: FromStr> FromStr for MenuVec<T> {
-    type Err = T::Err;
+    type Err = MenuVecParseError<T::Err>;
 
     /// The implementation uses space as pattern for separation of inputs.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(MenuVecParseError::Empty);
+        }
         let result: Result<Vec<T>, T::Err> = s.split(' ').map(T::from_str).collect();
         Ok(Self(result?))
     }
@@ -71,7 +95,7 @@ pub struct MenuBool(pub bool);
 
 impl fmt::Display for MenuBool {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -108,8 +132,8 @@ impl FromStr for MenuBool {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "y" | "yes" | "true" => Ok(Self(true)),
-            "n" | "no" | "false" => Ok(Self(false)),
+            "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" => Ok(Self(true)),
+            "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
             _ => Err(MenuError::Other(Box::new("incorrect boolean value"))),
         }
     }
