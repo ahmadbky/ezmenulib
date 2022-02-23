@@ -2,217 +2,151 @@
 //!
 //! Fast designing menus for your Rust CLI programs.
 //!
-//! This crate provides a `derive(Menu)` procedural macro to easily build menus.
+//! This crate provides a library with structs and traits to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
 //!
 //! ## Example
 //!
-//! Here is an example of how to use it:
+//! Here is an example of how to use the library:
 //!
 //! ```rust
-//! use std::io::Write;
-//! use ezmenu::{Menu, MenuResult};
+//! use ezmenu::{Menu, ValueField, ValueMenu};
 //!
-//! fn map(val: u32, w: &mut impl Write) -> MenuResult<u32> {
-//!     if val == 1000 {
-//!         w.write(b"ok!\n")?;
-//!     }
-//!     Ok(val)
+//! fn main() {
+//!     let mut my_menu = ValueMenu::from([
+//!         ValueField::from("Give your name"),
+//!         ValueField::from("Give a number"),
+//!     ]);
+//!
+//!     let name: String = my_menu.next_output().unwrap();
+//!     let number: i32 = my_menu.next_output().unwrap();
+//!
+//!     println!("values provided: name={}, number={}", name, number);
 //! }
-//!
-//! #[derive(Menu)]
-//! #[menu(title = "Hello there!")]
-//! struct MyMenu {
-//!     author: String,
-//!     #[menu(msg = "Give a number", then(map))]
-//!     number: u32,
-//! }
-//! ```
-//!
-//! To display the menu, you instantiate the struct by calling its `from_menu` method:
-//!
-//! ```rust
-//! let MyMenu { author, number } = MyMenu::from_menu();
-//! println!("values provided: author={}, number={}", author, number);
 //! ```
 //!
 //! This sample code prints the standard menu like above:
 //!
 //! ```text
 //! Hello there!
-//! * author: Ahmad
+//! * Give your name: Ahmad
 //! * Give a number: 1000
-//! ok!
-//! values provided: author=Ahmad, number=1000
+//! values provided: name=Ahmad, number=1000
 //! ```
 //!
 //! ## Format it as you wish
 //!
-//! You can apply several formatting rules on a menu and on a field specifically.
+//! You can apply several formatting rules on a menu or on a field specifically.
 //! You can edit:
 //! * the chip: `* ` by default.
 //! * the prefix: `: ` by default.
 //! * insert a new line before prefix and user input: `false` by default.
 //! * display default values or not: `true` by default.
+//! These parameters are defined in the [`ValueFieldFormatting`](https://docs.rs/ezmenu/latest/ezmenu/struct.ValueFieldFormatting.html) struct.
 //!
 //! ### Example
 //!
 //! For a custom format on a field and a main formatting rule on a menu, you can build this with:
 //! ```rust
-//! #[derive(Menu)]
-//! #[menu(chip = ">> ")]
-//! struct License {
-//!     #[menu(chip = "- ")]
-//!     author: String,
-//!     date: u16,
+//! use ezmenu::{ValueField, ValueFieldFormatting};
+//! fn main() {
+//!     let mut license = ValueMenu::from([
+//!         ValueField::from("Authors"),
+//!         ValueField::from("Project name")
+//!             .fmt(ValueFieldFormatting {
+//!                 chip: "--> ",
+//!                 ..Default::default()
+//!             }),
+//!         ValueField::from("Date"),
+//!     ])
+//!     .fmt(ValueFieldFormatting {
+//!         chip: "==> ",
+//!         ..Default::default()
+//!     });
+//!
+//!     // ...
 //! }
 //! ```
 //!
-//! The custom `>> ` will be applied on every field except those with custom formatting rules.
+//! The custom `==> ` chip will be applied on every field except those with custom formatting rules,
 //! In this case, it will format the text like above:
 //!
 //! ```text
-//! - author: ...
-//! >> date: ...
+//! ==> Authors: ...
+//! --> Project name: ...
+//! ==> Date: ...
 //! ```
 //!
 //! ## Skip fields with default values
 //!
-//! You can provide default values to a field like above:
-//!
+//! You can provide a default input value to a field with the `default` method:
 //! ```rust
-//! #[derive(Menu)]
-//! struct License {
-//!     author: String,
-//!     #[menu(default = 2022)]
-//!     date: u16,
-//! }
+//! ValueField::from("Date").default("2022")
 //! ```
 //!
 //! If the user provided an incorrect input, the program will not re-ask a value to the user,
 //! but will directly return the default value instead.
 //!
-//! By default, the default value is visible. If you want to hide it, you can do so:
+//! By default, the default value is visible. If you want to hide it, you can do so
+//! with formatting rules:
 //! ```rust
-//! #[derive(Menu)]
-//! #[menu(display_default = false)]
-//! struct License {
-//!     author: String,
-//!     #[menu(default = 2022, display_default = true)]
-//!     date: u16,
-//! }
-//! ```
-//!
-//! ## Custom I/O types
-//!
-//! If you are not using `std::io::Stdin` and `std::io::Stdout` types, you can provide your own
-//! types by enabling the `custom_io` feature in your Cargo.toml file:
-//!
-//! ```toml
-//! [dependencies]
-//! ezmenu = { version = "0.2.3", features = ["custom_io"] }
-//! ```
-//!
-//! Then you can instantiate your struct with:
-//!
-//! ```rust
-//! use std::io::stdout;
-//! let input = b"Ahmad\n1000\n" as &[u8];
-//! let values = MyMenu::from_io(input, stdout());
+//! ValueField::from("...")
+//!     .fmt(ValueFieldFormatting {
+//!         default: false,
+//!         ..Default::default()
+//!     })
 //! ```
 //!
 //! ## Use custom value types
 //!
 //! If the user has to provide a value which corresponds to your specific type,
-//! you can use the `ezmenu::parsed` on this type.
-//! For example, in the case of a mk-license program, the menu can be built like above:
+//! you only need to implement the `FromStr` trait on that type.
+//! The error type only needs to implement `Debug` trait, for error displaying purposes.
+//!
+//! If the error is infallible, you can use simple data types such as unit `()`
+//! or `std::convert::Infallible`.
+//!
+//! ### Example
 //!
 //! ```rust
-//! #[ezmenu::parsed]
+//! use std::str::FromStr;
+//! use ezmenu::ValueField;
+//!
 //! enum Type {
 //!     MIT,
 //!     BSD,
 //!     GPL,
 //! }
 //!
-//! #[derive(Menu)]
-//! struct License {
-//!     author: String,
-//!     date: u16,
-//!     #[menu(default = "mit")]
-//!     ty: Type,
+//! impl FromStr for Type {
+//!     type Err = String;
+//!     fn from_str(s: &str) -> Result<Self, Self::Err> {
+//!         // ...
+//!     }
+//! }
+//!
+//! fn main() {
+//!     let license_type: Type = ValueField::from("Give the license type")
+//!         .init_build()
+//!         .unwrap();
 //! }
 //! ```
 //!
-//! This will restrict the user to enter "MIT", "BSD" or "GPL" inputs ignoring the case.
+//! ## Provided custom value types
 //!
-//! ## Derive feature
+//! The EZMenu library already provides custom value types to handle user input.
+//! Check out the [`customs`](https://docs.rs/ezmenu/latest/ezmenu/customs/index.html)
+//! module to see all available custom value types.
 //!
-//! The `derive(Menu)` is available with the `derive` feature, enabled by default.
-//! You can disable it in your Cargo.toml file:
-//! ```toml
-//! [dependencies]
-//! ezmenu = { version = "0.2.3", default-features = false }
-//! ```
+//! For instance, the [`MenuBool`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuBool.html)
+//! is used to override the boolean parsing method, allowing "yes" or "no" as inputs.
 //!
-//! You can still use the provided library to build your menus.
-//!
-//! ### Example
-//!
-//! To ask a simple value, you can use `StructField::build` method by giving the `Stdin`
-//! and `Stdout` types.
-//!
-//! ```rust
-//! use std::io::{stdin, stdout};
-//! use ezmenu::ValueField;
-//! let age: u8 = ValueField::from("How old are you?")
-//!    .build(&stdin(), &mut stdout()).unwrap();
-//! ```
-//!
-//! If you want to build a menu with all the previous features (default values, formatting rules...),
-//! you can refer to this code below:
-//! ```rust
-//! use ezmenu::{ValueField, ValueFieldFormatting};
-//! let mut menu = StructMenu::default()
-//!     .title("-- Mklicense --")
-//!     .fmt(ValueFieldFormatting {
-//!         chip: "* Give the ",
-//!        ..Default::default()
-//!     })
-//!     .with_field(ValueField::from("project author name"))
-//!     .with_field(ValueField::from("project name"))
-//!     .with_field(
-//!         ValueField::from("Give the year of the license")
-//!             .default("2022")
-//!             .fmt(ValueFieldFormatting {
-//!                 prefix: ">> ",
-//!                 new_line: true,
-//!                 ..Default::default()
-//!             }),
-//!     );
-//!
-//! let name: String = menu
-//!     .next_map(|s: String, w| {
-//!         if s.to_lowercase() == "ahmad" {
-//!             w.write(b"Nice name!!")?;
-//!         }
-//!         Ok(s)
-//!     }).unwrap();
-//!
-//! let proj_name: String = menu.next().unwrap();
-//! let proj_year: i64 = menu.next().unwrap();
-//! ```
-mod customs;
+//! The [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuVec.html) type allows the user
+//! to enter many values separated by spaces and collect them into a `Vec<T>`.
+//! Of course, `T` must implement `FromStr` trait.
+pub mod customs;
 mod field;
 mod menu;
-
-/// The `derive(Menu)` macro
-#[cfg(feature = "derive")]
-pub use ezmenu_derive::Menu;
-
-/// The `ezmenu::parsed` attribute macro
-#[cfg(feature = "parsed_attr")]
-pub use ezmenu_derive::parsed;
 
 pub use customs::{MenuBool, MenuVec};
 pub use field::{ValueField, ValueFieldFormatting};
@@ -229,8 +163,9 @@ pub enum MenuError {
     /// An incorrect type of value has been used as default value.
     IncorrectType(Box<dyn Debug>),
     /// There is no more field to call for an output.
-    /// This error appears when calling `<StructMenu as Menu>::next` method whereas
-    /// the menu building has finished for example.
+    ///
+    /// This error appears when calling `<ValueMenu as Menu>::next_output` method whereas
+    /// the menu building has finished.
     NoMoreField,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
@@ -242,7 +177,7 @@ impl Error for MenuError {}
 
 impl Display for MenuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        <Self as Debug>::fmt(self, f)
+        Debug::fmt(self, f)
     }
 }
 

@@ -13,7 +13,7 @@ Here is an example of how to use the library:
 use ezmenu::{Menu, ValueField, ValueMenu};
 
 fn main() {
-    let my_menu = ValueMenu::from([
+    let mut my_menu = ValueMenu::from([
         ValueField::from("Give your name"),
         ValueField::from("Give a number"),
     ]);
