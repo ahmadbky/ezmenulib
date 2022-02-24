@@ -138,10 +138,10 @@
 //! Check out the [`customs`](https://docs.rs/ezmenu/latest/ezmenu/customs/index.html)
 //! module to see all available custom value types.
 //!
-//! For instance, the [`MenuBool`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuBool.html)
+//! For instance, the [`MenuBool`](https://docs.rs/ezmenu/latest/ezmenu/customs/struct.MenuBool.html)
 //! is used to override the boolean parsing method, allowing "yes" or "no" as inputs.
 //!
-//! The [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuVec.html) type allows the user
+//! The [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/customs/struct.MenuVec.html) type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
 pub mod customs;
