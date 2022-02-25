@@ -1,9 +1,12 @@
-//! # EZMenu
-//!
 //! Fast designing menus for your Rust CLI programs.
 //!
 //! This crate provides a library with structs and traits to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
+//!
+//! ### Note
+//!
+//! If you want to use the derive Menu macro,
+//! you must use the [`ezmenu_derive`](https://docs.rs/ezmenu-derive/) crate instead.
 //!
 //! ## Example
 //!
@@ -16,7 +19,8 @@
 //!     let mut my_menu = ValueMenu::from([
 //!         ValueField::from("Give your name"),
 //!         ValueField::from("Give a number"),
-//!     ]);
+//!     ])
+//!    .title("Hello there!");
 //!
 //!     let name: String = my_menu.next_output().unwrap();
 //!     let number: i32 = my_menu.next_output().unwrap();
@@ -121,7 +125,7 @@
 //! impl FromStr for Type {
 //!     type Err = String;
 //!     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//!         // ...
+//!         Ok(Self::MIT)
 //!     }
 //! }
 //!
