@@ -6,12 +6,6 @@ use std::str::FromStr;
 
 /// Defines the formatting of a value-menu field.
 ///
-/// It manages:
-/// - the chip: the small string displayed before the message acting as a list style attribute
-/// - the prefix: the small string displayed before the user input
-/// - new line: sets the user input with its prefix on a new line or not (by default no)
-/// - default: display default value or not (by default yes)
-///
 /// The final text formatting looks like above:
 /// ```md
 /// <chip><message>{[ (default: <default>)]}{new line}<prefix>
@@ -22,13 +16,19 @@ use std::str::FromStr;
 /// - `[...]` means the value inside is displayed if it is available
 #[derive(Clone)]
 pub struct ValueFieldFormatting<'a> {
+    /// The small string slice displayed before the message acting as a list style attribute
+    /// (by default set as `* `).
     pub chip: &'a str,
+    /// The small string slice displayed before the user input (by default set as `: `).
     pub prefix: &'a str,
+    /// Sets the user input with its prefix on a new line or not (by default set as `false`).
     pub new_line: bool,
+    /// Display default value or not (by default set as `true`).
     pub default: bool,
 }
 
-/// Default formatting for a field is "* " as a chip and ": " as prefix.
+/// Default formatting for a field is `* ` as a chip and `: ` as prefix.
+///
 /// This being, the field is printed like above (text between `[` and `]` is optional
 /// depending on default value providing:
 /// ```md

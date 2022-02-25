@@ -46,7 +46,7 @@
 //! * the prefix: `: ` by default.
 //! * insert a new line before prefix and user input: `false` by default.
 //! * display default values or not: `true` by default.
-//! These parameters are defined in the [`ValueFieldFormatting`](https://docs.rs/ezmenulib/latest/ezmenulib/struct.ValueFieldFormatting.html) struct.
+//! These parameters are defined in the [`ValueFieldFormatting`] struct.
 //!
 //! ### Example
 //!
@@ -139,15 +139,18 @@
 //! ## Provided custom value types
 //!
 //! The EZMenu library already provides custom value types to handle user input.
-//! Check out the [`customs`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/index.html)
+//! Check out the [`customs`]
 //! module to see all available custom value types.
 //!
-//! For instance, the [`MenuBool`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/struct.MenuBool.html)
+//! For instance, the [`MenuBool`]
 //! is used to override the boolean parsing method, allowing "yes" or "no" as inputs.
 //!
-//! The [`MenuVec<T>`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/struct.MenuVec.html) type allows the user
+//! The [`MenuVec<T>`] type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
+#![deny(missing_docs)]
+
+/// The module defining the provided custom value types to handle user input.
 pub mod customs;
 mod field;
 mod menu;

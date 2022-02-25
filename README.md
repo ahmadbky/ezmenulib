@@ -1,4 +1,4 @@
-# EZMenu
+# EZMenuLib
 
 Fast designing menus for your Rust CLI programs.
 
@@ -10,7 +10,7 @@ It includes type-checking from the user input, and a formatting customization.
 Here is an example of how to use the library:
 
 ```rust
-use ezmenu::{Menu, ValueField, ValueMenu};
+use ezmenulib::{Menu, ValueField, ValueMenu};
 
 fn main() {
     let mut my_menu = ValueMenu::from([
@@ -34,7 +34,7 @@ values provided: author=Ahmad, number=1000
 
 ## Documentation
 
-You can find all the crate documentation on [Docs.rs](https://docs.rs/ezmenu).
+You can find all the crate documentation on [Docs.rs](https://docs.rs/ezmenulib).
 You can also check the [examples](examples) to learn with a practical way.
 
 ## WIP

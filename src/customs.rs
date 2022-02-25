@@ -50,7 +50,7 @@ impl<T> DerefMut for MenuVec<T> {
     }
 }
 
-/// The error type used for parsing user input into a [`MenuVec<T>`](https://docs.rs/ezmenulib/latest/ezmenulib/struct.MenuVec.html).
+/// The error type used for parsing user input into a [`MenuVec<T>`].
 ///
 /// The `E` generic parameter means `<T as FromStr>::Err`.
 pub enum MenuVecParseError<E> {

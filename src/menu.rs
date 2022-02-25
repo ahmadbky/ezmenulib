@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
 ///
-/// The `N` const parameter represents the amount of [`ValueField`s](https://docs.rs/ezmenulib/latest/ezmenulib/struct.ValueField.html)
+/// The `N` const parameter represents the amount of [`ValueField`]
 /// It has a global formatting applied to the fields it contains by inheritance.
 pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,
@@ -70,7 +70,7 @@ where
     /// The function takes `(Output, &mut Stdout)` as argument, where `Output` is the type of the output.
     ///
     /// It returns a `MenuResult<Output>` to prevent from any error or return a custom error, with:
-    /// `MenuError::Other(Box<dyn std::error::Debug>)`.
+    /// `MenuError::Other(Box<dyn std::fmt::Debug>)`.
     fn next_map<F>(&mut self, f: F) -> MenuResult<Output>
     where
         F: FnOnce(Output, &mut Stdout) -> MenuResult<Output>,
