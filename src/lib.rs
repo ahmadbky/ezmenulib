@@ -6,14 +6,14 @@
 //! ### Note
 //!
 //! If you want to use the derive Menu macro,
-//! you must use the [`ezmenu_derive`](https://docs.rs/ezmenu-derive/) crate instead.
+//! you must use the [`ezmenu`](https://docs.rs/ezmenu/) crate instead.
 //!
 //! ## Example
 //!
 //! Here is an example of how to use the library:
 //!
 //! ```rust
-//! use ezmenu::{Menu, ValueField, ValueMenu};
+//! use ezmenulib::{Menu, ValueField, ValueMenu};
 //!
 //! fn main() {
 //!     let mut my_menu = ValueMenu::from([
@@ -46,13 +46,13 @@
 //! * the prefix: `: ` by default.
 //! * insert a new line before prefix and user input: `false` by default.
 //! * display default values or not: `true` by default.
-//! These parameters are defined in the [`ValueFieldFormatting`](https://docs.rs/ezmenu/latest/ezmenu/struct.ValueFieldFormatting.html) struct.
+//! These parameters are defined in the [`ValueFieldFormatting`](https://docs.rs/ezmenulib/latest/ezmenulib/struct.ValueFieldFormatting.html) struct.
 //!
 //! ### Example
 //!
 //! For a custom format on a field and a main formatting rule on a menu, you can build this with:
 //! ```rust
-//! use ezmenu::{ValueField, ValueFieldFormatting};
+//! use ezmenulib::{ValueField, ValueFieldFormatting};
 //! fn main() {
 //!     let mut license = ValueMenu::from([
 //!         ValueField::from("Authors"),
@@ -114,7 +114,7 @@
 //!
 //! ```rust
 //! use std::str::FromStr;
-//! use ezmenu::ValueField;
+//! use ezmenulib::ValueField;
 //!
 //! enum Type {
 //!     MIT,
@@ -139,13 +139,13 @@
 //! ## Provided custom value types
 //!
 //! The EZMenu library already provides custom value types to handle user input.
-//! Check out the [`customs`](https://docs.rs/ezmenu/latest/ezmenu/customs/index.html)
+//! Check out the [`customs`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/index.html)
 //! module to see all available custom value types.
 //!
-//! For instance, the [`MenuBool`](https://docs.rs/ezmenu/latest/ezmenu/customs/struct.MenuBool.html)
+//! For instance, the [`MenuBool`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/struct.MenuBool.html)
 //! is used to override the boolean parsing method, allowing "yes" or "no" as inputs.
 //!
-//! The [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/customs/struct.MenuVec.html) type allows the user
+//! The [`MenuVec<T>`](https://docs.rs/ezmenulib/latest/ezmenulib/customs/struct.MenuVec.html) type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
 pub mod customs;

@@ -1,4 +1,4 @@
-use ezmenu::{Menu, MenuVec, ValueField, ValueFieldFormatting, ValueMenu};
+use ezmenulib::{Menu, MenuVec, ValueField, ValueFieldFormatting, ValueMenu};
 
 fn main() {
     let mut menu = ValueMenu::from([

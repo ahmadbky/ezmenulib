@@ -57,7 +57,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 ///
 /// For a make-license CLI program for example, you can use
 /// ```
-/// use ezmenu::ValueField;
+/// use ezmenulib::ValueField;
 /// let author: String = ValueField::from("Give the author of the license")
 ///     .init_build()
 ///     .unwrap();
@@ -116,7 +116,7 @@ impl<'a> ValueField<'a> {
     /// ## Example
     ///
     /// ```
-    /// use ezmenu::{MenuResult, ValueField};
+    /// use ezmenulib::{MenuResult, ValueField};
     /// let age: MenuResult<u8> = ValueField::from("How old are you")
     ///     .init_build();
     /// ```

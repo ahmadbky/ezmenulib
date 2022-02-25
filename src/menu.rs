@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
 ///
-/// The `N` const parameter represents the amount of [`ValueField`s](https://docs.rs/ezmenu/latest/ezmenu/struct.ValueField.html)
+/// The `N` const parameter represents the amount of [`ValueField`s](https://docs.rs/ezmenulib/latest/ezmenulib/struct.ValueField.html)
 /// It has a global formatting applied to the fields it contains by inheritance.
 pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,
@@ -112,33 +112,32 @@ where
     }
 }
 
-/// The position of the title for an enum menu.
-// TODO: implement enum menu to use this
-#[allow(unused)]
-pub enum TitlePos {
-    /// Position at the top of the menu:
-    /// ```md
-    /// <title>
-    /// 1 - field1
-    /// 2 - field2
-    /// ...
-    /// >>
-    /// ```
-    Top,
-    /// Position at the bottom of the menu:
-    /// ```md
-    /// 1 - field1
-    /// 2 - field2
-    /// ...
-    /// <title>
-    /// >>
-    /// ```
-    Bottom,
-}
-
-/// Default position for the menu title is at the top.
-impl Default for TitlePos {
-    fn default() -> Self {
-        Self::Top
-    }
-}
+// /// The position of the title for an enum menu.
+// // TODO: implement enum menu to use this
+// pub enum TitlePos {
+//     /// Position at the top of the menu:
+//     /// ```md
+//     /// <title>
+//     /// 1 - field1
+//     /// 2 - field2
+//     /// ...
+//     /// >>
+//     /// ```
+//     Top,
+//     /// Position at the bottom of the menu:
+//     /// ```md
+//     /// 1 - field1
+//     /// 2 - field2
+//     /// ...
+//     /// <title>
+//     /// >>
+//     /// ```
+//     Bottom,
+// }
+//
+// /// Default position for the menu title is at the top.
+// impl Default for TitlePos {
+//     fn default() -> Self {
+//         Self::Top
+//     }
+// }

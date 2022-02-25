@@ -14,7 +14,7 @@ use std::str::FromStr;
 /// ## Example
 ///
 /// ```
-/// use ezmenu::MenuVec;
+/// use ezmenulib::MenuVec;
 /// let a = "23 -54 456";
 /// let a: MenuVec<i32> = a.parse().unwrap();
 /// assert_eq!(*a, vec![23, -54, 456]);
@@ -50,7 +50,7 @@ impl<T> DerefMut for MenuVec<T> {
     }
 }
 
-/// The error type used for parsing user input into a [`MenuVec<T>`](https://docs.rs/ezmenu/latest/ezmenu/struct.MenuVec.html).
+/// The error type used for parsing user input into a [`MenuVec<T>`](https://docs.rs/ezmenulib/latest/ezmenulib/struct.MenuVec.html).
 ///
 /// The `E` generic parameter means `<T as FromStr>::Err`.
 pub enum MenuVecParseError<E> {

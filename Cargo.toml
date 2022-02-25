@@ -1,5 +1,5 @@
 [package]
-name = "ezmenu"
+name = "ezmenulib"
 version = "0.2.7"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
