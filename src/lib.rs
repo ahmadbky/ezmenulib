@@ -13,7 +13,7 @@
 //! Here is an example of how to use the library:
 //!
 //! ```rust
-//! use ezmenulib::{Menu, ValueField, ValueMenu};
+//! use ezmenulib::{MenuBuilder, ValueField, ValueMenu};
 //!
 //! fn main() {
 //!     let mut my_menu = ValueMenu::from([
@@ -148,7 +148,7 @@
 //! The [`MenuVec<T>`] type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 /// The module defining the provided custom value types to handle user input.
 pub mod customs;
@@ -156,8 +156,8 @@ mod field;
 mod menu;
 
 pub use customs::{MenuBool, MenuVec};
-pub use field::{ValueField, ValueFieldFormatting};
-pub use menu::{Menu, ValueMenu};
+pub use field::{SelectField, ValueField, ValueFieldFormatting};
+pub use menu::{MenuBuilder, SelectMenu, TitlePos, ValueMenu};
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -208,8 +208,23 @@ impl fmt::Debug for MenuError {
 }
 
 impl From<io::Error> for MenuError {
+    #[inline]
     fn from(e: io::Error) -> Self {
         Self::IOError(e)
+    }
+}
+
+impl From<&'static str> for MenuError {
+    #[inline]
+    fn from(s: &'static str) -> Self {
+        Self::Other(Box::new(s))
+    }
+}
+
+impl From<String> for MenuError {
+    #[inline]
+    fn from(s: String) -> Self {
+        Self::Other(Box::new(s))
     }
 }
 
