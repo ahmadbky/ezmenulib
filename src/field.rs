@@ -1,8 +1,40 @@
 use crate::{MenuError, MenuResult};
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
+
+#[derive(Clone)]
+pub struct SelectField<'a, Output> {
+    msg: &'a str,
+    pub(crate) chip: &'a str,
+    pub(crate) select: Output,
+    pub(crate) custom_fmt: bool,
+}
+
+impl<Output> Display for SelectField<'_, Output> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self.chip, f)?;
+        Display::fmt(self.msg, f)
+    }
+}
+
+impl<'a, Output> SelectField<'a, Output> {
+    pub fn new(msg: &'a str, select: Output) -> Self {
+        Self {
+            msg,
+            chip: " - ",
+            select,
+            custom_fmt: false,
+        }
+    }
+
+    pub fn chip(mut self, chip: &'a str) -> Self {
+        self.chip = chip;
+        self.custom_fmt = true;
+        self
+    }
+}
 
 /// Defines the formatting of a value-menu field.
 ///
@@ -168,7 +200,7 @@ impl<'a> ValueField<'a> {
 
         // loops while incorrect value
         loop {
-            prompt_fmt(writer, self.msg, self.default, self.fmt.as_ref())?;
+            value_prompt(writer, self.msg, self.default, self.fmt.as_ref())?;
 
             // read input to string
             let mut out = String::new();
@@ -177,7 +209,6 @@ impl<'a> ValueField<'a> {
             // try to parse to T, else repeat
             match out.trim().parse() {
                 Ok(t) => break Ok(t),
-                // TODO: feature allowing control over default values behavior
                 Err(_) if self.default.is_some() => break default_parse(self.default),
                 _ => continue,
             }
@@ -186,7 +217,7 @@ impl<'a> ValueField<'a> {
 }
 
 /// Prompts an input according to the formatting options of the field
-fn prompt_fmt<W: Write>(
+fn value_prompt<W: Write>(
     writer: &mut W,
     msg: &str,
     default: Option<&str>,
