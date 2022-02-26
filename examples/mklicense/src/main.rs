@@ -1,6 +1,9 @@
-use ezmenulib::{Menu, MenuVec, ValueField, ValueFieldFormatting, ValueMenu};
+use ezmenulib::{
+    MenuBuilder, MenuVec, SelectField, SelectMenu, TitlePos, ValueField, ValueFieldFormatting,
+    ValueMenu,
+};
 
-fn main() {
+fn values_test() {
     let mut menu = ValueMenu::from([
         ValueField::from("Authors"),
         ValueField::from("Project name").fmt(ValueFieldFormatting {
@@ -20,4 +23,19 @@ fn main() {
     let _: i32 = ValueField::from("Give the license type")
         .init_build()
         .unwrap();
+}
+
+fn main() {
+    let amount = SelectMenu::from([
+        SelectField::new("un", 1),
+        SelectField::new("deux", 2).chip(" -- "),
+        SelectField::new("trois", 3).chip(" --- "),
+    ])
+    .title("bonsoir")
+    .title_pos(TitlePos::Bottom)
+    .chip(" xd ")
+    .next_output()
+    .unwrap();
+
+    println!("{}", amount);
 }
