@@ -90,6 +90,12 @@ impl<T: FromStr> FromStr for MenuVec<T> {
     }
 }
 
+impl<T> From<MenuVec<T>> for Vec<T> {
+    fn from(m: MenuVec<T>) -> Self {
+        m.0
+    }
+}
+
 /// Wrapper type used to handle a boolean user input value.
 ///
 /// Its main feature is to implemented `FromStr` trait,
@@ -143,5 +149,11 @@ impl FromStr for MenuBool {
             "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
             _ => Err(MenuError::Other(Box::new("incorrect boolean value"))),
         }
+    }
+}
+
+impl From<MenuBool> for bool {
+    fn from(m: MenuBool) -> Self {
+        m.0
     }
 }
