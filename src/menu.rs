@@ -107,25 +107,13 @@ where
     Output: Clone,
 {
     fn next_output(&mut self) -> MenuResult<Output> {
-        // displays the title at the top
-        if let TitlePos::Top = self.pos {
-            disp_title(&mut self.writer, self.title)?;
-        }
-
-        // displays the select-fields
-        for (i, field) in self.fields.iter().enumerate() {
-            disp_select_field(
-                &mut self.writer,
-                i,
-                field,
-                matches!(self.default, Some(d) if d == i),
-            )?;
-        }
-
-        // displays the title at the bottom
-        if let TitlePos::Bottom = self.pos {
-            disp_title(&mut self.writer, self.title)?;
-        }
+        disp_sel_menu(
+            &self.pos,
+            &mut self.writer,
+            self.title,
+            self.fields.as_ref(),
+            &self.default,
+        )?;
 
         // loops while incorrect input
         loop {
@@ -139,9 +127,9 @@ where
 
             // converts user input into Output type
             match out.trim().parse::<usize>() {
-                Ok(n) => {
-                    if let Some(SelectField { select, .. }) = self.fields.get(n).cloned() {
-                        break Ok(select);
+                Ok(n @ 1..=usize::MAX) => {
+                    if let Some(sf) = self.fields.get(n - 1) {
+                        break Ok(sf.select(&mut self.writer)?);
                     }
                 }
                 _ => {
@@ -149,12 +137,11 @@ where
                         break Ok(self
                             .fields
                             .get(default)
-                            .cloned()
                             .ok_or(MenuError::IncorrectType(Box::new(format!(
                                 "default index is {} but menu length is {}",
                                 default, N
                             ))))?
-                            .select);
+                            .select(&mut self.writer)?);
                     } else {
                         continue;
                     }
@@ -164,13 +151,38 @@ where
     }
 }
 
+fn disp_sel_menu<Output>(
+    pos: &TitlePos,
+    writer: &mut Stdout,
+    title: &str,
+    fields: &[SelectField<'_, Output>],
+    default: &Option<usize>,
+) -> MenuResult<()> {
+    // displays the title at the top
+    if let TitlePos::Top = pos {
+        disp_title(writer, title)?;
+    }
+
+    // displays the select-fields
+    for (i, field) in fields.iter().enumerate() {
+        disp_sel_field(writer, i, field, matches!(default, Some(d) if *d == i))?;
+    }
+
+    // displays the title at the bottom
+    if let TitlePos::Bottom = pos {
+        disp_title(writer, title)?;
+    }
+
+    Ok(())
+}
+
 #[inline(never)]
 fn disp_title(writer: &mut Stdout, title: &str) -> MenuResult<()> {
     writeln!(writer, "{}", title).map_err(MenuError::from)
 }
 
 #[inline(never)]
-fn disp_select_field<Output>(
+fn disp_sel_field<Output>(
     writer: &mut Stdout,
     idx: usize,
     field: &SelectField<'_, Output>,
@@ -222,7 +234,7 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
         self.fmt = Rc::new(fmt);
         for field in self.fields.as_mut_slice() {
             if !field.custom_fmt {
-                field.inherit_fmt(self.fmt.clone());
+                field.fmt = self.fmt.clone();
             }
         }
         self

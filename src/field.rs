@@ -4,12 +4,15 @@ use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
+pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
+
 #[derive(Clone)]
 pub struct SelectField<'a, Output> {
     msg: &'a str,
     pub(crate) chip: &'a str,
-    pub(crate) select: Output,
+    select: Output,
     pub(crate) custom_fmt: bool,
+    bind: Option<Binding>,
 }
 
 impl<Output> Display for SelectField<'_, Output> {
@@ -26,6 +29,7 @@ impl<'a, Output> SelectField<'a, Output> {
             chip: " - ",
             select,
             custom_fmt: false,
+            bind: None,
         }
     }
 
@@ -33,6 +37,23 @@ impl<'a, Output> SelectField<'a, Output> {
         self.chip = chip;
         self.custom_fmt = true;
         self
+    }
+
+    pub fn bind(mut self, bind: Binding) -> Self {
+        self.bind = Some(bind);
+        self
+    }
+}
+
+impl<'a, Output> SelectField<'a, Output>
+where
+    Output: Clone,
+{
+    pub fn select(&self, writer: &mut Stdout) -> MenuResult<Output> {
+        if let Some(func) = self.bind {
+            func(writer)?;
+        }
+        Ok(self.select.clone())
     }
 }
 
@@ -97,7 +118,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 pub struct ValueField<'a> {
     msg: &'a str,
     // pointer to the parent fmt or its own fmt
-    fmt: Rc<ValueFieldFormatting<'a>>,
+    pub(crate) fmt: Rc<ValueFieldFormatting<'a>>,
     pub(crate) custom_fmt: bool,
     default: Option<&'a str>,
 }
@@ -120,13 +141,6 @@ impl<'a> ValueField<'a> {
         self.fmt = Rc::new(fmt);
         self.custom_fmt = true;
         self
-    }
-
-    /// Method used to make the field inherit from the formatting rules from a parent attribute
-    /// such as a `ValueMenu`.
-    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        self.fmt = fmt;
-        self.custom_fmt = false;
     }
 
     /// Give the default value accepted by the field.

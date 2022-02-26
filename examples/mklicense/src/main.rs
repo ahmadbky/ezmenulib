@@ -1,7 +1,8 @@
 use ezmenulib::{
-    MenuBuilder, MenuVec, SelectField, SelectMenu, TitlePos, ValueField, ValueFieldFormatting,
-    ValueMenu,
+    MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, TitlePos, ValueField,
+    ValueFieldFormatting, ValueMenu,
 };
+use std::io::Write;
 
 fn values_test() {
     let mut menu = ValueMenu::from([
@@ -25,15 +26,20 @@ fn values_test() {
         .unwrap();
 }
 
+fn deux(e: &mut std::io::Stdout) -> MenuResult<()> {
+    use std::io::Write;
+    e.write_all(b"bonsoir\n").map_err(MenuError::from)
+}
+
 fn main() {
     let amount = SelectMenu::from([
-        SelectField::new("un", 1),
-        SelectField::new("deux", 2).chip(" -- "),
-        SelectField::new("trois", 3).chip(" --- "),
+        SelectField::new("un", 1).bind(|_| Ok(println!("tu as choisi un"))),
+        SelectField::new("deux", 2).bind(deux),
+        SelectField::new("trois", 3),
     ])
     .title("bonsoir")
     .title_pos(TitlePos::Bottom)
-    .chip(" xd ")
+    .default(0)
     .next_output()
     .unwrap();
 
