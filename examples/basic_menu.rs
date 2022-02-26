@@ -1,4 +1,4 @@
-use ezmenulib::{Menu, ValueField, ValueMenu};
+use ezmenulib::{MenuBuilder, ValueField, ValueMenu};
 use std::error::Error;
 
 struct Person {
