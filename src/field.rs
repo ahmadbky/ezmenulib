@@ -12,7 +12,7 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 ///
 /// The generic type `Output` means the output type of the selective menu.
 /// Unlike [`ValueField`], this struct should not be used alone, without a context.
-/// You must instantiate it in an array in the constructor of the [`SelectMenu`] struct.
+/// You must instantiate it in an array in the constructor of the [`SelectMenu`](crate::SelectMenu) struct.
 ///
 /// Just like [`ValueFieldFormatting`], it contains an editable `chip` string slice, placed
 /// after the selection index (`X`):
