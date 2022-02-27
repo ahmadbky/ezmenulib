@@ -4,9 +4,34 @@ use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
+/// Type used to handle the binding function executed right after
+/// the corresponding field has been selected by the user.
 pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 
-#[derive(Clone)]
+/// Struct modeling a field of a selective menu.
+///
+/// The generic type `Output` means the output type of the selective menu.
+/// Unlike [`ValueField`], this struct should not be used alone, without a context.
+/// You must instantiate it in an array in the constructor of the [`SelectMenu`] struct.
+///
+/// Just like [`ValueFieldFormatting`], it contains an editable `chip` string slice, placed
+/// after the selection index (`X`):
+/// ```text
+/// X<chip><message>
+/// ```
+///
+/// ## Example
+///
+/// ```
+/// use ezmenulib::{SelectField, SelectMenu};
+///
+/// fn main() {
+///     let get_amount = SelectMenu::from([
+///         SelectField::new("one", 1),
+///         SelectField::new("two", 2),
+///     ]);
+/// }
+/// ```
 pub struct SelectField<'a, Output> {
     msg: &'a str,
     pub(crate) chip: &'a str,
@@ -23,6 +48,10 @@ impl<Output> Display for SelectField<'_, Output> {
 }
 
 impl<'a, Output> SelectField<'a, Output> {
+    /// Initializes the selection field for the menu.
+    ///
+    /// This associated function should not be used without context.
+    /// The `SelectField` type must be instantiated inside a
     pub fn new(msg: &'a str, select: Output) -> Self {
         Self {
             msg,
@@ -33,12 +62,50 @@ impl<'a, Output> SelectField<'a, Output> {
         }
     }
 
+    /// Edits the chip of the selection field.
+    ///
+    /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
+    /// It is placed next right to the selection menu index (`X`):
+    /// ```text
+    /// X<chip><message>
+    /// ```
     pub fn chip(mut self, chip: &'a str) -> Self {
         self.chip = chip;
         self.custom_fmt = true;
         self
     }
 
+    /// Defines the function to execute right after the user selected this field.
+    ///
+    /// It is optional, and is useful if you have many modes in your program with
+    /// procedures defined for each mode.
+    ///
+    /// The function must take a `&mut Stdout` as parameter and return a `MenuResult<()>`.
+    /// The result return is used to spread the error to the point you built the menu.
+    ///
+    /// If you want to return a string (or static string slice) error, you can use `MenuError::from` associated function.
+    /// For an IO Error when using `Stdout` methods, you can map the error type by using `Result::map_err`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use ezmenulib::{MenuResult, MenuError, SelectField, SelectMenu};
+    /// use std::io::{Stdout, Write};
+    ///
+    /// fn bsd(e: &mut Stdout) -> MenuResult<()> {
+    ///     e.write_all(b"coucou this is from bsd\n").map_err(MenuError::from)
+    /// }
+    ///
+    /// fn main() {
+    ///     let selected = SelectMenu::from([
+    ///         SelectField::new("MIT", Type::MIT).bind(|_| Ok(println!("you selected MIT!!!"))),
+    ///         SelectField::new("BSD", Type::BSD).bind(bsd),
+    ///         // ...
+    ///     ]);
+    /// }
+    /// ```
+    ///
+    /// For other error, you can simply use the `MenuError::Other` variant and box your custom error type.
     pub fn bind(mut self, bind: Binding) -> Self {
         self.bind = Some(bind);
         self
@@ -49,7 +116,11 @@ impl<'a, Output> SelectField<'a, Output>
 where
     Output: Clone,
 {
-    pub fn select(&self, writer: &mut Stdout) -> MenuResult<Output> {
+    /// Selects this menu and returns the corresponding output.
+    ///
+    /// This function is used by the [`SelectMenu`] struct when building the menu.
+    /// It calls the inner function binding, then returns a clone of the output.
+    pub(crate) fn select(&self, writer: &mut Stdout) -> MenuResult<Output> {
         if let Some(func) = self.bind {
             func(writer)?;
         }
@@ -134,6 +205,23 @@ impl<'a> From<&'a str> for ValueField<'a> {
     }
 }
 
+impl<'a> Display for ValueField<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{chip}{msg}{def}{nl}{prefix}",
+            chip = self.fmt.chip,
+            msg = self.msg,
+            def = match self.default {
+                Some(val) if self.fmt.default => format!(" (default: {})", val),
+                _ => "".to_owned(),
+            },
+            nl = if self.fmt.new_line { "\n" } else { "" },
+            prefix = self.fmt.prefix,
+        )
+    }
+}
+
 /// Constructor methods defining how the field behaves
 impl<'a> ValueField<'a> {
     /// Give a custom formatting for the field.
@@ -214,7 +302,10 @@ impl<'a> ValueField<'a> {
 
         // loops while incorrect value
         loop {
-            value_prompt(writer, self.msg, self.default, self.fmt.as_ref())?;
+            // outputs the field message with its formatting
+            // see `<ValueField as Display>::fmt`
+            write!(writer, "{}", self)?;
+            writer.flush()?;
 
             // read input to string
             let mut out = String::new();
@@ -228,27 +319,4 @@ impl<'a> ValueField<'a> {
             }
         }
     }
-}
-
-/// Prompts an input according to the formatting options of the field
-fn value_prompt<W: Write>(
-    writer: &mut W,
-    msg: &str,
-    default: Option<&str>,
-    fmt: &ValueFieldFormatting<'_>,
-) -> Result<(), std::io::Error> {
-    write!(
-        writer,
-        "{chip}{msg}{def}{nl}{prefix}",
-        chip = fmt.chip,
-        msg = msg,
-        def = match default {
-            Some(val) if fmt.default => format!(" (default: {})", val),
-            _ => "".to_owned(),
-        },
-        nl = if fmt.new_line { "\n" } else { "" },
-        prefix = fmt.prefix,
-    )?;
-    // flushes writer so it prints the message if it's on the same line
-    writer.flush()
 }
