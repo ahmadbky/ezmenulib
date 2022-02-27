@@ -1,8 +1,17 @@
+#![allow(unused)]
+
 use ezmenulib::{
     MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, TitlePos, ValueField,
     ValueFieldFormatting, ValueMenu,
 };
 use std::io::Write;
+
+#[derive(Debug, Clone)]
+enum Test {
+    One,
+    Two,
+    Three,
+}
 
 fn values_test() {
     let mut menu = ValueMenu::from([
@@ -32,16 +41,11 @@ fn deux(e: &mut std::io::Stdout) -> MenuResult<()> {
 }
 
 fn main() {
-    let amount = SelectMenu::from([
-        SelectField::new("un", 1).bind(|_| Ok(println!("tu as choisi un"))),
-        SelectField::new("deux", 2).bind(deux),
-        SelectField::new("trois", 3),
-    ])
-    .title("bonsoir")
-    .title_pos(TitlePos::Bottom)
-    .default(0)
-    .next_output()
-    .unwrap();
+    let amount: u8 = SelectMenu::from([])
+        .title("bonsoir")
+        .title_pos(TitlePos::Bottom)
+        .next_output()
+        .unwrap();
 
-    println!("{}", amount);
+    println!("{:?}", amount);
 }
