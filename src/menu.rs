@@ -28,13 +28,62 @@ pub enum TitlePos {
     Bottom,
 }
 
-/// Default position for the menu title is at the top.
 impl Default for TitlePos {
+    /// Default position for the menu title is at the top.
     fn default() -> Self {
         Self::Top
     }
 }
 
+/// Struct modeling a selective menu.
+///
+/// The generic type `Output` means the output type of the selective menu, while `N` means the
+/// amount of selective fields it contains.
+///
+/// ## Example
+///
+/// ```
+/// use ezmenulib::{SelectField, SelectMenu, MenuBuilder};
+///
+/// // Debug and PartialEq trait impl are used for the `assert_eq` macro.
+/// #[derive(Clone, Debug, PartialEq)]
+/// enum Type {
+///     MIT,
+///     GPL,
+///     BSD,
+/// }
+///
+/// fn main() {
+///     let license_type = SelectMenu::from([
+///         SelectField::new("MIT", Type::MIT),
+///         SelectField::new("GPL", Type::GPL),
+///         SelectField::new("BSD", Type::BSD),
+///     ])
+///     .title("License type")
+///     .default(0)
+///     .next_output()
+///     .unwrap();
+/// }
+/// ```
+///
+/// Supposing the user skipped the selective menu, it will return by default the selective field
+/// at index `0`.
+/// ```
+/// assert_eq!(license_type, Type::MIT);
+/// ```
+///
+/// ## Formatting
+///
+/// The selective menu has two editable formatting rules.
+/// Like [`ValueFieldFormatting`], it contains a `chip` and a `prefix`:
+/// ```text
+/// X<chip><message>
+/// X<chip><message>
+/// ...
+/// <prefix>
+/// ```
+///
+/// Default chip is `" - "`, and default prefix is `">> "`.
 pub struct SelectMenu<'a, Output, const N: usize> {
     title: &'a str,
     pos: TitlePos,
@@ -60,26 +109,47 @@ impl<'a, Output, const N: usize> From<[SelectField<'a, Output>; N]> for SelectMe
 }
 
 impl<'a, Output, const N: usize> SelectMenu<'a, Output, N> {
+    /// Sets the title of the selective menu.
+    ///
+    /// The title is by default displayed at the top of the selective fields,
+    /// but you can edit this behavior by setting the title position to `TitlePos::Bottom`, with
+    /// `SelectMenu::title_pos` method.
     pub fn title(mut self, title: &'a str) -> Self {
         self.title = title;
         self
     }
 
+    /// Sets the title position of the selective menu.
+    ///
+    /// The title position is either at the top of the selective fields (by default),
+    /// or at the bottom.
     pub fn title_pos(mut self, pos: TitlePos) -> Self {
         self.pos = pos;
         self
     }
 
+    /// Sets the default selective field.
+    ///
+    /// If you have specified a default field, the latter will be marked as `"(default)"`.
+    /// Thus, if the user skips the selective menu (by pressing enter without input), it will return
+    /// the default selective field.
     pub fn default(mut self, default: usize) -> Self {
         self.default = Some(default);
         self
     }
 
+    /// Sets the user input prefix of the selective menu.
+    ///
+    /// By default, the prefix used is `">> "`.
     pub fn prefix(mut self, prefix: &'a str) -> Self {
         self.prefix = prefix;
         self
     }
 
+    /// Sets the chip of the selective menu.
+    ///
+    /// The chip is the short string slice placed between the field index and the field message.
+    /// It acts as a list style attribute.
     pub fn chip(mut self, chip: &'a str) -> Self {
         for field in self.fields.as_mut_slice() {
             if !field.custom_fmt {
@@ -106,6 +176,21 @@ impl<Output, const N: usize> MenuBuilder<Output> for SelectMenu<'_, Output, N>
 where
     Output: Clone,
 {
+    /// Displays the selective menu to the user, then return the field he selected.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use ezmenulib::{SelectMenu, MenuBuilder};
+    ///
+    /// fn main() {
+    ///     let amount = SelectMenu::from([
+    ///         
+    ///     ])
+    ///     .next_output()
+    ///     .unwrap();
+    /// }
+    /// ```
     fn next_output(&mut self) -> MenuResult<Output> {
         disp_sel_menu(
             &self.pos,
@@ -151,6 +236,8 @@ where
     }
 }
 
+/// Writes the whole selective menu according to its formatting rules
+/// to the writer.
 fn disp_sel_menu<Output>(
     pos: &TitlePos,
     writer: &mut Stdout,
@@ -178,7 +265,10 @@ fn disp_sel_menu<Output>(
 
 #[inline(never)]
 fn disp_title(writer: &mut Stdout, title: &str) -> MenuResult<()> {
-    writeln!(writer, "{}", title).map_err(MenuError::from)
+    if !title.is_empty() {
+        writeln!(writer, "{}", title).map_err(MenuError::from)?;
+    }
+    Ok(())
 }
 
 #[inline(never)]
@@ -274,7 +364,7 @@ where
     /// Returns the output of the next field if present.
     fn next_output(&mut self) -> MenuResult<Output> {
         // prints the title
-        if !self.first_popped {
+        if !self.first_popped && !self.title.is_empty() {
             writeln!(self.writer, "{}", self.title)?;
             self.first_popped = true;
         }
