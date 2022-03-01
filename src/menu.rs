@@ -1,7 +1,7 @@
-use crate::field::{SelectField, ValueFieldFormatting};
-use crate::{MenuError, MenuResult, ValueField};
+use crate::field::{Field, SelectField, ValueFieldFormatting};
+use crate::{MenuError, MenuResult};
 use std::array::IntoIter;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -53,17 +53,15 @@ impl Default for TitlePos {
 ///     BSD,
 /// }
 ///
-/// fn main() {
-///     let license_type = SelectMenu::from([
-///         SelectField::new("MIT", Type::MIT),
-///         SelectField::new("GPL", Type::GPL),
-///         SelectField::new("BSD", Type::BSD),
-///     ])
-///     .title("License type")
-///     .default(0)
-///     .next_output()
-///     .unwrap();
-/// }
+/// let license_type = SelectMenu::from([
+///     SelectField::new("MIT", Type::MIT),
+///     SelectField::new("GPL", Type::GPL),
+///     SelectField::new("BSD", Type::BSD),
+/// ])
+/// .title("License type")
+/// .default(0)
+/// .next_output()
+/// .unwrap();
 /// ```
 ///
 /// Supposing the user skipped the selective menu, it will return by default the selective field
@@ -84,19 +82,30 @@ impl Default for TitlePos {
 /// ```
 ///
 /// Default chip is `" - "`, and default prefix is `">> "`.
-pub struct SelectMenu<'a, Output, const N: usize> {
+pub struct SelectMenu<'a> {
+    // used for title displaying
+    // if used as submenu
+    fmt: Rc<ValueFieldFormatting<'a>>,
+    custom_fmt: bool,
+
     title: &'a str,
     pos: TitlePos,
-    fields: [SelectField<'a, Output>; N],
+    fields: Vec<SelectField<'a>>,
     reader: Stdin,
     writer: Stdout,
     default: Option<usize>,
     prefix: &'a str,
 }
 
-impl<'a, Output, const N: usize> From<[SelectField<'a, Output>; N]> for SelectMenu<'a, Output, N> {
-    fn from(fields: [SelectField<'a, Output>; N]) -> Self {
+impl<'a> From<Vec<SelectField<'a>>> for SelectMenu<'a> {
+    fn from(fields: Vec<SelectField<'a>>) -> Self {
         Self {
+            fmt: Rc::new(ValueFieldFormatting {
+                chip: "",
+                prefix: ":",
+                ..Default::default()
+            }),
+            custom_fmt: false,
             title: "",
             pos: Default::default(),
             fields,
@@ -108,7 +117,13 @@ impl<'a, Output, const N: usize> From<[SelectField<'a, Output>; N]> for SelectMe
     }
 }
 
-impl<'a, Output, const N: usize> SelectMenu<'a, Output, N> {
+impl<'a, const N: usize> From<[SelectField<'a>; N]> for SelectMenu<'a> {
+    fn from(fields: [SelectField<'a>; N]) -> Self {
+        Self::from(Vec::from(fields))
+    }
+}
+
+impl<'a> SelectMenu<'a> {
     /// Sets the title of the selective menu.
     ///
     /// The title is by default displayed at the top of the selective fields,
@@ -117,6 +132,19 @@ impl<'a, Output, const N: usize> SelectMenu<'a, Output, N> {
     pub fn title(mut self, title: &'a str) -> Self {
         self.title = title;
         self
+    }
+
+    /// Gives the formatting to apply to the title.
+    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
+        self.fmt = Rc::new(fmt);
+        self.custom_fmt = true;
+        self
+    }
+
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+        if !self.custom_fmt {
+            self.fmt = fmt;
+        }
     }
 
     /// Sets the title position of the selective menu.
@@ -160,21 +188,52 @@ impl<'a, Output, const N: usize> SelectMenu<'a, Output, N> {
     }
 }
 
-impl<Output, const N: usize> AsRef<Stdout> for SelectMenu<'_, Output, N> {
+impl Display for SelectMenu<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // displays title at top
+        if let TitlePos::Top = self.pos {
+            disp_title(f, &self.fmt, self.title)?;
+        }
+
+        // displays fields
+        for (i, field) in self.fields.iter().enumerate() {
+            writeln!(
+                f,
+                "{i}{msg} {def}",
+                i = i + 1,
+                msg = field,
+                def = if matches!(self.default, Some(d) if d == i) {
+                    "(default)"
+                } else {
+                    ""
+                },
+            )?;
+        }
+
+        // displays title at bottom
+        if let TitlePos::Bottom = self.pos {
+            disp_title(f, &self.fmt, self.title)?;
+        }
+        Ok(())
+    }
+}
+
+impl AsRef<Stdout> for SelectMenu<'_> {
     fn as_ref(&self) -> &Stdout {
         &self.writer
     }
 }
 
-impl<Output, const N: usize> AsMut<Stdout> for SelectMenu<'_, Output, N> {
+impl AsMut<Stdout> for SelectMenu<'_> {
     fn as_mut(&mut self) -> &mut Stdout {
         &mut self.writer
     }
 }
 
-impl<Output, const N: usize> MenuBuilder<Output> for SelectMenu<'_, Output, N>
+impl<Output> MenuBuilder<Output> for SelectMenu<'_>
 where
-    Output: Clone,
+    Output: FromStr,
+    Output::Err: 'static + Debug,
 {
     /// Displays the selective menu to the user, then return the field he selected.
     ///
@@ -183,22 +242,48 @@ where
     /// ```
     /// use ezmenulib::{SelectMenu, MenuBuilder};
     ///
-    /// fn main() {
-    ///     let amount = SelectMenu::from([
-    ///         
-    ///     ])
-    ///     .next_output()
-    ///     .unwrap();
-    /// }
+    /// let amount = SelectMenu::from([
+    ///     
+    /// ])
+    /// .next_output()
+    /// .unwrap();
     /// ```
+    // FIXME: i find it really awful
     fn next_output(&mut self) -> MenuResult<Output> {
-        disp_sel_menu(
-            &self.pos,
-            &mut self.writer,
-            self.title,
-            self.fields.as_ref(),
-            &self.default,
-        )?;
+        /// Returns an error meaning that the default selection index is incorrect.
+        #[inline]
+        fn err_idx(default: usize, len: usize) -> MenuError {
+            MenuError::from(format!(
+                "incorrect default value index: index is {} but selective menu length is {}",
+                default, len
+            ))
+        }
+
+        /// Returns an error meaning that the value type contained in the string slice is incorrect.
+        #[inline]
+        fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
+            MenuError::from(format!("incorrect default value type: {:?}", e))
+        }
+
+        /// Returns the default value among the fields.
+        ///
+        /// If the default value index or the aimed default field type is incorrect,
+        /// it will return an error (See [`MenuError::IncorrectType`]).
+        fn default_parse<Output>(default: usize, fields: &[SelectField<'_>]) -> MenuResult<Output>
+        where
+            Output: FromStr,
+            Output::Err: 'static + Debug,
+        {
+            fields
+                .get(default)
+                .ok_or_else(|| err_idx(default, fields.len()))?
+                .msg
+                .parse()
+                .map_err(err_ty)
+        }
+
+        // displays the menu once
+        self.writer.write_all(format!("{}", self).as_bytes())?;
 
         // loops while incorrect input
         loop {
@@ -209,83 +294,58 @@ where
             // reading input
             let mut out = String::new();
             self.reader.read_line(&mut out)?;
+            let out = out.trim();
 
-            // converts user input into Output type
-            match out.trim().parse::<usize>() {
-                Ok(n @ 1..=usize::MAX) => {
-                    if let Some(sf) = self.fields.get(n - 1) {
-                        break Ok(sf.select(&mut self.writer)?);
+            if self
+                .fields
+                .iter()
+                .any(|field| field.msg.to_lowercase() == out.to_lowercase())
+            {
+                // value entered as literal
+                match out.parse::<Output>() {
+                    Ok(out) => break Ok(out),
+                    Err(_) => {
+                        if let Some(default) = self.default {
+                            break default_parse(default, &self.fields);
+                        }
                     }
                 }
-                _ => {
-                    if let Some(default) = self.default {
-                        break Ok(self
-                            .fields
-                            .get(default)
-                            .ok_or(MenuError::IncorrectType(Box::new(format!(
-                                "default index is {} but menu length is {}",
-                                default, N
-                            ))))?
-                            .select(&mut self.writer)?);
-                    } else {
-                        continue;
+            } else {
+                // value entered as index
+                match out.parse::<usize>() {
+                    Ok(idx) if idx >= 1 => {
+                        if let Some(field) = self.fields.get(idx - 1) {
+                            break Ok(field.msg.parse().map_err(err_ty)?);
+                        }
                     }
+                    Err(_) => {
+                        if let Some(default) = self.default {
+                            break default_parse(default, &self.fields);
+                        }
+                    }
+                    _ => continue,
                 }
             }
         }
     }
 }
 
-/// Writes the whole selective menu according to its formatting rules
-/// to the writer.
-fn disp_sel_menu<Output>(
-    pos: &TitlePos,
-    writer: &mut Stdout,
+#[inline(never)]
+fn disp_title(
+    f: &mut Formatter<'_>,
+    fmt: &Rc<ValueFieldFormatting<'_>>,
     title: &str,
-    fields: &[SelectField<'_, Output>],
-    default: &Option<usize>,
-) -> MenuResult<()> {
-    // displays the title at the top
-    if let TitlePos::Top = pos {
-        disp_title(writer, title)?;
-    }
-
-    // displays the select-fields
-    for (i, field) in fields.iter().enumerate() {
-        disp_sel_field(writer, i, field, matches!(default, Some(d) if *d == i))?;
-    }
-
-    // displays the title at the bottom
-    if let TitlePos::Bottom = pos {
-        disp_title(writer, title)?;
-    }
-
-    Ok(())
-}
-
-#[inline(never)]
-fn disp_title(writer: &mut Stdout, title: &str) -> MenuResult<()> {
+) -> fmt::Result {
     if !title.is_empty() {
-        writeln!(writer, "{}", title).map_err(MenuError::from)?;
+        writeln!(
+            f,
+            "{chp}{ttl}{prfx}",
+            chp = fmt.chip,
+            ttl = title,
+            prfx = fmt.prefix
+        )?;
     }
     Ok(())
-}
-
-#[inline(never)]
-fn disp_sel_field<Output>(
-    writer: &mut Stdout,
-    idx: usize,
-    field: &SelectField<'_, Output>,
-    default: bool,
-) -> MenuResult<()> {
-    writeln!(
-        writer,
-        "{i}{msg}{def}",
-        i = idx + 1,
-        msg = field,
-        def = if default { " (default)" } else { "" },
-    )
-    .map_err(MenuError::from)
 }
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
@@ -295,20 +355,27 @@ fn disp_sel_field<Output>(
 pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
-    fields: IntoIter<ValueField<'a>, N>,
+    fields: IntoIter<Field<'a>, N>,
     reader: Stdin,
     writer: Stdout,
     // used to know when to print the title
     first_popped: bool,
 }
 
-impl<'a, const N: usize> From<[ValueField<'a>; N]> for ValueMenu<'a, N> {
+impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a, N> {
     /// Instantiate the value-menu from its value-fields array.
-    fn from(fields: [ValueField<'a>; N]) -> Self {
+    fn from(mut fields: [Field<'a>; N]) -> Self {
+        let fmt: Rc<ValueFieldFormatting> = Rc::default();
+
+        // inherits fmt on submenus title
+        for field in fields.iter_mut() {
+            field.inherit_fmt(fmt.clone());
+        }
+
         Self {
             fields: fields.into_iter(),
             title: "",
-            fmt: Rc::default(),
+            fmt,
             reader: stdin(),
             writer: stdout(),
             first_popped: false,
@@ -323,9 +390,7 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
     pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
         self.fmt = Rc::new(fmt);
         for field in self.fields.as_mut_slice() {
-            if !field.custom_fmt {
-                field.fmt = self.fmt.clone();
-            }
+            field.inherit_fmt(self.fmt.clone());
         }
         self
     }

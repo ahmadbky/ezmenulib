@@ -1,8 +1,33 @@
-use crate::{MenuError, MenuResult};
+use crate::{MenuBuilder, MenuError, MenuResult, SelectMenu};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
+
+pub enum Field<'a> {
+    Value(ValueField<'a>),
+    Select(SelectMenu<'a>),
+}
+
+impl<'a> Field<'a> {
+    pub fn build<Output>(&mut self, stdin: &Stdin, stdout: &mut Stdout) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+    {
+        match self {
+            Self::Value(vf) => vf.build(stdin, stdout),
+            Self::Select(sm) => sm.next_output(),
+        }
+    }
+
+    pub fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+        match self {
+            Self::Value(vf) => vf.inherit_fmt(fmt),
+            Self::Select(sm) => sm.inherit_fmt(fmt),
+        }
+    }
+}
 
 /// Type used to handle the binding function executed right after
 /// the corresponding field has been selected by the user.
@@ -25,43 +50,41 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 /// ```
 /// use ezmenulib::{SelectField, SelectMenu};
 ///
-/// fn main() {
-///     let get_amount = SelectMenu::from([
-///         SelectField::new("one", 1),
-///         SelectField::new("two", 2),
-///     ]);
-/// }
+/// let get_amount = SelectMenu::from([
+///     SelectField::new("one", 1),
+///     SelectField::new("two", 2),
+/// ]);
 /// ```
-pub struct SelectField<'a, Output> {
-    msg: &'a str,
+pub struct SelectField<'a> {
+    pub(crate) msg: &'a str,
     pub(crate) chip: &'a str,
-    select: Output,
     pub(crate) custom_fmt: bool,
     bind: Option<Binding>,
 }
 
-impl<Output> Display for SelectField<'_, Output> {
+impl Display for SelectField<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.chip, f)?;
         Display::fmt(self.msg, f)
     }
 }
 
-impl<'a, Output> SelectField<'a, Output> {
+impl<'a> From<&'a str> for SelectField<'a> {
     /// Initializes the selection field for the menu.
     ///
     /// This associated function should not be used without context.
     /// The `SelectField` type must be instantiated inside a
-    pub fn new(msg: &'a str, select: Output) -> Self {
+    fn from(msg: &'a str) -> Self {
         Self {
             msg,
             chip: " - ",
-            select,
             custom_fmt: false,
             bind: None,
         }
     }
+}
 
+impl<'a> SelectField<'a> {
     /// Edits the chip of the selection field.
     ///
     /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
@@ -109,22 +132,6 @@ impl<'a, Output> SelectField<'a, Output> {
     pub fn bind(mut self, bind: Binding) -> Self {
         self.bind = Some(bind);
         self
-    }
-}
-
-impl<'a, Output> SelectField<'a, Output>
-where
-    Output: Clone,
-{
-    /// Selects this menu and returns the corresponding output.
-    ///
-    /// This function is used by the [`SelectMenu`] struct when building the menu.
-    /// It calls the inner function binding, then returns a clone of the output.
-    pub(crate) fn select(&self, writer: &mut Stdout) -> MenuResult<Output> {
-        if let Some(func) = self.bind {
-            func(writer)?;
-        }
-        Ok(self.select.clone())
     }
 }
 
@@ -183,7 +190,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 /// ```
 /// use ezmenulib::ValueField;
 /// let author: String = ValueField::from("Give the author of the license")
-///     .init_build()
+///     .build_init()
 ///     .unwrap();
 /// ```
 pub struct ValueField<'a> {
@@ -231,6 +238,12 @@ impl<'a> ValueField<'a> {
         self
     }
 
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+        if !self.custom_fmt {
+            self.fmt = fmt;
+        }
+    }
+
     /// Give the default value accepted by the field.
     ///
     /// If the value type is incorrect, the `ValueField::build` or `ValueField::init_build`
@@ -252,10 +265,10 @@ impl<'a> ValueField<'a> {
     /// ```
     /// use ezmenulib::{MenuResult, ValueField};
     /// let age: MenuResult<u8> = ValueField::from("How old are you")
-    ///     .init_build();
+    ///     .build_init();
     /// ```
     #[inline]
-    pub fn init_build<T>(&self) -> MenuResult<T>
+    pub fn build_init<T>(&self) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -277,8 +290,8 @@ impl<'a> ValueField<'a> {
     /// let stdin = stdin();
     /// let mut stdout = stdout();
     ///
-    /// let author: String = ValueField::from("author")
-    ///     .build(&stdin(), &mut stdout())
+    /// let author: String = ValueField::from("Author")
+    ///     .build(&stdin, &mut stdout)
     ///     .unwrap();
     /// ```
     pub fn build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>

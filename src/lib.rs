@@ -15,18 +15,16 @@
 //! ```rust
 //! use ezmenulib::{MenuBuilder, ValueField, ValueMenu};
 //!
-//! fn main() {
-//!     let mut my_menu = ValueMenu::from([
-//!         ValueField::from("Give your name"),
-//!         ValueField::from("Give a number"),
-//!     ])
-//!    .title("Hello there!");
+//! let mut my_menu = ValueMenu::from([
+//!     ValueField::from("Give your name"),
+//!     ValueField::from("Give a number"),
+//! ])
+//! .title("Hello there!");
 //!
-//!     let name: String = my_menu.next_output().unwrap();
-//!     let number: i32 = my_menu.next_output().unwrap();
+//! let name: String = my_menu.next_output().unwrap();
+//! let number: i32 = my_menu.next_output().unwrap();
 //!
-//!     println!("values provided: name={}, number={}", name, number);
-//! }
+//! println!("values provided: name={}, number={}", name, number);
 //! ```
 //!
 //! This sample code prints the standard menu like above:
@@ -53,23 +51,22 @@
 //! For a custom format on a field and a main formatting rule on a menu, you can build this with:
 //! ```rust
 //! use ezmenulib::{ValueField, ValueFieldFormatting};
-//! fn main() {
-//!     let mut license = ValueMenu::from([
-//!         ValueField::from("Authors"),
-//!         ValueField::from("Project name")
-//!             .fmt(ValueFieldFormatting {
-//!                 chip: "--> ",
-//!                 ..Default::default()
-//!             }),
-//!         ValueField::from("Date"),
-//!     ])
-//!     .fmt(ValueFieldFormatting {
-//!         chip: "==> ",
-//!         ..Default::default()
-//!     });
 //!
-//!     // ...
-//! }
+//! let mut license = ValueMenu::from([
+//!     ValueField::from("Authors"),
+//!     ValueField::from("Project name")
+//!         .fmt(ValueFieldFormatting {
+//!             chip: "--> ",
+//!             ..Default::default()
+//!         }),
+//!     ValueField::from("Date"),
+//! ])
+//! .fmt(ValueFieldFormatting {
+//!     chip: "==> ",
+//!     ..Default::default()
+//! });
+//!
+//! // ...
 //! ```
 //!
 //! The custom `==> ` chip will be applied on every field except those with custom formatting rules,
@@ -129,11 +126,9 @@
 //!     }
 //! }
 //!
-//! fn main() {
-//!     let license_type: Type = ValueField::from("Give the license type")
-//!         .init_build()
-//!         .unwrap();
-//! }
+//! let license_type: Type = ValueField::from("Give the license type")
+//!     .build_init()
+//!     .unwrap();
 //! ```
 //!
 //! ## Provided custom value types
@@ -152,11 +147,11 @@
 
 /// The module defining the provided custom value types to handle user input.
 pub mod customs;
-mod field;
-mod menu;
+pub mod field;
+pub mod menu;
 
 pub use customs::{MenuBool, MenuVec};
-pub use field::{SelectField, ValueField, ValueFieldFormatting};
+pub use field::{Field, SelectField, ValueField, ValueFieldFormatting};
 pub use menu::{MenuBuilder, SelectMenu, TitlePos, ValueMenu};
 
 use std::error::Error;

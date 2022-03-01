@@ -1,26 +1,41 @@
 #![allow(unused)]
 
 use ezmenulib::{
-    MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, TitlePos, ValueField,
-    ValueFieldFormatting, ValueMenu,
+    Field, MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, TitlePos,
+    ValueField, ValueFieldFormatting, ValueMenu,
 };
+use std::convert::Infallible;
 use std::io::Write;
+use std::str::FromStr;
 
-#[derive(Debug, Clone)]
-enum Test {
-    One,
-    Two,
-    Three,
+#[derive(Debug)]
+enum Type {
+    MIT,
+    GPL,
+    BSD,
+}
+
+impl FromStr for Type {
+    type Err = MenuError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "mit" => Ok(Self::MIT),
+            "gpl" => Ok(Self::GPL),
+            "bsd" => Ok(Self::BSD),
+            _ => Err(MenuError::from("bonsoir")),
+        }
+    }
 }
 
 fn values_test() {
     let mut menu = ValueMenu::from([
-        ValueField::from("Authors"),
-        ValueField::from("Project name").fmt(ValueFieldFormatting {
+        Field::Value(ValueField::from("Authors")),
+        Field::Value(ValueField::from("Project name").fmt(ValueFieldFormatting {
             chip: "--> ",
             ..Default::default()
-        }),
-        ValueField::from("Date").default("2022"),
+        })),
+        Field::Value(ValueField::from("Date").default("2022")),
     ])
     .fmt(ValueFieldFormatting {
         chip: "==> ",
@@ -31,7 +46,7 @@ fn values_test() {
     let _: u16 = menu.next_output().unwrap();
 
     let _: i32 = ValueField::from("Give the license type")
-        .init_build()
+        .build_init()
         .unwrap();
 }
 
@@ -41,11 +56,28 @@ fn deux(e: &mut std::io::Stdout) -> MenuResult<()> {
 }
 
 fn main() {
-    let amount: u8 = SelectMenu::from([])
-        .title("bonsoir")
-        .title_pos(TitlePos::Bottom)
-        .next_output()
-        .unwrap();
+    //let amount: u8 = SelectMenu::from([SelectField::from("4")])
+    //    .title("bonsoir")
+    //    .title_pos(TitlePos::Bottom)
+    //    .next_output()
+    //    .unwrap();
 
-    println!("{:?}", amount);
+    let mut test = ValueMenu::from([
+        Field::Value(ValueField::from("Author name")),
+        Field::Select(
+            SelectMenu::from([SelectField::from("MIT"), SelectField::from("GPL")])
+                .title("Choose a license type")
+                .title_pos(TitlePos::Bottom)
+                .default(4),
+        ),
+    ])
+    .fmt(ValueFieldFormatting {
+        chip: "--> ",
+        ..Default::default()
+    });
+
+    let name: String = test.next_output().unwrap();
+    let ty: Type = test.next_output().unwrap();
+
+    println!("{:?} {:?}", name, ty);
 }
