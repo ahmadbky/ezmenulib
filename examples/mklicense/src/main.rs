@@ -115,7 +115,6 @@ fn submenu_primitives_test() {
     let age: Age = amount.next_output().unwrap();
 }
 
-#[inline]
 fn send_msg(o: &mut Stdout, msg: &str) -> MenuResult<()> {
     o.write_all(msg.as_bytes()).map_err(MenuError::from)
 }

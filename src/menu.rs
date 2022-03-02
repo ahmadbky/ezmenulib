@@ -117,8 +117,8 @@ pub enum TitlePos {
     /// Position at the top of the menu:
     /// ```md
     /// <title>
-    /// 1 - field1
-    /// 2 - field2
+    /// 1 - field0
+    /// 2 - field1
     /// ...
     /// >>
     /// ```
