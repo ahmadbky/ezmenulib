@@ -147,12 +147,12 @@
 
 /// The module defining the provided custom value types to handle user input.
 pub mod customs;
-pub mod field;
-pub mod menu;
+mod field;
+mod menu;
 
-pub use customs::{MenuBool, MenuVec};
-pub use field::{Field, SelectField, ValueField, ValueFieldFormatting};
-pub use menu::{MenuBuilder, SelectMenu, TitlePos, ValueMenu};
+pub use customs::*;
+pub use field::*;
+pub use menu::*;
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};

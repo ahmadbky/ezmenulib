@@ -4,12 +4,25 @@ use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
+/// A field contained in a [`ValueMenu`] menu.
+///
+/// A field of a menu returning values can be an asked value ([`ValueField`]),
+/// or a menu of selectable values ([`SelectMenu`]).
 pub enum Field<'a> {
+    /// A field asking a value to the user.
     Value(ValueField<'a>),
+    /// A field proposing selectable values to the user.
     Select(SelectMenu<'a>),
 }
 
 impl<'a> Field<'a> {
+    /// Builds the field according to its type.
+    ///
+    /// That is, if it is a value-field, it will ask the user a value then return it,
+    /// while if it is a selectable menu, it will display the menu to the user then return the value
+    /// selected.
+    ///
+    /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
     pub fn build<Output>(&mut self, stdin: &Stdin, stdout: &mut Stdout) -> MenuResult<Output>
     where
         Output: FromStr,
@@ -21,7 +34,12 @@ impl<'a> Field<'a> {
         }
     }
 
-    pub fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+    /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
+    ///
+    /// If it is aimed on a selectable menu, the formatting rules will be applied on its title,
+    /// to integrate it in the value-fields of the parent menu.
+    /// The title of the selectable menu will however save its prefix.
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
         match self {
             Self::Value(vf) => vf.inherit_fmt(fmt),
             Self::Select(sm) => sm.inherit_fmt(fmt),
@@ -57,8 +75,8 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 /// ```
 pub struct SelectField<'a> {
     pub(crate) msg: &'a str,
-    pub(crate) chip: &'a str,
-    pub(crate) custom_fmt: bool,
+    chip: &'a str,
+    custom_chip: bool,
     bind: Option<Binding>,
 }
 
@@ -78,7 +96,7 @@ impl<'a> From<&'a str> for SelectField<'a> {
         Self {
             msg,
             chip: " - ",
-            custom_fmt: false,
+            custom_chip: false,
             bind: None,
         }
     }
@@ -94,8 +112,14 @@ impl<'a> SelectField<'a> {
     /// ```
     pub fn chip(mut self, chip: &'a str) -> Self {
         self.chip = chip;
-        self.custom_fmt = true;
+        self.custom_chip = true;
         self
+    }
+
+    pub(crate) fn set_chip(&mut self, chip: &'a str) {
+        if !self.custom_chip {
+            self.chip = chip;
+        }
     }
 
     /// Defines the function to execute right after the user selected this field.
@@ -158,6 +182,36 @@ pub struct ValueFieldFormatting<'a> {
     pub default: bool,
 }
 
+/// Builds the constructors of the [`ValueFieldFormatting`] struct
+/// according to its fields.
+macro_rules! impl_constructors {
+    ($(
+        #[doc = $doc:expr]
+        $i:ident: $t:ty
+    ),*) => {
+        impl<'a> ValueFieldFormatting<'a> {$(
+            #[doc = $doc]
+            pub fn $i($i: $t) -> Self {
+                Self {
+                    $i,
+                    ..Default::default()
+                }
+            }
+        )*}
+    }
+}
+
+impl_constructors!(
+    /// Sets the chip of the formatting (`--> ` by default).
+    chip: &'a str,
+    /// Sets the prefix of the formatting (`>> ` by default).
+    prefix: &'a str,
+    /// Defines if there is a new line between the message and the prefix with the user input (`true` by default).
+    new_line: bool,
+    /// Defines if it displays the default value or not (`true` by default).
+    default: bool
+);
+
 /// Default formatting for a field is `* ` as a chip and `: ` as prefix.
 ///
 /// This being, the field is printed like above (text between `[` and `]` is optional
@@ -168,9 +222,9 @@ pub struct ValueFieldFormatting<'a> {
 impl<'a> Default for ValueFieldFormatting<'a> {
     fn default() -> Self {
         Self {
-            chip: "* ",
-            prefix: ": ",
-            new_line: false,
+            chip: "--> ",
+            prefix: ">> ",
+            new_line: true,
             default: true,
         }
     }
@@ -196,8 +250,8 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 pub struct ValueField<'a> {
     msg: &'a str,
     // pointer to the parent fmt or its own fmt
-    pub(crate) fmt: Rc<ValueFieldFormatting<'a>>,
-    pub(crate) custom_fmt: bool,
+    fmt: Rc<ValueFieldFormatting<'a>>,
+    custom_fmt: bool,
     default: Option<&'a str>,
 }
 
