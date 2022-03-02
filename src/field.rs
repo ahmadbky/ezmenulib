@@ -4,7 +4,7 @@ use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
-/// A field contained in a [`ValueMenu`] menu.
+/// A field contained in a [`ValueMenu`](crate::ValueMenu) menu.
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
 /// or a menu of selectable values ([`SelectMenu`]).

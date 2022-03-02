@@ -1,3 +1,29 @@
+//! The module containing the default custom types implementing [`FromStr`](std::str::FromStr) trait.
+//!
+//! When retrieving values from the user inputs, we need to accept more human values to parse.
+//! For instance, the default implementation of the `FromStr` trait for the `bool` primitive type
+//! requires the string slice to be either `true` or `false`. Therefore, in this module, there is
+//! the [`MenuBool`] type overriding this implementation, to accept more human values,
+//! like `yes` or `no`.
+//!
+//! An other example is about multiple values providing. The [`Vec<T>`] struct does not implement
+//! the `FromStr` trait, and this is why there is the [`MenuVec<T>`] struct for this.
+//!
+//! ## Example
+//!
+//! ```
+//! use ezmenulib::{Field, MenuBool, MenuBuilder, MenuVec, ValueField, ValueMenu};
+//!
+//! let mut project = ValueMenu::from([
+//!     Field::Value(ValueField::from("Authors")),
+//!     Field::Value(ValueField::from("Was it hard?")),
+//! ])
+//! .title("Describe a project.");
+//!
+//! let authors: MenuVec<String> = project.next_output().unwrap();
+//! let hard: MenuBool = project.next_output().unwrap();
+//! ```
+
 use crate::MenuError;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
