@@ -143,9 +143,6 @@ impl Default for TitlePos {
 
 /// Struct modeling a selective menu.
 ///
-/// The generic type `Output` means the output type of the selective menu, while `N` means the
-/// amount of selective fields it contains.
-///
 /// ## Example
 ///
 /// ```
