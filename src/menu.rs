@@ -1,5 +1,96 @@
-use crate::field::{Field, SelectField, ValueFieldFormatting};
-use crate::{MenuError, MenuResult};
+//! Module defining the different types of menus.
+//!
+//! ## The types
+//!
+//! There are two types of menus:
+//! - the [value-menus](ValueMenu): they corresponds to the menu where the user has to enter
+//! the value himself, for example for a name providing.
+//! - the [selectable menus](SelectMenu): they corresponds to the menu where the user has to select
+//! a value among proposed values by a list.
+//!
+//! ## Fields
+//!
+//! The `ValueMenu` can contain [`ValueField`s](crate::field::ValueField)
+//! and [`SelectMenu`s](SelectMenu).
+//! This behavior allows to use the selectable menus as sub-menus to retrieve
+//! values.
+//!
+//! The `SelectMenu` contains [`SelectField`s](crate::field::SelectField).
+//!
+//! ## Formatting
+//!
+//! The formatting rules are defined by the [`ValueFieldFormatting`](crate::field::ValueFieldFormatting) struct.
+//! It manages how the output of a message before the user input should be displayed.
+//!
+//! For a value-menu, you can apply global formatting rules with the [`ValueMenu::fmt`] method,
+//! which will be applied on all the fields it contains. You can also apply rules on
+//! specific fields.
+//!
+//! When a `SelectMenu` inherits the rules of its parent `ValueMenu`, they are applied on its title.
+//!
+//! ## Outputs
+//!
+//! The values entered by the user are provided by the [`MenuBuilder`] trait.
+//! This trait is implemented on both menus type and uses the [`MenuBuilder::next_output`] method
+//! to return the next output provided by the user.
+//!
+//! When calling this method, you need to provide your own type to convert the input from.
+//!
+//! The next output of a value-menu corresponds to its next fields, so if it is, for example, a
+//! selectable menu field, it will display the list of output values, then return the value the user
+//! selected. Attention: if all the fields have been retrieved, the value-menu will be empty, and the
+//! next call of this method will return an error (See [`MenuError::NoMoreField`](crate::MenuError::NoMoreField)).
+//!
+//! Therefore, a selectable menu can return many times the value selected by the user at different
+//! points of the code.
+//!
+//! ## Example
+//!
+//! ```
+//! use std::str::FromStr;
+//! use ezmenulib::customs;
+//! use ezmenulib::prelude::*;
+//!
+//! enum Type {
+//!     MIT,
+//!     GPL,
+//!     BSD,
+//! }
+//!
+//! impl FromStr for Type {
+//!     type Err = MenuError;
+//!
+//!     fn from_str(s: &str) -> MenuResult<Self> {
+//!         match s.to_lowercase().as_str() {
+//!             "mit" => Ok(Self::MIT),
+//!             "gpl" => Ok(Self::GPL),
+//!             "bsd" => Ok(Self::BSD),
+//!             s => Err(MenuError::from(format!("unknown license type: {}", s))),
+//!         }
+//!     }
+//! }
+//!
+//! let mut license = ValueMenu::from([
+//!     Field::Value(ValueField::from("Authors")),
+//!     Field::Select(SelectMenu::from([
+//!         SelectField::from("MIT"),
+//!         SelectField::from("GPL"),
+//!         SelectField::from("BSD"),
+//!     ])
+//!     .default(0)
+//!     .title(SelectTitle::from("Select the license type"))),
+//! ]);
+//!
+//! let authors: customs::MenuVec<String> = license.next_output().unwrap();
+//! let ty: Type = license.next_output().unwrap();
+//! ```
+//!
+//! ## Stdin and Stdout
+//!
+//! After using a menu, you can drop it and recover the [`Stdin`](std::io::Stdin)
+//! and [`Stdout`](std::io::Stdout) instances it used, thank to the [`MenuBuilder::get_io`] method.
+
+use crate::prelude::*;
 use std::array::IntoIter;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
@@ -12,7 +103,7 @@ use std::str::FromStr;
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::{MenuBuilder, MenuResult, SelectField, SelectMenu, SelectTitle, TitlePos};
+/// use ezmenulib::prelude::*;
 ///
 /// let amount: MenuResult<u8> = SelectMenu::from([
 ///     SelectField::from("first"),
@@ -58,7 +149,7 @@ impl Default for TitlePos {
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::{SelectField, SelectMenu, MenuBuilder, SelectTitle};
+/// use ezmenulib::prelude::*;
 ///
 /// // Debug and PartialEq trait impl are used for the `assert_eq` macro.
 /// #[derive(Clone, Debug, PartialEq)]
@@ -114,7 +205,7 @@ pub struct SelectMenu<'a> {
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::{MenuBool, MenuBuilder, SelectField, SelectMenu, SelectTitle, TitlePos, ValueFieldFormatting};
+/// use ezmenulib::{prelude::*, customs::MenuBool};
 ///     
 /// let is_adult: MenuBool = SelectMenu::from([
 ///     SelectField::from("yes"),
@@ -164,7 +255,7 @@ impl<'a> From<&'a str> for SelectTitle<'a> {
 impl<'a> SelectTitle<'a> {
     /// Sets the formatting of the selectable menu title.
     ///
-    /// The formatting type is the same as the [`ValueField`](crate::ValueField) is using.
+    /// The formatting type is the same as the [`ValueField`](crate::field::ValueField) is using.
     pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
         self.fmt = fmt;
         self.custom_fmt = true;
@@ -179,7 +270,7 @@ impl<'a> SelectTitle<'a> {
         self
     }
 
-    /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
+    /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::menu::ValueMenu)).
     ///
     /// It saves the prefix, because the default prefix is `>> ` and is not compatible with the
     /// title displaying.
@@ -335,7 +426,7 @@ where
     ///
     /// ```
     /// use std::str::FromStr;
-    /// use ezmenulib::{SelectMenu, MenuBuilder, SelectField, MenuError};
+    /// use ezmenulib::prelude::*;
     ///
     /// enum Amount {
     ///     Exact(u8),
@@ -385,17 +476,20 @@ where
         ///
         /// If the default value index or the aimed default field type is incorrect,
         /// it will return an error (See [`MenuError::IncorrectType`]).
-        fn default_parse<Output>(default: usize, fields: &[SelectField<'_>]) -> MenuResult<Output>
+        fn default_parse<Output>(
+            default: usize,
+            fields: &[SelectField<'_>],
+            writer: &mut Stdout,
+        ) -> MenuResult<Output>
         where
             Output: FromStr,
             Output::Err: 'static + Debug,
         {
-            fields
+            let field = fields
                 .get(default)
-                .ok_or_else(|| err_idx(default, fields.len()))?
-                .msg
-                .parse()
-                .map_err(err_ty)
+                .ok_or_else(|| err_idx(default, fields.len()))?;
+            field.call_bind(writer)?;
+            field.msg.parse().map_err(err_ty)
         }
 
         // displays the menu once
@@ -412,17 +506,22 @@ where
             self.reader.read_line(&mut out)?;
             let out = out.trim();
 
-            if self
+            if let Some(field) = self
                 .fields
                 .iter()
-                .any(|field| field.msg.to_lowercase() == out.to_lowercase())
+                .find(|field| field.msg.to_lowercase() == out.to_lowercase())
             {
                 // value entered as literal
                 match out.parse::<Output>() {
-                    Ok(out) => break Ok(out),
+                    Ok(out) => {
+                        break Ok({
+                            field.call_bind(&mut self.writer)?;
+                            out
+                        })
+                    }
                     Err(_) => {
                         if let Some(default) = self.default {
-                            break default_parse(default, &self.fields);
+                            break default_parse(default, &self.fields, &mut self.writer);
                         }
                     }
                 }
@@ -431,12 +530,15 @@ where
                 match out.parse::<usize>() {
                     Ok(idx) if idx >= 1 => {
                         if let Some(field) = self.fields.get(idx - 1) {
-                            break Ok(field.msg.parse().map_err(err_ty)?);
+                            break {
+                                field.call_bind(&mut self.writer)?;
+                                field.msg.parse().map_err(err_ty)
+                            };
                         }
                     }
                     Err(_) => {
                         if let Some(default) = self.default {
-                            break default_parse(default, &self.fields);
+                            break default_parse(default, &self.fields, &mut self.writer);
                         }
                     }
                     _ => continue,
@@ -452,7 +554,7 @@ where
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
 ///
-/// The `N` const parameter represents the amount of [`ValueField`](crate::ValueField)
+/// The `N` const parameter represents the amount of [`ValueField`](crate::field::ValueField)
 /// It has a global formatting applied to the fields it contains by inheritance.
 pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,

@@ -1,10 +1,29 @@
-use crate::{MenuBuilder, MenuError, MenuResult, SelectMenu};
+//! Module defining different types of fields.
+//!
+//! The selection fields [`SelectField`] corresponds to a [`SelectMenu`](crate::menu::SelectMenu),
+//! while the value fields [`ValueField`] corresponds to a [`ValueMenu`](crate::menu::ValueMenu).
+//!
+//! A `ValueMenu` can however contain both a `ValueField` and a `SelectMenu`,
+//! to be used as a sub-menu (check out the [`Field`] enum).
+//!
+//! ## Formatting
+//!
+//! You can edit the [formatting rules](ValueFieldFormatting) of a `ValueField` or set the global
+//! formatting rules for the `ValueMenu`.
+//!
+//! If a `SelectMenu` is used as a sub-menu to a `ValueMenu`, the global formatting rules of the `ValueMenu`
+//! will be applied on the title of the `SelectMenu` to integrate it in the structure.
+//!
+//! You can still edit the formatting rules of its title (see [`SelectTitle`](crate::menu::SelectTitle))
+//! independently from the global formatting rules.
+
+use crate::prelude::*;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
-/// A field contained in a [`ValueMenu`](crate::ValueMenu) menu.
+/// A field contained in a [`ValueMenu`](crate::menu::ValueMenu) menu.
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
 /// or a menu of selectable values ([`SelectMenu`]).
@@ -55,7 +74,7 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 ///
 /// The generic type `Output` means the output type of the selective menu.
 /// Unlike [`ValueField`], this struct should not be used alone, without a context.
-/// You must instantiate it in an array in the constructor of the [`SelectMenu`](crate::SelectMenu) struct.
+/// You must instantiate it in an array in the constructor of the [`SelectMenu`](crate::menu::SelectMenu) struct.
 ///
 /// Just like [`ValueFieldFormatting`], it contains an editable `chip` string slice, placed
 /// after the selection index (`X`):
@@ -66,7 +85,7 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::{SelectField, SelectMenu};
+/// use ezmenulib::prelude::*;
 ///
 /// let get_amount = SelectMenu::from([
 ///     SelectField::new("one", 1),
@@ -122,6 +141,13 @@ impl<'a> SelectField<'a> {
         }
     }
 
+    pub(crate) fn call_bind(&self, out: &mut Stdout) -> MenuResult<()> {
+        if let Some(b) = self.bind {
+            b(out)?;
+        }
+        Ok(())
+    }
+
     /// Defines the function to execute right after the user selected this field.
     ///
     /// It is optional, and is useful if you have many modes in your program with
@@ -136,7 +162,7 @@ impl<'a> SelectField<'a> {
     /// ## Example
     ///
     /// ```
-    /// use ezmenulib::{MenuResult, MenuError, SelectField, SelectMenu};
+    /// use ezmenulib::prelude::*;
     /// use std::io::{Stdout, Write};
     ///
     /// fn bsd(e: &mut Stdout) -> MenuResult<()> {
@@ -317,7 +343,7 @@ impl<'a> ValueField<'a> {
     /// ## Example
     ///
     /// ```
-    /// use ezmenulib::{MenuResult, ValueField};
+    /// use ezmenulib::prelude::*;
     /// let age: MenuResult<u8> = ValueField::from("How old are you")
     ///     .build_init();
     /// ```
@@ -341,6 +367,7 @@ impl<'a> ValueField<'a> {
     /// Supposing you have declared your own `Stdin` and `Stdout` in your program, you can do so:
     /// ```
     /// use std::io::{stdin, stdout};
+    ///
     /// let stdin = stdin();
     /// let mut stdout = stdout();
     ///
@@ -359,7 +386,7 @@ impl<'a> ValueField<'a> {
         fn default_parse<T>(default: Option<&str>) -> MenuResult<T>
         where
             T: FromStr,
-            <T as FromStr>::Err: 'static + Debug,
+            T::Err: 'static + Debug,
         {
             let default = default.unwrap();
             default
