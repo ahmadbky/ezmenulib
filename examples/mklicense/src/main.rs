@@ -1,9 +1,7 @@
 #![allow(unused)]
 
-use ezmenulib::{
-    Field, MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, SelectTitle,
-    TitlePos, ValueField, ValueFieldFormatting, ValueMenu,
-};
+use ezmenulib::customs::MenuVec;
+use ezmenulib::prelude::*;
 use std::convert::Infallible;
 use std::io::{Stdout, Write};
 use std::str::FromStr;
@@ -117,11 +115,49 @@ fn submenu_primitives_test() {
     let age: Age = amount.next_output().unwrap();
 }
 
-fn main() {
-    let amount = SelectMenu::from([
-        SelectField::from("5"),
-        SelectField::from("6"),
-        SelectField::from("54"),
+#[inline]
+fn send_msg(o: &mut Stdout, msg: &str) -> MenuResult<()> {
+    o.write_all(msg.as_bytes()).map_err(MenuError::from)
+}
+
+fn play(o: &mut Stdout) -> MenuResult<()> {
+    send_msg(o, "playing")
+}
+
+fn settings(o: &mut Stdout) -> MenuResult<()> {
+    send_msg(o, "settings")
+}
+
+fn exit(o: &mut Stdout) -> MenuResult<()> {
+    send_msg(o, "exiting")
+}
+
+enum State {
+    Play,
+    Settings,
+    Exit,
+}
+
+impl FromStr for State {
+    type Err = MenuError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "play" => Ok(Self::Play),
+            "settings" => Ok(Self::Settings),
+            "exit" => Ok(Self::Exit),
+            s => Err(MenuError::from(format!("wtf is this mode: {}", s))),
+        }
+    }
+}
+
+fn main() -> MenuResult<()> {
+    let _: State = SelectMenu::from([
+        SelectField::from("Play").bind(play),
+        SelectField::from("Settings").bind(settings),
+        SelectField::from("Exit").bind(exit),
     ])
-    .title(SelectTitle::from("quel age avez vous").pos(TitlePos::Bottom));
+    .title(SelectTitle::from("what do u want to do").pos(TitlePos::Bottom))
+    .next_output()?;
+    Ok(())
 }
