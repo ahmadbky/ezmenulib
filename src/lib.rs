@@ -13,7 +13,7 @@
 //! Here is an example of how to use the library:
 //!
 //! ```rust
-//! use ezmenulib::{MenuBuilder, ValueField, ValueMenu};
+//! use ezmenulib::prelude::*;
 //!
 //! let mut my_menu = ValueMenu::from([
 //!     ValueField::from("Give your name"),
@@ -44,13 +44,13 @@
 //! * the prefix: `: ` by default.
 //! * insert a new line before prefix and user input: `false` by default.
 //! * display default values or not: `true` by default.
-//! These parameters are defined in the [`ValueFieldFormatting`] struct.
+//! These parameters are defined in the [`ValueFieldFormatting`](crate::field::ValueFieldFormatting) struct.
 //!
 //! ### Example
 //!
 //! For a custom format on a field and a main formatting rule on a menu, you can build this with:
 //! ```rust
-//! use ezmenulib::{ValueField, ValueFieldFormatting};
+//! use ezmenulib::prelude::*;
 //!
 //! let mut license = ValueMenu::from([
 //!     ValueField::from("Authors"),
@@ -137,22 +137,26 @@
 //! Check out the [`customs`]
 //! module to see all available custom value types.
 //!
-//! For instance, the [`MenuBool`]
+//! For instance, the [`MenuBool`](crate::customs::MenuBool)
 //! is used to override the boolean parsing method, allowing "yes" or "no" as inputs.
 //!
-//! The [`MenuVec<T>`] type allows the user
+//! The [`MenuVec<T>`](crate::customs::MenuVec) type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
 #![warn(missing_docs)]
 
-/// The module defining the provided custom value types to handle user input.
 pub mod customs;
-mod field;
-mod menu;
+pub mod field;
+pub mod menu;
 
-pub use customs::*;
-pub use field::*;
-pub use menu::*;
+/// Module used to import common structs, to build menus with their fields.
+pub mod prelude {
+    pub use crate::field::*;
+    pub use crate::menu::*;
+
+    pub use crate::MenuError;
+    pub use crate::MenuResult;
+}
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};

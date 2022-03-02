@@ -12,7 +12,7 @@
 //! ## Example
 //!
 //! ```
-//! use ezmenulib::{Field, MenuBool, MenuBuilder, MenuVec, ValueField, ValueMenu};
+//! use ezmenulib::{prelude::*, customs::*};
 //!
 //! let mut project = ValueMenu::from([
 //!     Field::Value(ValueField::from("Authors")),
@@ -40,7 +40,8 @@ use std::str::FromStr;
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::MenuVec;
+/// use ezmenulib::customs::MenuVec;
+///
 /// let a = "23 -54 456";
 /// let a: MenuVec<i32> = a.parse().unwrap();
 /// assert_eq!(*a, vec![23, -54, 456]);
