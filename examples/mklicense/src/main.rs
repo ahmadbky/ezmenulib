@@ -1,11 +1,11 @@
 #![allow(unused)]
 
 use ezmenulib::{
-    Field, MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, TitlePos,
-    ValueField, ValueFieldFormatting, ValueMenu,
+    Field, MenuBuilder, MenuError, MenuResult, MenuVec, SelectField, SelectMenu, SelectTitle,
+    TitlePos, ValueField, ValueFieldFormatting, ValueMenu,
 };
 use std::convert::Infallible;
-use std::io::Write;
+use std::io::{Stdout, Write};
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -55,7 +55,7 @@ fn deux(e: &mut std::io::Stdout) -> MenuResult<()> {
     e.write_all(b"bonsoir\n").map_err(MenuError::from)
 }
 
-fn main() {
+fn submenu_test() {
     //let amount: u8 = SelectMenu::from([SelectField::from("4")])
     //    .title("bonsoir")
     //    .title_pos(TitlePos::Bottom)
@@ -66,9 +66,8 @@ fn main() {
         Field::Value(ValueField::from("Author name")),
         Field::Select(
             SelectMenu::from([SelectField::from("MIT"), SelectField::from("GPL")])
-                .title("Choose a license type")
-                .title_pos(TitlePos::Bottom)
-                .default(4),
+                .title(SelectTitle::from("Choose a license type").pos(TitlePos::Bottom))
+                .default(0),
         ),
     ])
     .fmt(ValueFieldFormatting {
@@ -80,4 +79,49 @@ fn main() {
     let ty: Type = test.next_output().unwrap();
 
     println!("{:?} {:?}", name, ty);
+}
+
+enum Age {
+    One,
+    Two,
+    Three,
+    More,
+}
+
+impl FromStr for Age {
+    type Err = MenuError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Self::One),
+            "2" => Ok(Self::Two),
+            "3" => Ok(Self::Three),
+            "More" => Ok(Self::More),
+            _ => Err(MenuError::from("yo i dont know whats that age")),
+        }
+    }
+}
+
+fn submenu_primitives_test() {
+    let mut amount = ValueMenu::from([
+        Field::Value(ValueField::from("whats your name?")),
+        Field::Select(SelectMenu::from([
+            SelectField::from("1"),
+            SelectField::from("2"),
+            SelectField::from("3"),
+            SelectField::from("More"),
+        ])),
+    ]);
+
+    let name: String = amount.next_output().unwrap();
+    let age: Age = amount.next_output().unwrap();
+}
+
+fn main() {
+    let amount = SelectMenu::from([
+        SelectField::from("5"),
+        SelectField::from("6"),
+        SelectField::from("54"),
+    ])
+    .title(SelectTitle::from("quel age avez vous").pos(TitlePos::Bottom));
 }
