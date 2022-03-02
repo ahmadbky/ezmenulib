@@ -7,6 +7,21 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 /// The position of the title for an enum menu.
+/// By default, the title position is at the top.
+///
+/// ## Example
+///
+/// ```
+/// use ezmenulib::{MenuBuilder, MenuResult, SelectField, SelectMenu, SelectTitle, TitlePos};
+///
+/// let amount: MenuResult<u8> = SelectMenu::from([
+///     SelectField::from("first"),
+///     SelectField::from("second"),
+///     SelectField::from("third"),
+/// ])
+/// .title(SelectTitle::from("set the podium").pos(TitlePos::Bottom))
+/// .next_output();
+/// ```
 pub enum TitlePos {
     /// Position at the top of the menu:
     /// ```md
@@ -19,8 +34,8 @@ pub enum TitlePos {
     Top,
     /// Position at the bottom of the menu:
     /// ```md
-    /// 1 - field1
-    /// 2 - field2
+    /// 1 - field0
+    /// 2 - field1
     /// ...
     /// <title>
     /// >>
@@ -43,7 +58,7 @@ impl Default for TitlePos {
 /// ## Example
 ///
 /// ```
-/// use ezmenulib::{SelectField, SelectMenu, MenuBuilder};
+/// use ezmenulib::{SelectField, SelectMenu, MenuBuilder, SelectTitle};
 ///
 /// // Debug and PartialEq trait impl are used for the `assert_eq` macro.
 /// #[derive(Clone, Debug, PartialEq)]
@@ -58,7 +73,7 @@ impl Default for TitlePos {
 ///     SelectField::new("GPL", Type::GPL),
 ///     SelectField::new("BSD", Type::BSD),
 /// ])
-/// .title("License type")
+/// .title(SelectTitle::from("Choose a license type"))
 /// .default(0)
 /// .next_output()
 /// .unwrap();
@@ -83,13 +98,7 @@ impl Default for TitlePos {
 ///
 /// Default chip is `" - "`, and default prefix is `">> "`.
 pub struct SelectMenu<'a> {
-    // used for title displaying
-    // if used as submenu
-    fmt: Rc<ValueFieldFormatting<'a>>,
-    custom_fmt: bool,
-
-    title: &'a str,
-    pos: TitlePos,
+    title: SelectTitle<'a>,
     fields: Vec<SelectField<'a>>,
     reader: Stdin,
     writer: Stdout,
@@ -97,17 +106,120 @@ pub struct SelectMenu<'a> {
     prefix: &'a str,
 }
 
+/// Represents the title of a selectable menu.
+///
+/// It has its own type because it manages its position, its formatting,
+/// and the formatting of the fields inside the selectable menu.
+///
+/// ## Example
+///
+/// ```
+/// use ezmenulib::{MenuBool, MenuBuilder, SelectField, SelectMenu, SelectTitle, TitlePos, ValueFieldFormatting};
+///     
+/// let is_adult: MenuBool = SelectMenu::from([
+///     SelectField::from("yes"),
+///     SelectField::from("no"),
+/// ])
+/// .title(SelectTitle::from("Are you an adult?")
+///     .fmt(ValueFieldFormatting::chip("==> "))
+///     .pos(TitlePos::Top))
+/// .default(1)
+/// .next_output()
+/// .unwrap();
+/// ```
+pub struct SelectTitle<'a> {
+    inner: &'a str,
+    fmt: ValueFieldFormatting<'a>,
+    custom_fmt: bool,
+    pub(crate) pos: TitlePos,
+}
+
+impl Default for SelectTitle<'_> {
+    fn default() -> Self {
+        Self {
+            inner: "",
+            fmt: ValueFieldFormatting {
+                chip: "",
+                prefix: "",
+                new_line: true,
+                ..Default::default()
+            },
+            custom_fmt: false,
+            pos: Default::default(),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for SelectTitle<'a> {
+    fn from(inner: &'a str) -> Self {
+        Self {
+            inner,
+            fmt: ValueFieldFormatting::prefix(":"),
+            custom_fmt: false,
+            pos: Default::default(),
+        }
+    }
+}
+
+impl<'a> SelectTitle<'a> {
+    /// Sets the formatting of the selectable menu title.
+    ///
+    /// The formatting type is the same as the [`ValueField`](crate::ValueField) is using.
+    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
+        self.fmt = fmt;
+        self.custom_fmt = true;
+        self
+    }
+
+    /// Sets the position of the title.
+    ///
+    /// By default, the title position is at the top (see [`TitlePos`]).
+    pub fn pos(mut self, pos: TitlePos) -> Self {
+        self.pos = pos;
+        self
+    }
+
+    /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
+    ///
+    /// It saves the prefix, because the default prefix is `>> ` and is not compatible with the
+    /// title displaying.
+    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+        self.fmt = ValueFieldFormatting {
+            chip: fmt.chip,
+            new_line: fmt.new_line,
+            default: fmt.default,
+            // saving prefix
+            prefix: self.fmt.prefix,
+        };
+        self.custom_fmt = false;
+    }
+}
+
+impl Display for SelectTitle<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.inner.is_empty() {
+            return Ok(());
+        }
+
+        let disp = format!(
+            "{chip}{title}{prefix}",
+            chip = self.fmt.chip,
+            title = self.inner,
+            prefix = self.fmt.prefix,
+        );
+
+        if self.fmt.new_line {
+            writeln!(f, "{}", disp)
+        } else {
+            write!(f, "{}", disp)
+        }
+    }
+}
+
 impl<'a> From<Vec<SelectField<'a>>> for SelectMenu<'a> {
     fn from(fields: Vec<SelectField<'a>>) -> Self {
         Self {
-            fmt: Rc::new(ValueFieldFormatting {
-                chip: "",
-                prefix: ":",
-                ..Default::default()
-            }),
-            custom_fmt: false,
-            title: "",
-            pos: Default::default(),
+            title: Default::default(),
             fields,
             reader: stdin(),
             writer: stdout(),
@@ -129,31 +241,15 @@ impl<'a> SelectMenu<'a> {
     /// The title is by default displayed at the top of the selective fields,
     /// but you can edit this behavior by setting the title position to `TitlePos::Bottom`, with
     /// `SelectMenu::title_pos` method.
-    pub fn title(mut self, title: &'a str) -> Self {
+    #[inline]
+    pub fn title(mut self, title: SelectTitle<'a>) -> Self {
         self.title = title;
         self
     }
 
-    /// Gives the formatting to apply to the title.
-    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
-        self.fmt = Rc::new(fmt);
-        self.custom_fmt = true;
-        self
-    }
-
+    #[inline]
     pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        if !self.custom_fmt {
-            self.fmt = fmt;
-        }
-    }
-
-    /// Sets the title position of the selective menu.
-    ///
-    /// The title position is either at the top of the selective fields (by default),
-    /// or at the bottom.
-    pub fn title_pos(mut self, pos: TitlePos) -> Self {
-        self.pos = pos;
-        self
+        self.title.inherit_fmt(fmt);
     }
 
     /// Sets the default selective field.
@@ -180,9 +276,7 @@ impl<'a> SelectMenu<'a> {
     /// It acts as a list style attribute.
     pub fn chip(mut self, chip: &'a str) -> Self {
         for field in self.fields.as_mut_slice() {
-            if !field.custom_fmt {
-                field.chip = chip;
-            }
+            field.set_chip(chip);
         }
         self
     }
@@ -191,8 +285,8 @@ impl<'a> SelectMenu<'a> {
 impl Display for SelectMenu<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // displays title at top
-        if let TitlePos::Top = self.pos {
-            disp_title(f, &self.fmt, self.title)?;
+        if let TitlePos::Top = self.title.pos {
+            write!(f, "{}", self.title)?;
         }
 
         // displays fields
@@ -211,8 +305,8 @@ impl Display for SelectMenu<'_> {
         }
 
         // displays title at bottom
-        if let TitlePos::Bottom = self.pos {
-            disp_title(f, &self.fmt, self.title)?;
+        if let TitlePos::Bottom = self.title.pos {
+            write!(f, "{}", self.title)?;
         }
         Ok(())
     }
@@ -240,15 +334,37 @@ where
     /// ## Example
     ///
     /// ```
-    /// use ezmenulib::{SelectMenu, MenuBuilder};
+    /// use std::str::FromStr;
+    /// use ezmenulib::{SelectMenu, MenuBuilder, SelectField, MenuError};
     ///
-    /// let amount = SelectMenu::from([
-    ///     
+    /// enum Amount {
+    ///     Exact(u8),
+    ///     More,
+    /// }
+    ///
+    /// impl FromStr for Amount {
+    ///     type Err = MenuError;
+    ///
+    ///     fn from_str(s: &str) -> Result<Self, Self::Err> {
+    ///         match s {
+    ///             "one" => Ok(Self::Exact(1)),
+    ///             "two" => Ok(Self::Exact(2)),
+    ///             "three" => Ok(Self::Exact(3)),
+    ///             "more" => Ok(Self::More),
+    ///             _ => Err(MenuError::from("no")),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let amount: Amount = SelectMenu::from([
+    ///     SelectField::from("one"),
+    ///     SelectField::from("two"),
+    ///     SelectField::from("three"),
+    ///     SelectField::from("more"),
     /// ])
     /// .next_output()
     /// .unwrap();
     /// ```
-    // FIXME: i find it really awful
     fn next_output(&mut self) -> MenuResult<Output> {
         /// Returns an error meaning that the default selection index is incorrect.
         #[inline]
@@ -328,29 +444,15 @@ where
             }
         }
     }
-}
 
-#[inline(never)]
-fn disp_title(
-    f: &mut Formatter<'_>,
-    fmt: &Rc<ValueFieldFormatting<'_>>,
-    title: &str,
-) -> fmt::Result {
-    if !title.is_empty() {
-        writeln!(
-            f,
-            "{chp}{ttl}{prfx}",
-            chp = fmt.chip,
-            ttl = title,
-            prfx = fmt.prefix
-        )?;
+    fn get_io(self) -> (Stdin, Stdout) {
+        (self.reader, self.writer)
     }
-    Ok(())
 }
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
 ///
-/// The `N` const parameter represents the amount of [`ValueField`]
+/// The `N` const parameter represents the amount of [`ValueField`](crate::ValueField)
 /// It has a global formatting applied to the fields it contains by inheritance.
 pub struct ValueMenu<'a, const N: usize> {
     title: &'a str,
@@ -407,6 +509,9 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
 pub trait MenuBuilder<Output>: AsRef<Stdout> + AsMut<Stdout> {
     /// Returns the next output from the menu.
     fn next_output(&mut self) -> MenuResult<Output>;
+
+    /// Returns the input and output streams of the menu and drops it.
+    fn get_io(self) -> (Stdin, Stdout);
 }
 
 impl<const N: usize> AsRef<Stdout> for ValueMenu<'_, N> {
@@ -438,5 +543,9 @@ where
             .next()
             .ok_or(MenuError::NoMoreField)?
             .build(&self.reader, &mut self.writer)
+    }
+
+    fn get_io(self) -> (Stdin, Stdout) {
+        (self.reader, self.writer)
     }
 }
