@@ -11,7 +11,7 @@ build a menu on your own after.
 
 It can also be used as a mode selection, for a game for example.
 
-> Note: If you want to use the derive Menu macro,
+> Note: If you want to use the `derive(Menu)` macro,
 you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
 This crate may however contain features that are not available on the ezmenu crate.
 
