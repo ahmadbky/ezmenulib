@@ -84,11 +84,6 @@
 //! let authors: customs::MenuVec<String> = license.next_output().unwrap();
 //! let ty: Type = license.next_output().unwrap();
 //! ```
-//!
-//! ## Stdin and Stdout
-//!
-//! After using a menu, you can drop it and recover the [`Stdin`](std::io::Stdin)
-//! and [`Stdout`](std::io::Stdout) instances it used, thank to the [`MenuBuilder::get_io`] method.
 
 use crate::prelude::*;
 use std::array::IntoIter;
@@ -113,9 +108,10 @@ use std::str::FromStr;
 /// .title(SelectTitle::from("set the podium").pos(TitlePos::Bottom))
 /// .next_output();
 /// ```
+#[derive(Clone, Copy)]
 pub enum TitlePos {
     /// Position at the top of the menu:
-    /// ```md
+    /// ```text
     /// <title>
     /// 1 - field0
     /// 2 - field1
@@ -124,7 +120,7 @@ pub enum TitlePos {
     /// ```
     Top,
     /// Position at the bottom of the menu:
-    /// ```md
+    /// ```text
     /// 1 - field0
     /// 2 - field1
     /// ...
@@ -146,31 +142,37 @@ impl Default for TitlePos {
 /// ## Example
 ///
 /// ```
+/// use std::str::FromStr;
 /// use ezmenulib::prelude::*;
 ///
-/// // Debug and PartialEq trait impl are used for the `assert_eq` macro.
-/// #[derive(Clone, Debug, PartialEq)]
 /// enum Type {
 ///     MIT,
 ///     GPL,
 ///     BSD,
 /// }
 ///
+/// impl FromStr for Type {
+///     type Err = MenuError;
+///
+///     fn from_str(s: &str) -> MenuResult<Self> {
+///         match s.to_lowercase().as_str() {
+///             "mit" => Ok(Self::MIT),
+///             "gpl" => Ok(Self::GPL),
+///             "bsd" => Ok(Self::BSD),
+///             s => Err(MenuError::from(format!("unknown license type: {}", s))),
+///         }
+///     }
+/// }
+///
 /// let license_type = SelectMenu::from([
-///     SelectField::new("MIT", Type::MIT),
-///     SelectField::new("GPL", Type::GPL),
-///     SelectField::new("BSD", Type::BSD),
+///     SelectField::new("MIT"),
+///     SelectField::new("GPL"),
+///     SelectField::new("BSD"),
 /// ])
 /// .title(SelectTitle::from("Choose a license type"))
 /// .default(0)
 /// .next_output()
 /// .unwrap();
-/// ```
-///
-/// Supposing the user skipped the selective menu, it will return by default the selective field
-/// at index `0`.
-/// ```
-/// assert_eq!(license_type, Type::MIT);
 /// ```
 ///
 /// ## Formatting
@@ -184,7 +186,7 @@ impl Default for TitlePos {
 /// <prefix>
 /// ```
 ///
-/// Default chip is `" - "`, and default prefix is `">> "`.
+/// The default chip is `" - "`, and the default prefix is `">> "`.
 pub struct SelectMenu<'a> {
     title: SelectTitle<'a>,
     fields: Vec<SelectField<'a>>,
@@ -543,10 +545,6 @@ where
             }
         }
     }
-
-    fn get_io(self) -> (Stdin, Stdout) {
-        (self.reader, self.writer)
-    }
 }
 
 /// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
@@ -608,9 +606,6 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
 pub trait MenuBuilder<Output>: AsRef<Stdout> + AsMut<Stdout> {
     /// Returns the next output from the menu.
     fn next_output(&mut self) -> MenuResult<Output>;
-
-    /// Returns the input and output streams of the menu and drops it.
-    fn get_io(self) -> (Stdin, Stdout);
 }
 
 impl<const N: usize> AsRef<Stdout> for ValueMenu<'_, N> {
@@ -642,9 +637,5 @@ where
             .next()
             .ok_or(MenuError::NoMoreField)?
             .build(&self.reader, &mut self.writer)
-    }
-
-    fn get_io(self) -> (Stdin, Stdout) {
-        (self.reader, self.writer)
     }
 }
