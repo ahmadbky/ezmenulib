@@ -3,21 +3,33 @@
 //! This crate provides a library with structs and traits to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
 //!
-//! ### Note
+//! This crate is really useful if you use [structopt](https://docs.rs/structopt/)
+//! or [clap](https://docs.rs/clap/) crates beside this, so you can get the matches safely, and
+//! build a menu on your own after.
 //!
-//! If you want to use the derive Menu macro,
-//! you must use the [`ezmenu`](https://docs.rs/ezmenu/) crate instead.
+//! It can also be used as a mode selection, for a game for example.
+//!
+//! > Note: If you want to use the derive Menu macro,
+//! you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
+//! This crate may however contain features that are not available on the ezmenu crate.
+//!
+//! # Value-menus
+//!
+//! The first type of menu you can build is a [value-menu](crate::menu::ValueMenu).
+//! These menus are used to retrieve data values from the user by iterating on the next outputs.
+//! At each iteration, it prompts the user a value, parses it and reprompts until it is correct,
+//! then returns it.
 //!
 //! ## Example
 //!
-//! Here is an example of how to use the library:
+//! Here is an example of how to use this menu:
 //!
-//! ```rust
+//! ```
 //! use ezmenulib::prelude::*;
 //!
 //! let mut my_menu = ValueMenu::from([
-//!     ValueField::from("Give your name"),
-//!     ValueField::from("Give a number"),
+//!     Field::Value(ValueField::from("Give your name")),
+//!     Field::Value(ValueField::from("Give a number")),
 //! ])
 //! .title("Hello there!");
 //!
@@ -31,8 +43,10 @@
 //!
 //! ```text
 //! Hello there!
-//! * Give your name: Ahmad
-//! * Give a number: 1000
+//! --> Give your name
+//! >> Ahmad
+//! --> Give a number
+//! >> 1000
 //! values provided: name=Ahmad, number=1000
 //! ```
 //!
@@ -40,9 +54,9 @@
 //!
 //! You can apply several formatting rules on a menu or on a field specifically.
 //! You can edit:
-//! * the chip: `* ` by default.
-//! * the prefix: `: ` by default.
-//! * insert a new line before prefix and user input: `false` by default.
+//! * the chip: `"--> "` by default.
+//! * the prefix: `">> "` by default.
+//! * insert a new line before prefix and user input: `true` by default.
 //! * display default values or not: `true` by default.
 //! These parameters are defined in the [`ValueFieldFormatting`](crate::field::ValueFieldFormatting) struct.
 //!
@@ -53,34 +67,31 @@
 //! use ezmenulib::prelude::*;
 //!
 //! let mut license = ValueMenu::from([
-//!     ValueField::from("Authors"),
-//!     ValueField::from("Project name")
-//!         .fmt(ValueFieldFormatting {
-//!             chip: "--> ",
-//!             ..Default::default()
-//!         }),
-//!     ValueField::from("Date"),
+//!     Field::Value(ValueField::from("Authors")),
+//!     Field::Value(ValueField::from("Project name")
+//!         .fmt(ValueFieldFormatting::chip("--- "))),
+//!     Field::Value(ValueField::from("Date")),
 //! ])
-//! .fmt(ValueFieldFormatting {
-//!     chip: "==> ",
-//!     ..Default::default()
-//! });
+//! .fmt(ValueFieldFormatting::chip("==> "));
 //!
 //! // ...
 //! ```
 //!
-//! The custom `==> ` chip will be applied on every field except those with custom formatting rules,
+//! The custom `"==> "` chip will be applied on every field except those with custom formatting rules,
 //! In this case, it will format the text like above:
 //!
 //! ```text
-//! ==> Authors: ...
-//! --> Project name: ...
-//! ==> Date: ...
+//! ==> Authors
+//! >> ...
+//! --- Project name
+//! >> ...
+//! ==> Date
+//! >> ...
 //! ```
 //!
 //! ## Skip fields with default values
 //!
-//! You can provide a default input value to a field with the `default` method:
+//! You can provide a default input value to a field with the `ValueField::default` method:
 //! ```rust
 //! ValueField::from("Date").default("2022")
 //! ```
@@ -90,12 +101,10 @@
 //!
 //! By default, the default value is visible. If you want to hide it, you can do so
 //! with formatting rules:
+//!
 //! ```rust
 //! ValueField::from("...")
-//!     .fmt(ValueFieldFormatting {
-//!         default: false,
-//!         ..Default::default()
-//!     })
+//!     .fmt(ValueFieldFormatting::default(false))
 //! ```
 //!
 //! ## Use custom value types
@@ -121,8 +130,14 @@
 //!
 //! impl FromStr for Type {
 //!     type Err = String;
+//!
 //!     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//!         Ok(Self::MIT)
+//!         match s.to_lowercase().as_str() {
+//!             "mit" => Ok(Self::MIT),
+//!             "gpl" => Ok(Self::GPL),
+//!             "bsd" => Ok(Self::BSD),
+//!             s => Err(format!("unknown license type: {}", s)),
+//!         }
 //!     }
 //! }
 //!
@@ -143,7 +158,123 @@
 //! The [`MenuVec<T>`](crate::customs::MenuVec) type allows the user
 //! to enter many values separated by spaces and collect them into a `Vec<T>`.
 //! Of course, `T` must implement `FromStr` trait.
-#![warn(missing_docs)]
+//!
+//! # Selectable menus
+//!
+//! Beside the value-menus, there is also the [selectable menus](crate::menu::SelectMenu).
+//! These menus, unlike value-menus, displays the list of possible values to the user,
+//! to let him select one among them.
+//!
+//! ## Example
+//!
+//! ```
+//! use std::str::FromStr;
+//! use ezmenulib::prelude::*;
+//!
+//! enum Type {
+//!     MIT,
+//!     GPL,
+//!     BSD,
+//! }
+//!
+//! impl FromStr for Type {
+//!     type Err = MenuError;
+//!
+//!     fn from_str(s: &str) -> MenuResult<Self> {
+//!         match s.to_lowercase().as_str() {
+//!             "mit" => Ok(Self::MIT),
+//!             "gpl" => Ok(Self::GPL),
+//!             "bsd" => Ok(Self::BSD),
+//!             s => Err(MenuError::from(format!("unknown license type: {}", s))),
+//!         }
+//!     }
+//! }
+//!
+//! let license_type = SelectMenu::from([
+//!     SelectField::new("MIT"),
+//!     SelectField::new("GPL"),
+//!     SelectField::new("BSD"),
+//! ])
+//! .title(SelectTitle::from("Choose a license type"))
+//! .default(0)
+//! .next_output()
+//! .unwrap();
+//! ```
+//!
+//! This code prints the output like above:
+//! ```text
+//! Choose a license type:
+//! 1 - MIT (default)
+//! 2 - GPL
+//! 3 - BSD
+//! ```
+//! > Note that the `:` character right next to the title is on purpose
+//! (check the [`SelectTitle`](crate::menu::SelectTitle) for more information).
+//!
+//! You can also use this menu on primitive types or types already implementing `FromStr` trait.
+//! The menu accepts an index or the literal value as input.
+//!
+//! ## Formatting rules
+//!
+//! Like the [`ValueMenu`](crate::menu::ValueMenu), you can edit many formatting rules
+//! to stylish the menu as you want.
+//!
+//! ### The menu format
+//!
+//! The selective menu itself has two editable formatting rules.
+//! Like [`ValueFieldFormatting`](crate::field::ValueFieldFormatting), it contains a
+//! `chip` and a `prefix`:
+//! ```text
+//! X<chip><message>
+//! X<chip><message>
+//! ...
+//! <prefix>
+//! ```
+//!
+//! The default chip is `" - "`, and the default prefix is `">> "`.
+//!
+//! ### The title format
+//!
+//! The selective has also its own title format.
+//! Because the title can be seen as a field of a value-menu, it has its own instance of
+//! `ValueFieldFormatting` struct.
+//!
+//! This is useful for sub-menu management, where the formatting rules of the title inherits from the
+//! formatting rules of the parent menu, for more convenience.
+//!
+//! ## Skip the menu with a default field value
+//!
+//! The user can skip the selectable menu if it has a default value provided.
+//! To do so, you must use the [`SelectMenu::default`](crate::menu::SelectMenu::default) method.
+//!
+//! This will mark the indexed field as `"(default)"`.
+//!
+//! ## Sub-menus
+//!
+//! You can set a selectable menu as a field of a value-menu.
+//! This is really useful if you want to design sub-menu. The selectable field format
+//! will inherit from the formatting rules of the value-menu.
+//!
+//! ### Example
+//!
+//! ```
+//! use ezmenulib::prelude::*;
+//!
+//! let mut license = ValueMenu::from([
+//!     Field::Value(ValueField::from("Authors")),
+//!     Field::Value(ValueField::from("Project name")),
+//!     Field::Select(SelectMenu::from([
+//!         SelectField::from("MIT"),
+//!         SelectField::from("GPL"),
+//!         SelectField::from("BSD"),
+//!     ])
+//!     .title(SelectTitle::from("License type"))
+//!     .default(0)),
+//! ])
+//! .title("Descibre the project license");
+//! ```
+
+#![warn(missing_docs, missing_copy_implementations, unused_allocation)]
 
 pub mod customs;
 pub mod field;
