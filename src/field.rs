@@ -197,11 +197,11 @@ impl<'a> SelectField<'a> {
 #[derive(Clone)]
 pub struct ValueFieldFormatting<'a> {
     /// The small string slice displayed before the message acting as a list style attribute
-    /// (by default set as `* `).
+    /// (by default set as `--> `).
     pub chip: &'a str,
-    /// The small string slice displayed before the user input (by default set as `: `).
+    /// The small string slice displayed before the user input (by default set as `">> "`).
     pub prefix: &'a str,
-    /// Sets the user input with its prefix on a new line or not (by default set as `false`).
+    /// Sets the user input with its prefix on a new line or not (by default set as `true`).
     pub new_line: bool,
     /// Display default value or not (by default set as `true`).
     pub default: bool,
@@ -237,7 +237,7 @@ impl_constructors!(
     default: bool
 );
 
-/// Default formatting for a field is `* ` as a chip and `: ` as prefix.
+/// Default formatting for a field is `"--> "` as a chip and `">> "` as prefix.
 ///
 /// This being, the field is printed like above (text between `[` and `]` is optional
 /// depending on default value providing:
