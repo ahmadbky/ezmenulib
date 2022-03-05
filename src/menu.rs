@@ -370,6 +370,66 @@ impl<'a> SelectMenu<'a> {
         }
         self
     }
+
+    #[inline]
+    fn disp_list(&mut self) -> MenuResult<()> {
+        self.writer
+            .write_all(format!("{}", self).as_bytes())
+            .map_err(MenuError::from)
+    }
+
+    fn select<Output>(&mut self) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+    {
+        // printing prefix
+        self.writer.write_all(self.prefix.as_bytes())?;
+        self.writer.flush()?;
+
+        let out = raw_read_input(&self.reader)?;
+
+        if let Some(field) = self
+            .fields
+            .iter()
+            .find(|field| field.msg.to_lowercase() == out.to_lowercase())
+        {
+            // value entered as literal
+            match out.parse::<Output>() {
+                Ok(out) => {
+                    field.call_bind(&mut self.writer)?;
+                    Ok(out)
+                }
+                Err(_) => {
+                    if let Some(default) = self.default {
+                        default_parse(default, &self.fields, &mut self.writer)
+                    } else {
+                        Err(MenuError::Select(out))
+                    }
+                }
+            }
+        } else {
+            // value entered as index
+            match out.parse::<usize>() {
+                Ok(idx) if idx >= 1 => {
+                    if let Some(field) = self.fields.get(idx - 1) {
+                        field.call_bind(&mut self.writer)?;
+                        field.msg.parse().map_err(err_ty)
+                    } else {
+                        Err(MenuError::Select(out))
+                    }
+                }
+                Err(_) => {
+                    if let Some(default) = self.default {
+                        default_parse(default, &self.fields, &mut self.writer)
+                    } else {
+                        Err(MenuError::Select(out))
+                    }
+                }
+                _ => Err(MenuError::Select(out)),
+            }
+        }
+    }
 }
 
 impl Display for SelectMenu<'_> {
@@ -402,16 +462,39 @@ impl Display for SelectMenu<'_> {
     }
 }
 
-impl AsRef<Stdout> for SelectMenu<'_> {
-    fn as_ref(&self) -> &Stdout {
-        &self.writer
-    }
+/// Returns an error meaning that the default selection index is incorrect.
+#[inline]
+fn err_idx(default: usize, len: usize) -> MenuError {
+    MenuError::from(format!(
+        "incorrect default value index: index is {} but selective menu length is {}",
+        default, len
+    ))
 }
 
-impl AsMut<Stdout> for SelectMenu<'_> {
-    fn as_mut(&mut self) -> &mut Stdout {
-        &mut self.writer
-    }
+/// Returns an error meaning that the value type contained in the string slice is incorrect.
+#[inline]
+fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
+    MenuError::from(format!("incorrect default value type: {:?}", e))
+}
+
+/// Returns the default value among the fields.
+///
+/// If the default value index or the aimed default field type is incorrect,
+/// it will return an error (See [`MenuError::IncorrectType`]).
+fn default_parse<Output>(
+    default: usize,
+    fields: &[SelectField<'_>],
+    writer: &mut Stdout,
+) -> MenuResult<Output>
+where
+    Output: FromStr,
+    Output::Err: 'static + Debug,
+{
+    let field = fields
+        .get(default)
+        .ok_or_else(|| err_idx(default, fields.len()))?;
+    field.call_bind(writer)?;
+    field.msg.parse().map_err(err_ty)
 }
 
 impl<Output> MenuBuilder<Output> for SelectMenu<'_>
@@ -456,93 +539,29 @@ where
     /// .unwrap();
     /// ```
     fn next_output(&mut self) -> MenuResult<Output> {
-        /// Returns an error meaning that the default selection index is incorrect.
-        #[inline]
-        fn err_idx(default: usize, len: usize) -> MenuError {
-            MenuError::from(format!(
-                "incorrect default value index: index is {} but selective menu length is {}",
-                default, len
-            ))
-        }
-
-        /// Returns an error meaning that the value type contained in the string slice is incorrect.
-        #[inline]
-        fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
-            MenuError::from(format!("incorrect default value type: {:?}", e))
-        }
-
-        /// Returns the default value among the fields.
-        ///
-        /// If the default value index or the aimed default field type is incorrect,
-        /// it will return an error (See [`MenuError::IncorrectType`]).
-        fn default_parse<Output>(
-            default: usize,
-            fields: &[SelectField<'_>],
-            writer: &mut Stdout,
-        ) -> MenuResult<Output>
-        where
-            Output: FromStr,
-            Output::Err: 'static + Debug,
-        {
-            let field = fields
-                .get(default)
-                .ok_or_else(|| err_idx(default, fields.len()))?;
-            field.call_bind(writer)?;
-            field.msg.parse().map_err(err_ty)
-        }
-
-        // displays the menu once
-        self.writer.write_all(format!("{}", self).as_bytes())?;
+        self.disp_list()?;
 
         // loops while incorrect input
         loop {
-            // printing prefix
-            self.writer.write_all(self.prefix.as_bytes())?;
-            self.writer.flush()?;
-
-            // reading input
-            let mut out = String::new();
-            self.reader.read_line(&mut out)?;
-            let out = out.trim();
-
-            if let Some(field) = self
-                .fields
-                .iter()
-                .find(|field| field.msg.to_lowercase() == out.to_lowercase())
-            {
-                // value entered as literal
-                match out.parse::<Output>() {
-                    Ok(out) => {
-                        break Ok({
-                            field.call_bind(&mut self.writer)?;
-                            out
-                        })
+            match self.select() {
+                Ok(out) => break Ok(out),
+                Err(_) => {
+                    if let Some(default) = self.default {
+                        break Ok(default_parse(default, &self.fields, &mut self.writer)?);
                     }
-                    Err(_) => {
-                        if let Some(default) = self.default {
-                            break default_parse(default, &self.fields, &mut self.writer);
-                        }
-                    }
-                }
-            } else {
-                // value entered as index
-                match out.parse::<usize>() {
-                    Ok(idx) if idx >= 1 => {
-                        if let Some(field) = self.fields.get(idx - 1) {
-                            break {
-                                field.call_bind(&mut self.writer)?;
-                                field.msg.parse().map_err(err_ty)
-                            };
-                        }
-                    }
-                    Err(_) => {
-                        if let Some(default) = self.default {
-                            break default_parse(default, &self.fields, &mut self.writer);
-                        }
-                    }
-                    _ => continue,
                 }
             }
+        }
+    }
+
+    fn next_or_default(&mut self) -> Output
+    where
+        Output: Default,
+    {
+        if self.disp_list().is_ok() {
+            self.select().unwrap_or_default()
+        } else {
+            Output::default()
         }
     }
 }
@@ -600,23 +619,32 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
         self.title = title;
         self
     }
-}
 
-/// Trait used to return the next output of the menu.
-pub trait MenuBuilder<Output>: AsRef<Stdout> + AsMut<Stdout> {
-    /// Returns the next output from the menu.
-    fn next_output(&mut self) -> MenuResult<Output>;
-}
+    fn print_title(&mut self) -> MenuResult<()> {
+        if !self.first_popped && !self.title.is_empty() {
+            writeln!(self.writer, "{}", self.title)?;
+            self.first_popped = true;
+        }
+        Ok(())
+    }
 
-impl<const N: usize> AsRef<Stdout> for ValueMenu<'_, N> {
-    fn as_ref(&self) -> &Stdout {
-        &self.writer
+    fn next_field(&mut self) -> MenuResult<Field<'a>> {
+        self.fields.next().ok_or(MenuError::NoMoreField)
     }
 }
 
-impl<const N: usize> AsMut<Stdout> for ValueMenu<'_, N> {
-    fn as_mut(&mut self) -> &mut Stdout {
-        &mut self.writer
+/// Trait used to return the next output of the menu.
+pub trait MenuBuilder<Output> {
+    /// Returns the next output from the menu.
+    fn next_output(&mut self) -> MenuResult<Output>;
+
+    /// Returns the next output from the menu, or its default value.
+    #[inline(always)]
+    fn next_or_default(&mut self) -> Output
+    where
+        Output: Default,
+    {
+        self.next_output().unwrap_or_default()
     }
 }
 
@@ -627,15 +655,20 @@ where
 {
     /// Returns the output of the next field if present.
     fn next_output(&mut self) -> MenuResult<Output> {
-        // prints the title
-        if !self.first_popped && !self.title.is_empty() {
-            writeln!(self.writer, "{}", self.title)?;
-            self.first_popped = true;
-        }
+        self.print_title()?;
+        self.next_field()?.build(&self.reader, &mut self.writer)
+    }
 
-        self.fields
-            .next()
-            .ok_or(MenuError::NoMoreField)?
-            .build(&self.reader, &mut self.writer)
+    fn next_or_default(&mut self) -> Output
+    where
+        Output: Default,
+    {
+        if self.print_title().is_ok() {
+            self.next_field()
+                .map(|mut f| f.build_or_default(&self.reader, &mut self.writer))
+                .unwrap_or_default()
+        } else {
+            Output::default()
+        }
     }
 }

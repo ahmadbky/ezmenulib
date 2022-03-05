@@ -18,6 +18,7 @@
 //! independently from the global formatting rules.
 
 use crate::prelude::*;
+use std::env;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{stdin, stdout, Stdin, Stdout, Write};
 use std::rc::Rc;
@@ -50,6 +51,17 @@ impl<'a> Field<'a> {
         match self {
             Self::Value(vf) => vf.build(stdin, stdout),
             Self::Select(sm) => sm.next_output(),
+        }
+    }
+
+    pub fn build_or_default<Output>(&mut self, stdin: &Stdin, stdout: &mut Stdout) -> Output
+    where
+        Output: FromStr + Default,
+        Output::Err: 'static + Debug,
+    {
+        match self {
+            Self::Value(vf) => vf.build_or_default(stdin, stdout),
+            Self::Select(sm) => sm.next_or_default(),
         }
     }
 
@@ -255,6 +267,34 @@ impl<'a> Default for ValueFieldFormatting<'a> {
     }
 }
 
+// should not be accessed from outer module
+enum DefaultValue<'a> {
+    Value(&'a str),
+    Env(String),
+}
+
+impl<'a> DefaultValue<'a> {
+    pub fn env(var: &'a str) -> MenuResult<Self> {
+        Ok(Self::Env(
+            env::var(var).map_err(|e| MenuError::EnvVar(var.to_string(), e))?,
+        ))
+    }
+}
+
+impl Display for DefaultValue<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        #[inline(never)]
+        fn write_str(f: &mut Formatter<'_>, s: impl AsRef<str>) -> fmt::Result {
+            write!(f, "(default: {})", s.as_ref())
+        }
+
+        match self {
+            Self::Value(s) => write_str(f, s),
+            Self::Env(s) => write_str(f, s),
+        }
+    }
+}
+
 /// Defines behavior for a value-menu field.
 ///
 /// It manages
@@ -277,7 +317,7 @@ pub struct ValueField<'a> {
     // pointer to the parent fmt or its own fmt
     fmt: Rc<ValueFieldFormatting<'a>>,
     custom_fmt: bool,
-    default: Option<&'a str>,
+    default: Option<DefaultValue<'a>>,
 }
 
 impl<'a> From<&'a str> for ValueField<'a> {
@@ -295,11 +335,11 @@ impl<'a> Display for ValueField<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{chip}{msg}{def}{nl}{prefix}",
+            "{chip}{msg} {def}{nl}{prefix}",
             chip = self.fmt.chip,
             msg = self.msg,
-            def = match self.default {
-                Some(val) if self.fmt.default => format!(" (default: {})", val),
+            def = match &self.default {
+                Some(val) if self.fmt.default => format!("{}", val),
                 _ => "".to_owned(),
             },
             nl = if self.fmt.new_line { "\n" } else { "" },
@@ -330,9 +370,14 @@ impl<'a> ValueField<'a> {
     ///
     /// So when instantiating the field with a provided default value, it will not panic and it will
     /// print the default value even if it is incorrect (if the format rule `default` is set to `true`).
-    pub fn default(mut self, default: &'a str) -> Self {
-        self.default = Some(default);
+    pub fn default_value(mut self, default: &'a str) -> Self {
+        self.default = Some(DefaultValue::Value(default));
         self
+    }
+
+    pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
+        self.default = Some(DefaultValue::env(var)?);
+        Ok(self)
     }
 
     /// Builds the field without specifying standard input and output files.
@@ -379,37 +424,86 @@ impl<'a> ValueField<'a> {
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        /// Function that parses the default value without checking.
-        /// It it useful to break the loop if there is some default value,
-        /// and no value was provided, or if the value is incorrect.
-        fn default_parse<T>(default: Option<&str>) -> MenuResult<T>
-        where
-            T: FromStr,
-            T::Err: 'static + Debug,
-        {
-            let default = default.unwrap();
-            default
-                .parse()
-                .map_err(|e| MenuError::IncorrectType(Box::new(e)))
-        }
-
         // loops while incorrect value
         loop {
-            // outputs the field message with its formatting
-            // see `<ValueField as Display>::fmt`
-            write!(writer, "{}", self)?;
-            writer.flush()?;
-
-            // read input to string
-            let mut out = String::new();
-            reader.read_line(&mut out)?;
-
             // try to parse to T, else repeat
-            match out.trim().parse() {
+            match self.inner_build(reader, writer) {
                 Ok(t) => break Ok(t),
-                Err(_) if self.default.is_some() => break default_parse(self.default),
+                Err(_) if self.default.is_some() => {
+                    break default_parse(self.default.as_ref().unwrap())
+                }
                 _ => continue,
             }
         }
     }
+
+    /// Builds the field, or returns the default value from the type.
+    #[inline]
+    pub fn build_or_default<T>(&self, reader: &Stdin, writer: &mut Stdout) -> T
+    where
+        T: FromStr + Default,
+        T::Err: 'static + Debug,
+    {
+        self.inner_build(reader, writer).unwrap_or_default()
+    }
+
+    fn inner_build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+    {
+        // outputs the field message with its formatting
+        // see `<ValueField as Display>::fmt`
+        write!(writer, "{}", self)?;
+        writer.flush()?;
+
+        read_input(reader)
+    }
+}
+
+/// Returns the input value as a String from the standard input stream.
+pub(crate) fn raw_read_input(reader: &Stdin) -> MenuResult<String> {
+    let mut out = String::new();
+    reader.read_line(&mut out)?;
+    Ok(out.trim().to_owned())
+}
+
+/// Reads the input, then parses it.
+#[inline]
+pub(crate) fn read_input<T>(reader: &Stdin) -> MenuResult<T>
+where
+    T: FromStr,
+    T::Err: 'static + Debug,
+{
+    parse_value(raw_read_input(reader)?)
+}
+
+/// Parses the input value.
+fn parse_value<T>(s: impl AsRef<str>) -> MenuResult<T>
+where
+    T: FromStr,
+    T::Err: 'static + Debug,
+{
+    if s.as_ref().is_empty() {
+        Err(MenuError::EmptyInput)
+    } else {
+        s.as_ref()
+            .parse()
+            .map_err(|e| MenuError::Parse(s.as_ref().to_owned(), Box::new(e)))
+    }
+}
+
+/// Function that parses the default value with a check if the default value is incorrect.
+/// It it used to return a value if there is some default value,
+/// and if no value was provided, or if the value provided is incorrect.
+fn default_parse<T>(default: &DefaultValue<'_>) -> MenuResult<T>
+where
+    T: FromStr,
+    T::Err: 'static + Debug,
+{
+    match default {
+        DefaultValue::Value(s) => parse_value(s),
+        DefaultValue::Env(s) => parse_value(s),
+    }
+    .map_err(|e| MenuError::Type(Box::new(e)))
 }

@@ -289,6 +289,7 @@ pub mod prelude {
     pub use crate::MenuResult;
 }
 
+use std::env::VarError;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, io};
@@ -298,12 +299,20 @@ pub enum MenuError {
     /// An IO error, when flushing, reading or writing values.
     IOError(io::Error),
     /// An incorrect type of value has been used as default value.
-    IncorrectType(Box<dyn Debug>),
+    Type(Box<dyn Debug>),
+    /// A parsing error for a value.
+    Parse(String, Box<dyn Debug>),
     /// There is no more field to call for an output.
     ///
     /// This error appears when calling `<ValueMenu as Menu>::next_output` method whereas
     /// the menu building has finished.
     NoMoreField,
+    /// An environment variable error.
+    EnvVar(String, VarError),
+    /// An incorrect selection input has been provided.
+    Select(String),
+    /// The input is empty.
+    EmptyInput,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
     /// by returning an `Err(MenuError::Other(...))`
@@ -312,25 +321,33 @@ pub enum MenuError {
 
 impl Error for MenuError {}
 
-impl Display for MenuError {
+impl Debug for MenuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(self, f)
+        Display::fmt(self, f)
     }
 }
 
-impl fmt::Debug for MenuError {
+impl Display for MenuError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "{}",
             match self {
                 Self::IOError(e) => format!("IO error: {}", e),
-                Self::IncorrectType(e) => format!(
-                    "an incorrect value type has been used as default value: {:?}",
+                Self::Type(e) => format!(
+                    "an incorrect value has been used as default value: {:?}",
                     *e
                 ),
+                Self::Parse(v, e) =>
+                    format!("the input value provided `{}` is incorrect: {:?}", v, e),
                 Self::NoMoreField =>
                     "attempted to get the next output while there is no more field in the menu"
                         .to_owned(),
+                Self::EnvVar(v, e) => format!(
+                    "attempted to get a default value from the environment variable `{}`: {}",
+                    v, e
+                ),
+                Self::Select(s) => format!("incorrect selection input: `{}`", s),
+                Self::EmptyInput => "empty input".to_owned(),
                 Self::Other(e) => format!("an error occurred: {:?}", e),
             }
         ))

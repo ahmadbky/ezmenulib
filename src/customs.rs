@@ -46,7 +46,7 @@ use std::str::FromStr;
 /// let a: MenuVec<i32> = a.parse().unwrap();
 /// assert_eq!(*a, vec![23, -54, 456]);
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct MenuVec<T>(pub Vec<T>);
 
 impl<T> AsRef<Vec<T>> for MenuVec<T> {

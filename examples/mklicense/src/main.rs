@@ -23,11 +23,23 @@ impl FromStr for Type {
     }
 }
 
+fn join<T, V>(v: V) -> String
+where
+    T: ToString,
+    V: AsRef<Vec<T>>,
+{
+    v.as_ref()
+        .iter()
+        .map(T::to_string)
+        .collect::<Vec<String>>()
+        .join(", ")
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut license = ValueMenu::from([
-        Field::Value(ValueField::from("Authors")),
+        Field::Value(ValueField::from("Authors").default_value("zmlfkgj")),
         Field::Value(ValueField::from("Project name")),
-        Field::Value(ValueField::from("License date").default("2022")),
+        Field::Value(ValueField::from("License date").default_value("2022")),
         Field::Select(
             SelectMenu::from([
                 SelectField::from("MIT"),
@@ -39,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
     ]);
 
-    let authors: MenuVec<String> = license.next_output()?;
+    let authors: MenuVec<i32> = license.next_output()?;
     let name: String = license.next_output()?;
     let date: u16 = license.next_output()?;
     let ty: Type = license.next_output()?;
@@ -48,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "{:?} License, Copyright (C) {} {}\n{}",
         ty,
         date,
-        authors.join(", "),
+        join(authors),
         name
     );
 
