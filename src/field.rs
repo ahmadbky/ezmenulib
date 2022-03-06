@@ -20,7 +20,7 @@
 use crate::prelude::*;
 use std::env;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io::{stdin, stdout, Stdin, Stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -43,24 +43,38 @@ impl<'a> Field<'a> {
     /// selected.
     ///
     /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
-    pub fn build<Output>(&mut self, stdin: &Stdin, stdout: &mut Stdout) -> MenuResult<Output>
+    pub(crate) fn menu_build<Output, R, W>(
+        &mut self,
+        reader: &mut R,
+        writer: &mut W,
+        raw: bool,
+    ) -> MenuResult<Output>
     where
         Output: FromStr,
         Output::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
     {
         match self {
-            Self::Value(vf) => vf.build(stdin, stdout),
+            Self::Value(vf) => vf.menu_build(reader, writer, raw),
             Self::Select(sm) => sm.next_output(),
         }
     }
 
-    pub fn build_or_default<Output>(&mut self, stdin: &Stdin, stdout: &mut Stdout) -> Output
+    pub(crate) fn menu_build_or_default<Output, R, W>(
+        &mut self,
+        reader: &mut R,
+        writer: &mut W,
+        raw: bool,
+    ) -> Output
     where
         Output: FromStr + Default,
         Output::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
     {
         match self {
-            Self::Value(vf) => vf.build_or_default(stdin, stdout),
+            Self::Value(vf) => vf.menu_build_or_default(reader, writer, raw),
             Self::Select(sm) => sm.next_or_default(),
         }
     }
@@ -80,7 +94,7 @@ impl<'a> Field<'a> {
 
 /// Type used to handle the binding function executed right after
 /// the corresponding field has been selected by the user.
-pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
+pub type Binding<W> = fn(&mut W) -> MenuResult<()>;
 
 /// Struct modeling a field of a selective menu.
 ///
@@ -103,21 +117,21 @@ pub type Binding = fn(&mut Stdout) -> MenuResult<()>;
 ///     SelectField::new("two", 2),
 /// ]);
 /// ```
-pub struct SelectField<'a> {
+pub struct SelectField<'a, W> {
     pub(crate) msg: &'a str,
     chip: &'a str,
     custom_chip: bool,
-    bind: Option<Binding>,
+    bind: Option<Binding<W>>,
 }
 
-impl Display for SelectField<'_> {
+impl<W> Display for SelectField<'_, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.chip, f)?;
         Display::fmt(self.msg, f)
     }
 }
 
-impl<'a> From<&'a str> for SelectField<'a> {
+impl<'a, W> From<&'a str> for SelectField<'a, W> {
     /// Initializes the selection field for the menu.
     ///
     /// This associated function should not be used without context.
@@ -132,7 +146,7 @@ impl<'a> From<&'a str> for SelectField<'a> {
     }
 }
 
-impl<'a> SelectField<'a> {
+impl<'a, W> SelectField<'a, W> {
     /// Edits the chip of the selection field.
     ///
     /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
@@ -152,7 +166,7 @@ impl<'a> SelectField<'a> {
         }
     }
 
-    pub(crate) fn call_bind(&self, out: &mut Stdout) -> MenuResult<()> {
+    pub(crate) fn call_bind(&self, out: &mut W) -> MenuResult<()> {
         if let Some(b) = self.bind {
             b(out)?;
         }
@@ -190,7 +204,7 @@ impl<'a> SelectField<'a> {
     /// ```
     ///
     /// For other error, you can simply use the `MenuError::Other` variant and box your custom error type.
-    pub fn bind(mut self, bind: Binding) -> Self {
+    pub fn bind(mut self, bind: Binding<W>) -> Self {
         self.bind = Some(bind);
         self
     }
@@ -335,11 +349,11 @@ impl<'a> Display for ValueField<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{chip}{msg} {def}{nl}{prefix}",
+            "{chip}{msg}{def}{nl}{prefix}",
             chip = self.fmt.chip,
             msg = self.msg,
             def = match &self.default {
-                Some(val) if self.fmt.default => format!("{}", val),
+                Some(val) if self.fmt.default => format!(" {}", val),
                 _ => "".to_owned(),
             },
             nl = if self.fmt.new_line { "\n" } else { "" },
@@ -365,7 +379,7 @@ impl<'a> ValueField<'a> {
 
     /// Give the default value accepted by the field.
     ///
-    /// If the value type is incorrect, the `ValueField::build` or `ValueField::init_build`
+    /// If the value type is incorrect, the [`ValueField::build`] or [`ValueField::build_init`]
     /// method will return an `Err` value emphasizing that the default value type is incorrect.
     ///
     /// So when instantiating the field with a provided default value, it will not panic and it will
@@ -375,6 +389,16 @@ impl<'a> ValueField<'a> {
         self
     }
 
+    /// Give the default value of the field, passing by an environment variable.
+    ///
+    /// If the provided environment variable is incorrect, it will return an error
+    /// (See [`MenuError::EnvVar`] variant).
+    ///
+    /// If the value type of the variable is incorrect, the [`ValueField::build`] or [`ValueField::build_init`]
+    /// method will return an `Err` value emphasizing that the default value type is incorrect.
+    ///
+    /// So when instantiating the field with a provided default value, it will not panic and it will
+    /// print the default value even if it is incorrect (if the format rule `default` is set to `true`).
     pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
         self.default = Some(DefaultValue::env(var)?);
         Ok(self)
@@ -397,7 +421,7 @@ impl<'a> ValueField<'a> {
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.build(&stdin(), &mut stdout())
+        self.build(stdin(), &mut stdout())
     }
 
     /// Builds the field. It prints the message according to its formatting,
@@ -419,15 +443,57 @@ impl<'a> ValueField<'a> {
     ///     .build(&stdin, &mut stdout)
     ///     .unwrap();
     /// ```
-    pub fn build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
+    pub fn build<T>(&self, reader: Stdin, writer: &mut Stdout) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
     {
+        self.menu_build(&mut BufReader::new(reader), writer, false)
+    }
+
+    /// Builds the field, or returns the default value from the type.
+    #[inline]
+    pub fn build_or_default<T>(&self, reader: Stdin, writer: &mut Stdout) -> T
+    where
+        T: FromStr + Default,
+        T::Err: 'static + Debug,
+    {
+        self.menu_build_or_default(&mut BufReader::new(reader), writer, false)
+    }
+
+    fn inner_build<T, R, W>(&self, reader: &mut R, writer: &mut W, raw: bool) -> MenuResult<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+    {
+        // outputs the field message with its formatting
+        // see `<ValueField as Display>::fmt`
+        write!(writer, "{}", self)?;
+        writer.flush()?;
+
+        let output = raw_read_input(reader, writer, raw)?;
+
+        parse_value(output)
+    }
+
+    pub(crate) fn menu_build<T, R, W>(
+        &self,
+        reader: &mut R,
+        writer: &mut W,
+        raw: bool,
+    ) -> MenuResult<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+    {
         // loops while incorrect value
         loop {
             // try to parse to T, else repeat
-            match self.inner_build(reader, writer) {
+            match self.inner_build(reader, writer, raw) {
                 Ok(t) => break Ok(t),
                 Err(_) if self.default.is_some() => {
                     break default_parse(self.default.as_ref().unwrap())
@@ -437,59 +503,57 @@ impl<'a> ValueField<'a> {
         }
     }
 
-    /// Builds the field, or returns the default value from the type.
-    #[inline]
-    pub fn build_or_default<T>(&self, reader: &Stdin, writer: &mut Stdout) -> T
+    pub(crate) fn menu_build_or_default<T, R, W>(
+        &self,
+        reader: &mut R,
+        writer: &mut W,
+        raw: bool,
+    ) -> T
     where
         T: FromStr + Default,
         T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
     {
-        self.inner_build(reader, writer).unwrap_or_default()
-    }
-
-    fn inner_build<T>(&self, reader: &Stdin, writer: &mut Stdout) -> MenuResult<T>
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-    {
-        // outputs the field message with its formatting
-        // see `<ValueField as Display>::fmt`
-        write!(writer, "{}", self)?;
-        writer.flush()?;
-
-        read_input(reader)
+        self.inner_build(reader, writer, raw)
+            .or(self
+                .default
+                .as_ref()
+                .ok_or(MenuError::EmptyInput)
+                .and_then(default_parse))
+            .unwrap_or_default()
     }
 }
 
 /// Returns the input value as a String from the standard input stream.
-pub(crate) fn raw_read_input(reader: &Stdin) -> MenuResult<String> {
+pub(crate) fn raw_read_input<R, W>(reader: &mut R, writer: &mut W, raw: bool) -> MenuResult<String>
+where
+    R: BufRead,
+    W: Write,
+{
     let mut out = String::new();
     reader.read_line(&mut out)?;
+    if raw {
+        writer.write_all(out.as_bytes())?;
+    }
     Ok(out.trim().to_owned())
 }
 
-/// Reads the input, then parses it.
-#[inline]
-pub(crate) fn read_input<T>(reader: &Stdin) -> MenuResult<T>
-where
-    T: FromStr,
-    T::Err: 'static + Debug,
-{
-    parse_value(raw_read_input(reader)?)
-}
-
 /// Parses the input value.
+///
+/// It is useful because it maps the error according to the [`MenuError`](crate::MenuError)
+/// type definition.
 fn parse_value<T>(s: impl AsRef<str>) -> MenuResult<T>
 where
     T: FromStr,
     T::Err: 'static + Debug,
 {
-    if s.as_ref().is_empty() {
+    let s = s.as_ref();
+    if s.is_empty() {
         Err(MenuError::EmptyInput)
     } else {
-        s.as_ref()
-            .parse()
-            .map_err(|e| MenuError::Parse(s.as_ref().to_owned(), Box::new(e)))
+        s.parse()
+            .map_err(|e| MenuError::Parse(s.to_owned(), Box::new(e)))
     }
 }
 

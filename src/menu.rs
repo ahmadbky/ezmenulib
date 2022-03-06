@@ -86,11 +86,11 @@
 //! ```
 
 use crate::prelude::*;
-use std::array::IntoIter;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io::{stdin, stdout, Stdin, Stdout, Write};
+use std::io::{stdin, stdout, BufReader, Read, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::vec::IntoIter;
 
 /// The position of the title for an enum menu.
 /// By default, the title position is at the top.
@@ -187,13 +187,14 @@ impl Default for TitlePos {
 /// ```
 ///
 /// The default chip is `" - "`, and the default prefix is `">> "`.
-pub struct SelectMenu<'a> {
+pub struct SelectMenu<'a, R = Stdin, W = Stdout> {
     title: SelectTitle<'a>,
-    fields: Vec<SelectField<'a>>,
-    reader: Stdin,
-    writer: Stdout,
+    fields: Vec<SelectField<'a, W>>,
+    reader: BufReader<R>,
+    writer: W,
     default: Option<usize>,
     prefix: &'a str,
+    raw: bool,
 }
 
 /// Represents the title of a selectable menu.
@@ -306,22 +307,42 @@ impl Display for SelectTitle<'_> {
     }
 }
 
-impl<'a> From<Vec<SelectField<'a>>> for SelectMenu<'a> {
-    fn from(fields: Vec<SelectField<'a>>) -> Self {
-        Self {
-            title: Default::default(),
-            fields,
-            reader: stdin(),
-            writer: stdout(),
-            default: None,
-            prefix: ">> ",
-        }
+impl<'a> From<Vec<SelectField<'a, Stdout>>> for SelectMenu<'a> {
+    /// Builds the menu from its fields vector.
+    #[inline]
+    fn from(fields: Vec<SelectField<'a, Stdout>>) -> Self {
+        Self::inner_new(stdin(), stdout(), fields, false)
     }
 }
 
-impl<'a, const N: usize> From<[SelectField<'a>; N]> for SelectMenu<'a> {
-    fn from(fields: [SelectField<'a>; N]) -> Self {
+impl<'a, const N: usize> From<[SelectField<'a, Stdout>; N]> for SelectMenu<'a> {
+    /// Builds the menu from an array of fields.
+    #[inline]
+    fn from(fields: [SelectField<'a, Stdout>; N]) -> Self {
         Self::from(Vec::from(fields))
+    }
+}
+
+impl<'a, R, W> SelectMenu<'a, R, W>
+where
+    R: Read,
+{
+    fn inner_new(reader: R, writer: W, fields: Vec<SelectField<'a, W>>, raw: bool) -> Self {
+        Self {
+            title: Default::default(),
+            fields,
+            reader: BufReader::new(reader),
+            writer,
+            default: None,
+            prefix: ">> ",
+            raw,
+        }
+    }
+
+    /// Builds the menu from its reader and writer streams, and with its fields vector.
+    #[inline]
+    pub fn new(reader: R, writer: W, fields: Vec<SelectField<'a, W>>) -> Self {
+        Self::inner_new(reader, writer, fields, true)
     }
 }
 
@@ -370,14 +391,22 @@ impl<'a> SelectMenu<'a> {
         }
         self
     }
+}
 
+impl<'a, R, W: Write> SelectMenu<'a, R, W> {
     #[inline]
     fn disp_list(&mut self) -> MenuResult<()> {
         self.writer
             .write_all(format!("{}", self).as_bytes())
             .map_err(MenuError::from)
     }
+}
 
+impl<'a, R, W> SelectMenu<'a, R, W>
+where
+    R: Read,
+    W: Write,
+{
     fn select<Output>(&mut self) -> MenuResult<Output>
     where
         Output: FromStr,
@@ -387,7 +416,7 @@ impl<'a> SelectMenu<'a> {
         self.writer.write_all(self.prefix.as_bytes())?;
         self.writer.flush()?;
 
-        let out = raw_read_input(&self.reader)?;
+        let out = raw_read_input(&mut self.reader, &mut self.writer, self.raw)?;
 
         if let Some(field) = self
             .fields
@@ -432,7 +461,14 @@ impl<'a> SelectMenu<'a> {
     }
 }
 
-impl Display for SelectMenu<'_> {
+impl<'a, R, W> SelectMenu<'a, R, W> {
+    /// Returns its input and output streams, consuming the selectable menu.
+    pub fn get_io(self) -> (R, W) {
+        (self.reader.into_inner(), self.writer)
+    }
+}
+
+impl<R, W> Display for SelectMenu<'_, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // displays title at top
         if let TitlePos::Top = self.title.pos {
@@ -481,10 +517,10 @@ fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
 ///
 /// If the default value index or the aimed default field type is incorrect,
 /// it will return an error (See [`MenuError::IncorrectType`]).
-fn default_parse<Output>(
+fn default_parse<Output, W>(
     default: usize,
-    fields: &[SelectField<'_>],
-    writer: &mut Stdout,
+    fields: &[SelectField<'_, W>],
+    writer: &mut W,
 ) -> MenuResult<Output>
 where
     Output: FromStr,
@@ -497,10 +533,12 @@ where
     field.msg.parse().map_err(err_ty)
 }
 
-impl<Output> MenuBuilder<Output> for SelectMenu<'_>
+impl<Output, R, W> MenuBuilder<Output> for SelectMenu<'_, R, W>
 where
     Output: FromStr,
     Output::Err: 'static + Debug,
+    R: Read,
+    W: Write,
 {
     /// Displays the selective menu to the user, then return the field he selected.
     ///
@@ -570,19 +608,36 @@ where
 ///
 /// The `N` const parameter represents the amount of [`ValueField`](crate::field::ValueField)
 /// It has a global formatting applied to the fields it contains by inheritance.
-pub struct ValueMenu<'a, const N: usize> {
+pub struct ValueMenu<'a, R = Stdin, W = Stdout> {
     title: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
-    fields: IntoIter<Field<'a>, N>,
-    reader: Stdin,
-    writer: Stdout,
-    // used to know when to print the title
+    fields: IntoIter<Field<'a>>,
+    reader: BufReader<R>,
+    writer: W,
     first_popped: bool,
+    raw: bool,
 }
 
-impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a, N> {
+impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a> {
     /// Instantiate the value-menu from its value-fields array.
-    fn from(mut fields: [Field<'a>; N]) -> Self {
+    #[inline]
+    fn from(fields: [Field<'a>; N]) -> Self {
+        Self::from(Vec::from(fields))
+    }
+}
+
+impl<'a> From<Vec<Field<'a>>> for ValueMenu<'a> {
+    #[inline]
+    fn from(fields: Vec<Field<'a>>) -> Self {
+        Self::inner_new(stdin(), stdout(), fields, false)
+    }
+}
+
+impl<'a, R, W> ValueMenu<'a, R, W>
+where
+    R: Read,
+{
+    fn inner_new(reader: R, writer: W, mut fields: Vec<Field<'a>>, raw: bool) -> Self {
         let fmt: Rc<ValueFieldFormatting> = Rc::default();
 
         // inherits fmt on submenus title
@@ -594,14 +649,34 @@ impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a, N> {
             fields: fields.into_iter(),
             title: "",
             fmt,
-            reader: stdin(),
-            writer: stdout(),
+            reader: BufReader::new(reader),
+            writer,
             first_popped: false,
+            raw,
         }
+    }
+
+    /// Builds the menu from its input and output streams, with its fields vector.
+    #[inline]
+    pub fn new(reader: R, writer: W, fields: Vec<Field<'a>>) -> Self {
+        Self::inner_new(reader, writer, fields, true)
     }
 }
 
-impl<'a, const N: usize> ValueMenu<'a, N> {
+impl<'a, R, W> ValueMenu<'a, R, W>
+where
+    W: Write,
+{
+    fn print_title(&mut self) -> MenuResult<()> {
+        if !self.first_popped && !self.title.is_empty() {
+            writeln!(self.writer, "{}", self.title)?;
+            self.first_popped = true;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> ValueMenu<'a> {
     /// Give the global formatting applied to all the fields the menu contains.
     /// If a field has a custom formatting, it will uses the formatting rules of the field
     /// when printing to the writer.
@@ -619,13 +694,12 @@ impl<'a, const N: usize> ValueMenu<'a, N> {
         self.title = title;
         self
     }
+}
 
-    fn print_title(&mut self) -> MenuResult<()> {
-        if !self.first_popped && !self.title.is_empty() {
-            writeln!(self.writer, "{}", self.title)?;
-            self.first_popped = true;
-        }
-        Ok(())
+impl<'a, R, W> ValueMenu<'a, R, W> {
+    /// Returns its input and output streams, consuming the value-menu.
+    pub fn get_io(self) -> (R, W) {
+        (self.reader.into_inner(), self.writer)
     }
 
     fn next_field(&mut self) -> MenuResult<Field<'a>> {
@@ -648,15 +722,18 @@ pub trait MenuBuilder<Output> {
     }
 }
 
-impl<Output, const N: usize> MenuBuilder<Output> for ValueMenu<'_, N>
+impl<Output, R, W> MenuBuilder<Output> for ValueMenu<'_, R, W>
 where
     Output: FromStr,
     Output::Err: 'static + Debug,
+    R: Read,
+    W: Write,
 {
     /// Returns the output of the next field if present.
     fn next_output(&mut self) -> MenuResult<Output> {
         self.print_title()?;
-        self.next_field()?.build(&self.reader, &mut self.writer)
+        self.next_field()?
+            .menu_build(&mut self.reader, &mut self.writer, self.raw)
     }
 
     fn next_or_default(&mut self) -> Output
@@ -665,7 +742,7 @@ where
     {
         if self.print_title().is_ok() {
             self.next_field()
-                .map(|mut f| f.build_or_default(&self.reader, &mut self.writer))
+                .map(|mut f| f.menu_build_or_default(&mut self.reader, &mut self.writer, self.raw))
                 .unwrap_or_default()
         } else {
             Output::default()
