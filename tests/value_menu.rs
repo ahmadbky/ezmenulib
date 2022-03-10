@@ -19,7 +19,7 @@ macro_rules! test_menu {
             $fields,
         );
         $($st)*
-        let $output = String::from_utf8($name.get_io().1).expect("unexpected invalid utf8 output");
+        let $output = String::from_utf8($name.get_stream().unwrap().1).expect("unexpected invalid utf8 output");
     };
 }
 
