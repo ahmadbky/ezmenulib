@@ -28,57 +28,14 @@ use std::str::FromStr;
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
 /// or a menu of selectable values ([`SelectMenu`]).
-pub enum Field<'a> {
+pub enum Field<'a, R = BufReader<Stdin>, W = Stdout> {
     /// A field asking a value to the user.
     Value(ValueField<'a>),
     /// A field proposing selectable values to the user.
-    Select(SelectMenu<'a>),
+    Select(SelectMenu<'a, R, W>),
 }
 
-impl<'a> Field<'a> {
-    /// Builds the field according to its type.
-    ///
-    /// That is, if it is a value-field, it will ask the user a value then return it,
-    /// while if it is a selectable menu, it will display the menu to the user then return the value
-    /// selected.
-    ///
-    /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
-    pub(crate) fn menu_build<Output, R, W>(
-        &mut self,
-        reader: &mut R,
-        writer: &mut W,
-        raw: bool,
-    ) -> MenuResult<Output>
-    where
-        Output: FromStr,
-        Output::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
-    {
-        match self {
-            Self::Value(vf) => vf.menu_build(reader, writer, raw),
-            Self::Select(sm) => sm.next_output(),
-        }
-    }
-
-    pub(crate) fn menu_build_or_default<Output, R, W>(
-        &mut self,
-        reader: &mut R,
-        writer: &mut W,
-        raw: bool,
-    ) -> Output
-    where
-        Output: FromStr + Default,
-        Output::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
-    {
-        match self {
-            Self::Value(vf) => vf.menu_build_or_default(reader, writer, raw),
-            Self::Select(sm) => sm.next_or_default(),
-        }
-    }
-
+impl<'a, R, W> Field<'a, R, W> {
     /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
     ///
     /// If it is aimed on a selectable menu, the formatting rules will be applied on its title,
@@ -92,9 +49,52 @@ impl<'a> Field<'a> {
     }
 }
 
+impl<'a, R, W> Field<'a, R, W>
+where
+    R: BufRead,
+    W: Write,
+{
+    /// Builds the field according to its type.
+    ///
+    /// That is, if it is a value-field, it will ask the user a value then return it,
+    /// while if it is a selectable menu, it will display the menu to the user then return the value
+    /// selected.
+    ///
+    /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
+    pub(crate) fn menu_build<Output>(
+        &mut self,
+        stream: &mut MenuStream<R, W>,
+        raw: bool,
+    ) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+    {
+        match self {
+            Self::Value(vf) => vf.menu_build(stream, raw),
+            Self::Select(sm) => sm.next_output_with(stream),
+        }
+    }
+
+    pub(crate) fn menu_build_or_default<Output>(
+        &mut self,
+        stream: &mut MenuStream<R, W>,
+        raw: bool,
+    ) -> Output
+    where
+        Output: FromStr + Default,
+        Output::Err: 'static + Debug,
+    {
+        match self {
+            Self::Value(vf) => vf.menu_build_or_default(stream, raw),
+            Self::Select(sm) => sm.next_or_default_with(stream),
+        }
+    }
+}
+
 /// Type used to handle the binding function executed right after
 /// the corresponding field has been selected by the user.
-pub type Binding<W> = fn(&mut W) -> MenuResult<()>;
+pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult<()>;
 
 /// Struct modeling a field of a selective menu.
 ///
@@ -117,21 +117,21 @@ pub type Binding<W> = fn(&mut W) -> MenuResult<()>;
 ///     SelectField::new("two", 2),
 /// ]);
 /// ```
-pub struct SelectField<'a, W> {
+pub struct SelectField<'a, R, W> {
     pub(crate) msg: &'a str,
     chip: &'a str,
     custom_chip: bool,
-    bind: Option<Binding<W>>,
+    bind: Option<Binding<R, W>>,
 }
 
-impl<W> Display for SelectField<'_, W> {
+impl<R, W> Display for SelectField<'_, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.chip, f)?;
         Display::fmt(self.msg, f)
     }
 }
 
-impl<'a, W> From<&'a str> for SelectField<'a, W> {
+impl<'a, R, W> From<&'a str> for SelectField<'a, R, W> {
     /// Initializes the selection field for the menu.
     ///
     /// This associated function should not be used without context.
@@ -146,7 +146,7 @@ impl<'a, W> From<&'a str> for SelectField<'a, W> {
     }
 }
 
-impl<'a, W> SelectField<'a, W> {
+impl<'a, R, W> SelectField<'a, R, W> {
     /// Edits the chip of the selection field.
     ///
     /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
@@ -166,9 +166,9 @@ impl<'a, W> SelectField<'a, W> {
         }
     }
 
-    pub(crate) fn call_bind(&self, out: &mut W) -> MenuResult<()> {
+    pub(crate) fn call_bind(&self, stream: &mut MenuStream<R, W>) -> MenuResult<()> {
         if let Some(b) = self.bind {
-            b(out)?;
+            b(stream)?;
         }
         Ok(())
     }
@@ -204,7 +204,7 @@ impl<'a, W> SelectField<'a, W> {
     /// ```
     ///
     /// For other error, you can simply use the `MenuError::Other` variant and box your custom error type.
-    pub fn bind(mut self, bind: Binding<W>) -> Self {
+    pub fn bind(mut self, bind: Binding<R, W>) -> Self {
         self.bind = Some(bind);
         self
     }
@@ -421,7 +421,7 @@ impl<'a> ValueField<'a> {
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.build(stdin(), &mut stdout())
+        self.build(&mut BufReader::new(stdin()), &mut stdout())
     }
 
     /// Builds the field. It prints the message according to its formatting,
@@ -443,25 +443,48 @@ impl<'a> ValueField<'a> {
     ///     .build(&stdin, &mut stdout)
     ///     .unwrap();
     /// ```
-    pub fn build<T>(&self, reader: Stdin, writer: &mut Stdout) -> MenuResult<T>
+    #[inline]
+    pub fn build<T>(&self, reader: &mut BufReader<Stdin>, writer: &mut Stdout) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.menu_build(&mut BufReader::new(reader), writer, false)
+        self.menu_build(&mut MenuStream::with(reader, writer), false)
+    }
+
+    #[inline]
+    pub fn build_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+    {
+        self.menu_build(stream, true)
     }
 
     /// Builds the field, or returns the default value from the type.
     #[inline]
-    pub fn build_or_default<T>(&self, reader: Stdin, writer: &mut Stdout) -> T
+    pub fn build_or_default<T>(&self, reader: &mut BufReader<Stdin>, writer: &mut Stdout) -> T
     where
         T: FromStr + Default,
         T::Err: 'static + Debug,
     {
-        self.menu_build_or_default(&mut BufReader::new(reader), writer, false)
+        self.menu_build_or_default(&mut MenuStream::new(reader, writer), false)
     }
 
-    fn inner_build<T, R, W>(&self, reader: &mut R, writer: &mut W, raw: bool) -> MenuResult<T>
+    #[inline]
+    pub fn build_or_default_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
+    where
+        T: FromStr + Default,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+    {
+        self.menu_build_or_default(stream, true)
+    }
+
+    fn inner_build<T, R, W>(&self, stream: &mut MenuStream<R, W>, raw: bool) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -470,18 +493,16 @@ impl<'a> ValueField<'a> {
     {
         // outputs the field message with its formatting
         // see `<ValueField as Display>::fmt`
-        write!(writer, "{}", self)?;
-        writer.flush()?;
+        write!(stream, "{}", self)?;
+        stream.flush()?;
 
-        let output = raw_read_input(reader, writer, raw)?;
-
+        let output = raw_read_input(stream, raw)?;
         parse_value(output)
     }
 
     pub(crate) fn menu_build<T, R, W>(
         &self,
-        reader: &mut R,
-        writer: &mut W,
+        stream: &mut MenuStream<R, W>,
         raw: bool,
     ) -> MenuResult<T>
     where
@@ -493,7 +514,7 @@ impl<'a> ValueField<'a> {
         // loops while incorrect value
         loop {
             // try to parse to T, else repeat
-            match self.inner_build(reader, writer, raw) {
+            match self.inner_build(stream, raw) {
                 Ok(t) => break Ok(t),
                 Err(_) if self.default.is_some() => {
                     break default_parse(self.default.as_ref().unwrap())
@@ -505,8 +526,7 @@ impl<'a> ValueField<'a> {
 
     pub(crate) fn menu_build_or_default<T, R, W>(
         &self,
-        reader: &mut R,
-        writer: &mut W,
+        stream: &mut MenuStream<R, W>,
         raw: bool,
     ) -> T
     where
@@ -515,7 +535,7 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.inner_build(reader, writer, raw)
+        self.inner_build(stream, raw)
             .or(self
                 .default
                 .as_ref()
@@ -526,15 +546,15 @@ impl<'a> ValueField<'a> {
 }
 
 /// Returns the input value as a String from the standard input stream.
-pub(crate) fn raw_read_input<R, W>(reader: &mut R, writer: &mut W, raw: bool) -> MenuResult<String>
+pub(crate) fn raw_read_input<R, W>(stream: &mut MenuStream<R, W>, raw: bool) -> MenuResult<String>
 where
     R: BufRead,
     W: Write,
 {
     let mut out = String::new();
-    reader.read_line(&mut out)?;
+    stream.read_line(&mut out)?;
     if raw {
-        writer.write_all(out.as_bytes())?;
+        stream.write_all(out.as_bytes())?;
     }
     Ok(out.trim().to_owned())
 }
