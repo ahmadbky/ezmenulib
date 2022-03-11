@@ -25,8 +25,7 @@
 //! ```
 
 use crate::MenuError;
-use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
@@ -50,12 +49,14 @@ use std::str::FromStr;
 pub struct MenuVec<T>(pub Vec<T>);
 
 impl<T> AsRef<Vec<T>> for MenuVec<T> {
+    #[inline]
     fn as_ref(&self) -> &Vec<T> {
         &self.0
     }
 }
 
 impl<T> AsMut<Vec<T>> for MenuVec<T> {
+    #[inline]
     fn as_mut(&mut self) -> &mut Vec<T> {
         &mut self.0
     }
@@ -80,6 +81,7 @@ impl<T> DerefMut for MenuVec<T> {
 /// The error type used for parsing user input into a [`MenuVec<T>`].
 ///
 /// The `E` generic parameter means `<T as FromStr>::Err`.
+#[derive(PartialEq)]
 pub enum MenuVecParseError<E> {
     /// The user input is empty.
     Empty,
@@ -88,13 +90,14 @@ pub enum MenuVecParseError<E> {
 }
 
 impl<E> From<E> for MenuVecParseError<E> {
+    #[inline]
     fn from(err: E) -> Self {
         Self::ItemParsed(err)
     }
 }
 
 impl<E: Debug> Debug for MenuVecParseError<E> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let msg = match self {
             Self::Empty => "empty vector".to_owned(),
             Self::ItemParsed(e) => format!("parsing error: {:?}", e),
@@ -118,6 +121,7 @@ impl<T: FromStr> FromStr for MenuVec<T> {
 }
 
 impl<T> From<MenuVec<T>> for Vec<T> {
+    #[inline]
     fn from(m: MenuVec<T>) -> Self {
         m.0
     }
@@ -130,22 +134,24 @@ impl<T> From<MenuVec<T>> for Vec<T> {
 ///
 /// You can still access the bool inner value with
 /// `&x.0`, or `*x`, which is same as `x.as_ref()`.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
 pub struct MenuBool(pub bool);
 
-impl fmt::Display for MenuBool {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+impl Display for MenuBool {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
 impl AsRef<bool> for MenuBool {
+    #[inline]
     fn as_ref(&self) -> &bool {
         &self.0
     }
 }
 
 impl AsMut<bool> for MenuBool {
+    #[inline]
     fn as_mut(&mut self) -> &mut bool {
         &mut self.0
     }
@@ -182,5 +188,67 @@ impl FromStr for MenuBool {
 impl From<MenuBool> for bool {
     fn from(m: MenuBool) -> Self {
         m.0
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct MenuOption<T>(pub Option<T>);
+
+impl<T: Display> Display for MenuOption<T> {
+    /// Displays T if present, else nothing (`""`).
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match &self.0 {
+            Some(e) => Display::fmt(e, f),
+            None => f.write_str(""),
+        }
+    }
+}
+
+impl<T> AsRef<Option<T>> for MenuOption<T> {
+    #[inline]
+    fn as_ref(&self) -> &Option<T> {
+        &self.0
+    }
+}
+
+impl<T> AsMut<Option<T>> for MenuOption<T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut Option<T> {
+        &mut self.0
+    }
+}
+
+impl<T> Deref for MenuOption<T> {
+    type Target = Option<T>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl<T> DerefMut for MenuOption<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut()
+    }
+}
+
+impl<T> From<MenuOption<T>> for Option<T> {
+    #[inline]
+    fn from(mo: MenuOption<T>) -> Self {
+        mo.0
+    }
+}
+
+impl<T: FromStr> FromStr for MenuOption<T> {
+    type Err = T::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.trim().is_empty() {
+            Ok(Self(None))
+        } else {
+            Ok(Self(Some(T::from_str(s)?)))
+        }
     }
 }
