@@ -295,6 +295,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, io};
 
 /// The error type used by the menu builder.
+#[non_exhaustive]
 pub enum MenuError {
     /// An IO error, when flushing, reading or writing values.
     IOError(io::Error),
