@@ -1,3 +1,4 @@
+use chrono::prelude::*;
 use ezmenulib::prelude::*;
 use std::io::stdout;
 
@@ -105,5 +106,22 @@ fn default_value() {
         output,
         "--> your age please
 >> mlzigujz\n"
+    );
+}
+
+#[test]
+fn date_value() {
+    test_menu! {
+        "lol\n",
+        vec![Field::Value(ValueField::from("date").default_value("2015-04-29"))],
+        date: NaiveDate,
+        => output,
+    };
+
+    assert_eq!(date, NaiveDate::from_ymd(2015, 04, 29));
+    assert_eq!(
+        output,
+        "--> date (default: 2015-04-29)
+>> lol\n"
     );
 }
