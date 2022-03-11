@@ -125,3 +125,18 @@ fn date_value() {
 >> lol\n"
     );
 }
+
+#[test]
+#[should_panic]
+fn incorrect_default_value() {
+    test_menu! {
+        "Ahmad\nno",
+        vec![
+            Field::Value(ValueField::from("name")),
+            Field::Value(ValueField::from("age").default_value("yep")),
+        ],
+        name: String,
+        age: u8,
+        => output,
+    };
+}

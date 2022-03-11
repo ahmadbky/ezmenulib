@@ -516,10 +516,11 @@ impl<'a> ValueField<'a> {
             // try to parse to T, else repeat
             match self.inner_build(stream, raw) {
                 Ok(t) => break Ok(t),
-                Err(_) if self.default.is_some() => {
-                    break default_parse(self.default.as_ref().unwrap())
+                Err(_) => {
+                    if let Some(default) = &self.default {
+                        break Ok(default_parse(default));
+                    }
                 }
-                _ => continue,
             }
         }
     }
@@ -535,13 +536,11 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.inner_build(stream, raw)
-            .or(self
-                .default
-                .as_ref()
-                .ok_or(MenuError::EmptyInput)
-                .and_then(default_parse))
-            .unwrap_or_default()
+        if let Ok(t) = self.inner_build(stream, raw) {
+            t
+        } else {
+            self.default.as_ref().map(default_parse).unwrap_or_default()
+        }
     }
 }
 
@@ -580,14 +579,20 @@ where
 /// Function that parses the default value with a check if the default value is incorrect.
 /// It it used to return a value if there is some default value,
 /// and if no value was provided, or if the value provided is incorrect.
-fn default_parse<T>(default: &DefaultValue<'_>) -> MenuResult<T>
+fn default_parse<T>(default: &DefaultValue<'_>) -> T
 where
     T: FromStr,
     T::Err: 'static + Debug,
 {
-    match default {
-        DefaultValue::Value(s) => parse_value(s),
-        DefaultValue::Env(s) => parse_value(s),
+    fn get_msg(s: impl AsRef<str>) -> String {
+        format!(
+            "an incorrect value type has been used as default value: `{}`",
+            s.as_ref()
+        )
     }
-    .map_err(|e| MenuError::Type(Box::new(e)))
+
+    match default {
+        DefaultValue::Value(s) => s.parse().expect(get_msg(s).as_str()),
+        DefaultValue::Env(s) => s.parse().expect(get_msg(s).as_str()),
+    }
 }

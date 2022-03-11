@@ -299,8 +299,6 @@ use std::{fmt, io};
 pub enum MenuError {
     /// An IO error, when flushing, reading or writing values.
     IOError(io::Error),
-    /// An incorrect type of value has been used as default value.
-    Type(Box<dyn Debug>),
     /// A parsing error for a value.
     Parse(String, Box<dyn Debug>),
     /// There is no more field to call for an output.
@@ -334,10 +332,6 @@ impl Display for MenuError {
             "{}",
             match self {
                 Self::IOError(e) => format!("IO error: {}", e),
-                Self::Type(e) => format!(
-                    "an incorrect value has been used as default value: {:?}",
-                    *e
-                ),
                 Self::Parse(v, e) =>
                     format!("the input value provided `{}` is incorrect: {:?}", v, e),
                 Self::NoMoreField =>
