@@ -1,4 +1,4 @@
-use ezmenulib::customs::MenuVec;
+use ezmenulib::customs::{MenuOption, MenuVec};
 use ezmenulib::prelude::*;
 use std::error::Error;
 use std::str::FromStr;
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ]);
 
     let authors: MenuVec<String> = license.next_output()?;
-    let name: String = license.next_output()?;
+    let name: MenuOption<String> = license.next_output()?;
     let date: u16 = license.next_output()?;
     let ty: Type = license.next_output()?;
 
