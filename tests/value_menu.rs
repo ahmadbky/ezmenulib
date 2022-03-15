@@ -20,7 +20,7 @@ macro_rules! test_menu {
             $fields,
         );
         $($st)*
-        let $output = String::from_utf8($name.get_stream().unwrap().1).expect("unexpected invalid utf8 output");
+        let $output = String::from_utf8($name.retrieve().1).expect("unexpected invalid utf8 output");
     };
 }
 
@@ -43,7 +43,7 @@ fn one_field() {
     assert_eq!(
         output,
         "--> your name please
->> Ahmad\n"
+>> \n"
     );
 }
 
@@ -63,9 +63,9 @@ fn retrieve_value() {
     assert_eq!(
         output,
         "--> your name please
->> Ahmad
+>> 
 --> how old are you
->> 19\n"
+>> \n"
     );
 
     assert_eq!(name, "Ahmad");
@@ -85,9 +85,9 @@ fn loop_ask() {
     assert_eq!(
         output,
         "--> your age please
->> zmelkfjz
+>> 
 --> your age please
->> 86\n"
+>> \n"
     );
 }
 
@@ -105,7 +105,7 @@ fn default_value() {
     assert_eq!(
         output,
         "--> your age please
->> mlzigujz\n"
+>> \n"
     );
 }
 
@@ -122,7 +122,7 @@ fn date_value() {
     assert_eq!(
         output,
         "--> date (default: 2015-04-29)
->> lol\n"
+>> \n"
     );
 }
 
@@ -135,8 +135,8 @@ fn incorrect_default_value() {
             Field::Value(ValueField::from("name")),
             Field::Value(ValueField::from("age").default_value("yep")),
         ],
-        name: String,
-        age: u8,
-        => output,
+        _name: String,
+        _age: u8,
+        => _output,
     };
 }
