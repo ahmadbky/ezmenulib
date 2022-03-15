@@ -9,3 +9,4 @@
   * Added methods and function arguments to inherit a stream.
   * Added methods to retrieve a menu stream, and the reader and writer.
 * Added default value from an environment variable.
+* Added `chrono` optional dependency crate for date-time values providing.
