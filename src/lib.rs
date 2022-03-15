@@ -103,7 +103,10 @@
 //!
 //! You can provide a default input value to a field with the `ValueField::default` method:
 //! ```rust
-//! ValueField::from("Date").default("2022")
+//! # use ezmenulib::field::ValueField;
+//! # fn get_field() -> ValueField<'static> {
+//! ValueField::from("Date").default_value("2022")
+//! # }
 //! ```
 //!
 //! If the user provided an incorrect input, the program will not re-ask a value to the user,
@@ -119,8 +122,11 @@
 //! with formatting rules:
 //!
 //! ```rust
+//! # use ezmenulib::prelude::*;
+//! # fn get_field() -> ValueField<'static> {
 //! ValueField::from("Date")
 //!     .fmt(ValueFieldFormatting::default(false))
+//! # }
 //! ```
 //!
 //! ## Use custom value types
@@ -136,7 +142,7 @@
 //!
 //! ```rust
 //! use std::str::FromStr;
-//! use ezmenulib::ValueField;
+//! use ezmenulib::field::ValueField;
 //!
 //! enum Type {
 //!     MIT,
@@ -206,10 +212,10 @@
 //!     }
 //! }
 //!
-//! let license_type = SelectMenu::from([
-//!     SelectField::new("MIT"),
-//!     SelectField::new("GPL"),
-//!     SelectField::new("BSD"),
+//! let license_type: Type = SelectMenu::from([
+//!     SelectField::from("MIT"),
+//!     SelectField::from("GPL"),
+//!     SelectField::from("BSD"),
 //! ])
 //! .title(SelectTitle::from("Choose a license type"))
 //! .default(0)

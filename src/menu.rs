@@ -192,10 +192,10 @@ impl Default for TitlePos {
 ///     }
 /// }
 ///
-/// let license_type = SelectMenu::from([
-///     SelectField::new("MIT"),
-///     SelectField::new("GPL"),
-///     SelectField::new("BSD"),
+/// let license_type: Type = SelectMenu::from([
+///     SelectField::from("MIT"),
+///     SelectField::from("GPL"),
+///     SelectField::from("BSD"),
 /// ])
 /// .title(SelectTitle::from("Choose a license type"))
 /// .default(0)

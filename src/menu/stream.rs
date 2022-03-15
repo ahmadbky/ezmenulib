@@ -85,6 +85,10 @@ impl<T> DerefMut for Stream<'_, T> {
 /// instantiate the stream:
 ///
 /// ```
+/// # use std::io::{stdin, stdout};
+/// # use ezmenulib::menu::MenuStream;
+/// # let my_stdin = stdin();
+/// # let my_stdout = stdout();
 /// let mut stream = MenuStream::wrap_reader(my_stdin, my_stdout);
 /// ```
 ///
@@ -97,7 +101,10 @@ impl<T> DerefMut for Stream<'_, T> {
 /// In the latter case, you can still get the ownership of the menu stream with the
 /// [`MenuStream::retrieve`] method:
 /// ```
+/// # use std::io::{stdin, stdout};
 /// use ezmenulib::menu::MenuStream;
+/// # let input = stdin();
+/// # let output = stdout();
 /// let mut stream = MenuStream::new(input, output);
 /// // ...
 /// let (input, output) = stream.retrieve();
