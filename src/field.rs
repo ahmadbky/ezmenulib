@@ -20,7 +20,7 @@
 use crate::prelude::*;
 use std::env;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Stdout, Write};
+use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -28,7 +28,7 @@ use std::str::FromStr;
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
 /// or a menu of selectable values ([`SelectMenu`]).
-pub enum Field<'a, R = BufReader<Stdin>, W = Stdout> {
+pub enum Field<'a, R = In, W = Out> {
     /// A field asking a value to the user.
     Value(ValueField<'a>),
     /// A field proposing selectable values to the user.
@@ -61,32 +61,24 @@ where
     /// selected.
     ///
     /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
-    pub(crate) fn menu_build<Output>(
-        &mut self,
-        stream: &mut MenuStream<R, W>,
-        raw: bool,
-    ) -> MenuResult<Output>
+    pub(crate) fn menu_build<Output>(&mut self, stream: &mut MenuStream<R, W>) -> MenuResult<Output>
     where
         Output: FromStr,
         Output::Err: 'static + Debug,
     {
         match self {
-            Self::Value(vf) => vf.menu_build(stream, raw),
+            Self::Value(vf) => vf.menu_build(stream),
             Self::Select(sm) => sm.next_output_with(stream),
         }
     }
 
-    pub(crate) fn menu_build_or_default<Output>(
-        &mut self,
-        stream: &mut MenuStream<R, W>,
-        raw: bool,
-    ) -> Output
+    pub(crate) fn menu_build_or_default<Output>(&mut self, stream: &mut MenuStream<R, W>) -> Output
     where
         Output: FromStr + Default,
         Output::Err: 'static + Debug,
     {
         match self {
-            Self::Value(vf) => vf.menu_build_or_default(stream, raw),
+            Self::Value(vf) => vf.menu_build_or_default(stream),
             Self::Select(sm) => sm.next_or_default_with(stream),
         }
     }
@@ -117,7 +109,7 @@ pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult<()>;
 ///     SelectField::new("two", 2),
 /// ]);
 /// ```
-pub struct SelectField<'a, R, W> {
+pub struct SelectField<'a, R = In, W = Out> {
     pub(crate) msg: &'a str,
     chip: &'a str,
     custom_chip: bool,
@@ -223,7 +215,7 @@ impl<'a, R, W> SelectField<'a, R, W> {
 #[derive(Clone)]
 pub struct ValueFieldFormatting<'a> {
     /// The small string slice displayed before the message acting as a list style attribute
-    /// (by default set as `--> `).
+    /// (by default set as `"--> "`).
     pub chip: &'a str,
     /// The small string slice displayed before the user input (by default set as `">> "`).
     pub prefix: &'a str,
@@ -328,7 +320,6 @@ impl Display for DefaultValue<'_> {
 /// ```
 pub struct ValueField<'a> {
     msg: &'a str,
-    // pointer to the parent fmt or its own fmt
     fmt: Rc<ValueFieldFormatting<'a>>,
     custom_fmt: bool,
     default: Option<DefaultValue<'a>>,
@@ -421,7 +412,7 @@ impl<'a> ValueField<'a> {
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.build(&mut BufReader::new(stdin()), &mut stdout())
+        self.build_with(&mut MenuStream::default())
     }
 
     /// Builds the field. It prints the message according to its formatting,
@@ -444,14 +435,18 @@ impl<'a> ValueField<'a> {
     ///     .unwrap();
     /// ```
     #[inline]
-    pub fn build<T>(&self, reader: &mut BufReader<Stdin>, writer: &mut Stdout) -> MenuResult<T>
+    pub fn build<T>(&self, reader: &mut In, writer: &mut Out) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.menu_build(&mut MenuStream::with(reader, writer), false)
+        self.menu_build(&mut MenuStream::with(reader, writer))
     }
 
+    /// Builds the fields with a given menu stream. It prints out the message to the stream
+    /// according to its formatting, then returns the corresponding value.
+    ///
+    /// You need to instantiate beforehand the `MenuStream` to use this method.
     #[inline]
     pub fn build_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
     where
@@ -460,19 +455,20 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.menu_build(stream, true)
+        self.menu_build(stream)
     }
 
     /// Builds the field, or returns the default value from the type.
     #[inline]
-    pub fn build_or_default<T>(&self, reader: &mut BufReader<Stdin>, writer: &mut Stdout) -> T
+    pub fn build_or_default<T>(&self, reader: &mut In, writer: &mut Out) -> T
     where
         T: FromStr + Default,
         T::Err: 'static + Debug,
     {
-        self.menu_build_or_default(&mut MenuStream::new(reader, writer), false)
+        self.menu_build_or_default(&mut MenuStream::new(reader, writer))
     }
 
+    /// Builds the field with a given menu stream, or returns the default value from the type.
     #[inline]
     pub fn build_or_default_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
     where
@@ -481,10 +477,10 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.menu_build_or_default(stream, true)
+        self.menu_build_or_default(stream)
     }
 
-    fn inner_build<T, R, W>(&self, stream: &mut MenuStream<R, W>, raw: bool) -> MenuResult<T>
+    fn inner_build<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -496,15 +492,11 @@ impl<'a> ValueField<'a> {
         write!(stream, "{}", self)?;
         stream.flush()?;
 
-        let output = raw_read_input(stream, raw)?;
+        let output = raw_read_input(stream)?;
         parse_value(output)
     }
 
-    pub(crate) fn menu_build<T, R, W>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        raw: bool,
-    ) -> MenuResult<T>
+    pub(crate) fn menu_build<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -514,7 +506,7 @@ impl<'a> ValueField<'a> {
         // loops while incorrect value
         loop {
             // try to parse to T, else repeat
-            match self.inner_build(stream, raw) {
+            match self.inner_build(stream) {
                 Ok(t) => break Ok(t),
                 Err(_) => {
                     if let Some(default) = &self.default {
@@ -525,18 +517,14 @@ impl<'a> ValueField<'a> {
         }
     }
 
-    pub(crate) fn menu_build_or_default<T, R, W>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        raw: bool,
-    ) -> T
+    pub(crate) fn menu_build_or_default<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
     where
         T: FromStr + Default,
         T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
     {
-        if let Ok(t) = self.inner_build(stream, raw) {
+        if let Ok(t) = self.inner_build(stream) {
             t
         } else {
             self.default.as_ref().map(default_parse).unwrap_or_default()
@@ -545,16 +533,14 @@ impl<'a> ValueField<'a> {
 }
 
 /// Returns the input value as a String from the standard input stream.
-pub(crate) fn raw_read_input<R, W>(stream: &mut MenuStream<R, W>, raw: bool) -> MenuResult<String>
+pub(crate) fn raw_read_input<R, W>(stream: &mut MenuStream<R, W>) -> MenuResult<String>
 where
     R: BufRead,
     W: Write,
 {
     let mut out = String::new();
     stream.read_line(&mut out)?;
-    if raw {
-        stream.write_all(out.as_bytes())?;
-    }
+    stream.write_all(b"\n")?;
     Ok(out.trim().to_owned())
 }
 
@@ -568,12 +554,20 @@ where
     T::Err: 'static + Debug,
 {
     let s = s.as_ref();
-    if s.is_empty() {
-        Err(MenuError::EmptyInput)
-    } else {
-        s.parse()
-            .map_err(|e| MenuError::Parse(s.to_owned(), Box::new(e)))
-    }
+    s.parse()
+        .map_err(|e| MenuError::Parse(s.to_owned(), Box::new(e)))
+}
+
+pub(crate) fn default_parse_failed<S, E>(s: S, e: E) -> !
+where
+    S: ToString,
+    E: 'static + Debug,
+{
+    panic!(
+        "`{}` has been used as default value but its type is incorrect: {:?}",
+        s.to_string(),
+        e
+    )
 }
 
 /// Function that parses the default value with a check if the default value is incorrect.
@@ -584,15 +578,8 @@ where
     T: FromStr,
     T::Err: 'static + Debug,
 {
-    fn get_msg(s: impl AsRef<str>) -> String {
-        format!(
-            "an incorrect value type has been used as default value: `{}`",
-            s.as_ref()
-        )
-    }
-
     match default {
-        DefaultValue::Value(s) => s.parse().expect(get_msg(s).as_str()),
-        DefaultValue::Env(s) => s.parse().expect(get_msg(s).as_str()),
+        DefaultValue::Value(s) => s.parse().unwrap_or_else(|e| default_parse_failed(s, e)),
+        DefaultValue::Env(s) => s.parse().unwrap_or_else(|e| default_parse_failed(s, e)),
     }
 }

@@ -176,6 +176,8 @@ impl DerefMut for MenuBool {
 impl FromStr for MenuBool {
     type Err = MenuError;
 
+    /// Parses the string slice to a boolean accepting more human values,
+    /// than only `"true"` or `"false"`, like `"yes"` or `"no"`..
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" => Ok(Self(true)),
@@ -191,6 +193,13 @@ impl From<MenuBool> for bool {
     }
 }
 
+/// Wrapper type used to handle an optional user input value.
+///
+/// It implements `FromStr` trait, returning `Some(value)` if a value is
+/// indeed present in the string slice, else it returns `None`.
+///
+/// You can still access the `Option<T>` inner value with
+/// `&x.0`, or `*x`, which is same as `x.as_ref()`.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct MenuOption<T>(pub Option<T>);
 
@@ -244,11 +253,12 @@ impl<T> From<MenuOption<T>> for Option<T> {
 impl<T: FromStr> FromStr for MenuOption<T> {
     type Err = T::Err;
 
+    /// Returns `Some(value)` if the string contains a value, else `None`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.trim().is_empty() {
             Ok(Self(None))
         } else {
-            Ok(Self(Some(T::from_str(s)?)))
+            Ok(Self(Some(s.parse()?)))
         }
     }
 }

@@ -2,6 +2,10 @@
 
 Fast designing menus for your Rust CLI programs.
 
+> Caution: This library is not completely stable yet.
+Many changes may occur depending on versions. I am still looking for a sustainable design
+of the library.
+
 This crate provides a library with structs and traits to easily build menus.
 It includes type-checking from the user input, and a formatting customization.
 
@@ -11,7 +15,9 @@ build a menu on your own after.
 
 It can also be used as a mode selection, for a game for example.
 
-> Note: If you want to use the `derive(Menu)` macro,
+### Note
+
+If you want to use the `derive(Menu)` macro,
 you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
 This crate may however contain features that are not available on the ezmenu crate.
 

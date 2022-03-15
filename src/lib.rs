@@ -1,23 +1,29 @@
 //! Fast designing menus for your Rust CLI programs.
 //!
+//! > Caution: This library is not completely stable yet.
+//! Many changes may occur depending on versions. I am still looking for a sustainable design
+//! of the library.
+//!
 //! This crate provides a library with structs and traits to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
 //!
-//! This crate is really useful if you use [structopt](https://docs.rs/structopt/)
-//! or [clap](https://docs.rs/clap/) crates beside this, so you can get the matches safely, and
+//! This crate is useful if you use [structopt](https://docs.rs/structopt/)
+//! or [clap](https://docs.rs/clap/) crates beside it, so you can get the matches safely, and
 //! build a menu on your own after.
 //!
 //! It can also be used as a mode selection, for a game for example.
 //!
-//! > Note: If you want to use the derive Menu macro,
+//! ## Note
+//!
+//! If you want to use the derive Menu macro,
 //! you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
 //! This crate may however contain features that are not available on the ezmenu crate.
 //!
 //! # Value-menus
 //!
-//! The first type of menu you can build is a [value-menu](crate::menu::ValueMenu).
+//! The first type of menu this library provides is a [value-menu](crate::menu::ValueMenu).
 //! These menus are used to retrieve data values from the user by iterating on the next outputs.
-//! At each iteration, it prompts the user a value, parses it and reprompts until it is correct,
+//! At each iteration, it prompts the user a value, parses it and prompts until it is correct,
 //! then returns it.
 //!
 //! ## Example
@@ -45,8 +51,10 @@
 //! Hello there!
 //! --> Give your name
 //! >> Ahmad
+//!
 //! --> Give a number
 //! >> 1000
+//!
 //! values provided: name=Ahmad, number=1000
 //! ```
 //!
@@ -83,8 +91,10 @@
 //! ```text
 //! ==> Authors
 //! >> ...
+//!
 //! --- Project name
 //! >> ...
+//!
 //! ==> Date
 //! >> ...
 //! ```
@@ -99,11 +109,17 @@
 //! If the user provided an incorrect input, the program will not re-ask a value to the user,
 //! but will directly return the default value instead.
 //!
-//! By default, the default value is visible. If you want to hide it, you can do so
+//! By default, the default value is visible by the user, like above:
+//!
+//! ```text
+//! --> Date (default: 2022)
+//! ```
+//!
+//! If you want to hide it, you can do so
 //! with formatting rules:
 //!
 //! ```rust
-//! ValueField::from("...")
+//! ValueField::from("Date")
 //!     .fmt(ValueFieldFormatting::default(false))
 //! ```
 //!
@@ -271,7 +287,7 @@
 //!     .title(SelectTitle::from("License type"))
 //!     .default(0)),
 //! ])
-//! .title("Descibre the project license");
+//! .title("Describe the project license");
 //! ```
 
 #![warn(missing_docs, missing_copy_implementations, unused_allocation)]
@@ -301,17 +317,10 @@ pub enum MenuError {
     IOError(io::Error),
     /// A parsing error for a value.
     Parse(String, Box<dyn Debug>),
-    /// There is no more field to call for an output.
-    ///
-    /// This error appears when calling `<ValueMenu as Menu>::next_output` method whereas
-    /// the menu building has finished.
-    NoMoreField,
     /// An environment variable error.
     EnvVar(String, VarError),
     /// An incorrect selection input has been provided.
     Select(String),
-    /// The input is empty.
-    EmptyInput,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
     /// by returning an `Err(MenuError::Other(...))`
@@ -334,15 +343,11 @@ impl Display for MenuError {
                 Self::IOError(e) => format!("IO error: {}", e),
                 Self::Parse(v, e) =>
                     format!("the input value provided `{}` is incorrect: {:?}", v, e),
-                Self::NoMoreField =>
-                    "attempted to get the next output while there is no more field in the menu"
-                        .to_owned(),
                 Self::EnvVar(v, e) => format!(
                     "attempted to get a default value from the environment variable `{}`: {}",
                     v, e
                 ),
                 Self::Select(s) => format!("incorrect selection input: `{}`", s),
-                Self::EmptyInput => "empty input".to_owned(),
                 Self::Other(e) => format!("an error occurred: {:?}", e),
             }
         ))
