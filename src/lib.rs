@@ -199,23 +199,10 @@
 //!     BSD,
 //! }
 //!
-//! impl FromStr for Type {
-//!     type Err = MenuError;
-//!
-//!     fn from_str(s: &str) -> MenuResult<Self> {
-//!         match s.to_lowercase().as_str() {
-//!             "mit" => Ok(Self::MIT),
-//!             "gpl" => Ok(Self::GPL),
-//!             "bsd" => Ok(Self::BSD),
-//!             s => Err(MenuError::from(format!("unknown license type: {}", s))),
-//!         }
-//!     }
-//! }
-//!
 //! let license_type: Type = SelectMenu::from([
-//!     SelectField::from("MIT"),
-//!     SelectField::from("GPL"),
-//!     SelectField::from("BSD"),
+//!     SelectField::new("MIT", Type::MIT),
+//!     SelectField::new("GPL", Type::GPL),
+//!     SelectField::new("BSD", Type::BSD),
 //! ])
 //! .title(SelectTitle::from("Choose a license type"))
 //! .default(0)
@@ -282,13 +269,19 @@
 //! ```
 //! use ezmenulib::prelude::*;
 //!
+//! enum Type {
+//!     MIT,
+//!     GPL,
+//!     BSD,
+//! }
+//!
 //! let mut license = ValueMenu::from([
 //!     Field::Value(ValueField::from("Authors")),
 //!     Field::Value(ValueField::from("Project name")),
 //!     Field::Select(SelectMenu::from([
-//!         SelectField::from("MIT"),
-//!         SelectField::from("GPL"),
-//!         SelectField::from("BSD"),
+//!         SelectField::new("MIT", Type::MIT),
+//!         SelectField::new("GPL", Type::GPL),
+//!         SelectField::new("BSD", Type::BSD),
 //!     ])
 //!     .title(SelectTitle::from("License type"))
 //!     .default(0)),
