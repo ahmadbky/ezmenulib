@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.11
+
+* Removed `T: FromStr` and `<T as FromStr>::Err: 'static + Debug` restrictions for `SelectMenu`.
+  * Now the output type `T` has to be `'static`.
+  * The user has to enter the index of the selection.
+  * To bind the output value to its selection field, you use the `SelectField::new` function.
+  * Retrieving a selectable menu output from a value-menu is no more done with
+`<ValueMenu as MenuBuilder>::next_output` function, because it requests output to
+implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function, to bypass this restriction.
+
 ## 0.2.10 (migrated from 0.2.9)
 
 * Added new custom value type: `MenuOption<T>`.
