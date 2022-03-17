@@ -57,32 +57,19 @@
 //!     BSD,
 //! }
 //!
-//! impl FromStr for Type {
-//!     type Err = MenuError;
-//!
-//!     fn from_str(s: &str) -> MenuResult<Self> {
-//!         match s.to_lowercase().as_str() {
-//!             "mit" => Ok(Self::MIT),
-//!             "gpl" => Ok(Self::GPL),
-//!             "bsd" => Ok(Self::BSD),
-//!             s => Err(MenuError::from(format!("unknown license type: {}", s))),
-//!         }
-//!     }
-//! }
-//!
 //! let mut license = ValueMenu::from([
 //!     Field::Value(ValueField::from("Authors")),
 //!     Field::Select(SelectMenu::from([
-//!         SelectField::from("MIT"),
-//!         SelectField::from("GPL"),
-//!         SelectField::from("BSD"),
+//!         SelectField::new("MIT", Type::MIT),
+//!         SelectField::new("GPL", Type::GPL),
+//!         SelectField::new("BSD", Type::BSD),
 //!     ])
 //!     .default(0)
 //!     .title(SelectTitle::from("Select the license type"))),
 //! ]);
 //!
 //! let authors: customs::MenuVec<String> = license.next_output().unwrap();
-//! let ty: Type = license.next_output().unwrap();
+//! let ty: Type = license.next_select().unwrap();
 //! ```
 
 mod stream;
@@ -129,9 +116,9 @@ pub trait GetStream<'s, R: 's, W: 's>: Sized {
 /// use ezmenulib::prelude::*;
 ///
 /// let amount: MenuResult<u8> = SelectMenu::from([
-///     SelectField::from("first"),
-///     SelectField::from("second"),
-///     SelectField::from("third"),
+///     SelectField::new("first", 1u8),
+///     SelectField::new("second", 2u8),
+///     SelectField::new("third", 3u8),
 /// ])
 /// .title(SelectTitle::from("set the podium").pos(TitlePos::Bottom))
 /// .next_output();
@@ -179,23 +166,10 @@ impl Default for TitlePos {
 ///     BSD,
 /// }
 ///
-/// impl FromStr for Type {
-///     type Err = MenuError;
-///
-///     fn from_str(s: &str) -> MenuResult<Self> {
-///         match s.to_lowercase().as_str() {
-///             "mit" => Ok(Self::MIT),
-///             "gpl" => Ok(Self::GPL),
-///             "bsd" => Ok(Self::BSD),
-///             s => Err(MenuError::from(format!("unknown license type: {}", s))),
-///         }
-///     }
-/// }
-///
 /// let license_type: Type = SelectMenu::from([
-///     SelectField::from("MIT"),
-///     SelectField::from("GPL"),
-///     SelectField::from("BSD"),
+///     SelectField::new("MIT", Type::MIT),
+///     SelectField::new("GPL", Type::GPL),
+///     SelectField::new("BSD", Type::BSD),
 /// ])
 /// .title(SelectTitle::from("Choose a license type"))
 /// .default(0)
@@ -234,8 +208,8 @@ pub struct SelectMenu<'a, R = In, W = Out> {
 /// use ezmenulib::{prelude::*, customs::MenuBool};
 ///     
 /// let is_adult: MenuBool = SelectMenu::from([
-///     SelectField::from("yes"),
-///     SelectField::from("no"),
+///     SelectField::new("yes", MenuBool(true)),
+///     SelectField::new("no", MenuBool(false)),
 /// ])
 /// .title(SelectTitle::from("Are you an adult?")
 ///     .fmt(ValueFieldFormatting::chip("==> "))
@@ -471,10 +445,9 @@ impl<R, W> Display for SelectMenu<'_, R, W> {
     }
 }
 
-/// Returns an error meaning that the value type contained in the string slice is incorrect.
-#[inline]
-fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
-    MenuError::from(format!("incorrect default value type: {:?}", e))
+#[inline(never)]
+fn assert_default_idx(default: usize, max: usize) {
+    assert!(default < max, "incorrect index");
 }
 
 /// Returns the default value among the fields.
@@ -483,34 +456,21 @@ fn err_ty<E: 'static + Debug>(e: E) -> MenuError {
 /// it will return an error (See [`MenuError::IncorrectType`]).
 fn default_parse<Output, R, W>(
     default: usize,
-    fields: &[SelectField<'_, R, W>],
+    fields: &mut Vec<SelectField<'_, R, W>>,
     stream: &mut MenuStream<R, W>,
 ) -> MenuResult<Output>
 where
-    Output: FromStr,
-    Output::Err: 'static + Debug,
+    Output: 'static,
 {
-    let field = fields.get(default).unwrap_or_else(|| {
-        default_parse_failed(
-            default,
-            format!(
-                "incorrect index: fields vector length is {}, index is {}",
-                fields.len(),
-                default
-            ),
-        )
-    });
+    assert_default_idx(default, fields.len());
+    let field = fields.remove(default);
     field.call_bind(stream)?;
-    Ok(field
-        .msg
-        .parse()
-        .unwrap_or_else(|e| default_parse_failed(default, e)))
+    Ok(field.select())
 }
 
 impl<Output, R, W> MenuBuilder<Output, R, W> for SelectMenu<'_, R, W>
 where
-    Output: FromStr,
-    Output::Err: 'static + Debug,
+    Output: 'static,
     R: BufRead,
     W: Write,
 {
@@ -542,10 +502,10 @@ where
     /// }
     ///
     /// let amount: Amount = SelectMenu::from([
-    ///     SelectField::from("one"),
-    ///     SelectField::from("two"),
-    ///     SelectField::from("three"),
-    ///     SelectField::from("more"),
+    ///     SelectField::new("one", Amount::Exact(1)),
+    ///     SelectField::new("two", Amount::Exact(2)),
+    ///     SelectField::new("three", Amount::Exact(3)),
+    ///     SelectField::new("more", Amount::More),
     /// ])
     /// .next_output()
     /// .unwrap();
@@ -562,11 +522,16 @@ where
 
         // loops while incorrect input
         loop {
-            match select(&mut self.stream, self.prefix, self.default, &self.fields) {
+            match select(
+                &mut self.stream,
+                self.prefix,
+                self.default,
+                &mut self.fields,
+            ) {
                 Ok(out) => break Ok(out),
                 Err(_) => {
                     if let Some(default) = self.default {
-                        break Ok(default_parse(default, &self.fields, &mut self.stream)?);
+                        break Ok(default_parse(default, &mut self.fields, &mut self.stream)?);
                     }
                 }
             }
@@ -583,11 +548,11 @@ where
         stream.write_all(format!("{}", self).as_bytes())?;
 
         loop {
-            match select(stream, self.prefix, self.default, &self.fields) {
+            match select(stream, self.prefix, self.default, &mut self.fields) {
                 Ok(out) => break Ok(out),
                 Err(_) => {
                     if let Some(default) = self.default {
-                        break Ok(default_parse(default, &self.fields, stream)?);
+                        break Ok(default_parse(default, &mut self.fields, stream)?);
                     }
                 }
             }
@@ -610,7 +575,13 @@ where
         }
         .is_ok()
         {
-            select(&mut self.stream, self.prefix, self.default, &self.fields).unwrap_or_default()
+            select(
+                &mut self.stream,
+                self.prefix,
+                self.default,
+                &mut self.fields,
+            )
+            .unwrap_or_default()
         } else {
             Output::default()
         }
@@ -627,7 +598,7 @@ where
         Output: Default,
     {
         if stream.write_all(format!("{}", self).as_bytes()).is_ok() {
-            select(stream, self.prefix, self.default, &self.fields).unwrap_or_default()
+            select(stream, self.prefix, self.default, &mut self.fields).unwrap_or_default()
         } else {
             Output::default()
         }
@@ -640,54 +611,30 @@ fn select<Output, R, W>(
     stream: &mut MenuStream<R, W>,
     prefix: &str,
     default: Option<usize>,
-    fields: &[SelectField<R, W>],
+    fields: &mut Vec<SelectField<R, W>>,
 ) -> MenuResult<Output>
 where
     W: Write,
     R: BufRead,
-    Output: FromStr,
-    Output::Err: 'static + Debug,
+    Output: 'static,
 {
     stream.write_all(prefix.as_bytes())?;
     stream.flush()?;
 
     let out = raw_read_input(stream)?;
+    let idx = out
+        .parse::<usize>()
+        .map_err(|_| MenuError::Select(out.clone()))?
+        - 1;
 
-    if let Some(field) = fields
-        .iter()
-        .find(|field| field.msg.to_lowercase() == out.to_lowercase())
-    {
-        match out.parse::<Output>() {
-            Ok(out) => {
-                field.call_bind(stream)?;
-                Ok(out)
-            }
-            Err(_) => {
-                if let Some(default) = default {
-                    default_parse(default, fields, stream)
-                } else {
-                    Err(MenuError::Select(out))
-                }
-            }
-        }
+    if fields.get(idx).is_some() {
+        Ok(fields.remove(idx).select())
     } else {
-        match out.parse::<usize>() {
-            Ok(idx) if idx >= 1 => {
-                if let Some(field) = fields.get(idx - 1) {
-                    field.call_bind(stream)?;
-                    field.msg.parse().map_err(err_ty)
-                } else {
-                    Err(MenuError::Select(out))
-                }
-            }
-            Err(_) => {
-                if let Some(default) = default {
-                    default_parse(default, fields, stream)
-                } else {
-                    Err(MenuError::Select(out))
-                }
-            }
-            _ => Err(MenuError::Select(out)),
+        if let Some(d) = default {
+            assert_default_idx(d, fields.len());
+            Ok(fields.remove(d).select())
+        } else {
+            Err(MenuError::Select(out))
         }
     }
 }
@@ -791,6 +738,56 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
     }
 }
 
+impl<R, W> ValueMenu<'_, R, W>
+where
+    R: BufRead,
+    W: Write,
+{
+    /// Returns the next output, if the next output corresponds to an inner selectable menu output.
+    ///
+    /// If this is the case, it returns the selectable menu output
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](<SelectMenu as MenuBuilder>::next_output)).
+    ///
+    /// ## Panic
+    ///
+    /// If the next field is not a selectable menu, this function will panic.
+    pub fn next_select<Output: 'static>(&mut self) -> MenuResult<Output> {
+        next_select(self.next_field(), &mut self.stream)
+    }
+
+    /// Returns the next output, if the next output corresponds to an inner selectable menu,
+    /// using the given menu stream.
+    ///
+    /// If this is the case, it returns the selectable menu output
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](<SelectMenu as MenuBuilder>::next_output)).
+    ///
+    /// ## Panic
+    ///
+    /// If the next field is not a selectable menu, this function will panic.
+    pub fn next_select_with<Output: 'static>(
+        &mut self,
+        stream: &mut MenuStream<'_, R, W>,
+    ) -> MenuResult<Output> {
+        next_select(self.next_field(), stream)
+    }
+}
+
+fn next_select<Output, R, W>(
+    field: Field<'_, R, W>,
+    stream: &mut MenuStream<'_, R, W>,
+) -> MenuResult<Output>
+where
+    Output: 'static,
+    R: BufRead,
+    W: Write,
+{
+    if let Field::Select(mut s) = field {
+        s.next_output_with(stream)
+    } else {
+        panic!("next output of the value-menu is not a selectable menu")
+    }
+}
+
 /// Trait used to return the next output of the menu.
 pub trait MenuBuilder<Output, R, W> {
     /// Returns the next output from the menu.
@@ -819,7 +816,7 @@ pub trait MenuBuilder<Output, R, W> {
 
 impl<Output, R, W> MenuBuilder<Output, R, W> for ValueMenu<'_, R, W>
 where
-    Output: FromStr,
+    Output: FromStr + 'static,
     Output::Err: 'static + Debug,
     R: BufRead,
     W: Write,
@@ -883,7 +880,7 @@ fn next_or_default<Output, R, W>(
     title: &str,
 ) -> Output
 where
-    Output: FromStr + Default,
+    Output: FromStr + Default + 'static,
     Output::Err: 'static + Debug,
     W: Write,
     R: BufRead,

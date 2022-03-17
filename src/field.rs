@@ -18,6 +18,7 @@
 //! independently from the global formatting rules.
 
 use crate::prelude::*;
+use std::any::Any;
 use std::env;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{BufRead, Write};
@@ -63,7 +64,7 @@ where
     /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
     pub(crate) fn menu_build<Output>(&mut self, stream: &mut MenuStream<R, W>) -> MenuResult<Output>
     where
-        Output: FromStr,
+        Output: FromStr + 'static,
         Output::Err: 'static + Debug,
     {
         match self {
@@ -74,7 +75,7 @@ where
 
     pub(crate) fn menu_build_or_default<Output>(&mut self, stream: &mut MenuStream<R, W>) -> Output
     where
-        Output: FromStr + Default,
+        Output: FromStr + Default + 'static,
         Output::Err: 'static + Debug,
     {
         match self {
@@ -114,6 +115,7 @@ pub struct SelectField<'a, R = In, W = Out> {
     chip: &'a str,
     custom_chip: bool,
     bind: Option<Binding<R, W>>,
+    inner: Box<dyn Any>,
 }
 
 impl<R, W> Display for SelectField<'_, R, W> {
@@ -123,22 +125,20 @@ impl<R, W> Display for SelectField<'_, R, W> {
     }
 }
 
-impl<'a, R, W> From<&'a str> for SelectField<'a, R, W> {
-    /// Initializes the selection field for the menu.
+impl<'a, R, W> SelectField<'a, R, W> {
+    /// Creates a selection field with its message and its associated output value.
     ///
-    /// This associated function should not be used without context.
-    /// The `SelectField` type must be instantiated inside a
-    fn from(msg: &'a str) -> Self {
+    /// This value corresponds to the output returned in case the user selected this field.
+    pub fn new<T: 'static>(msg: &'a str, inner: T) -> Self {
         Self {
             msg,
             chip: " - ",
             custom_chip: false,
             bind: None,
+            inner: Box::new(inner),
         }
     }
-}
 
-impl<'a, R, W> SelectField<'a, R, W> {
     /// Edits the chip of the selection field.
     ///
     /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
@@ -165,24 +165,38 @@ impl<'a, R, W> SelectField<'a, R, W> {
         Ok(())
     }
 
+    pub(crate) fn select<T: 'static>(self) -> T {
+        *self.inner.downcast().expect("Incorrect type")
+    }
+
     /// Defines the function to execute right after the user selected this field.
     ///
     /// It is optional, and is useful if you have many modes in your program with
     /// procedures defined for each mode.
     ///
-    /// The function must take a `&mut Stdout` as parameter and return a `MenuResult<()>`.
+    /// The function must take a `&mut MenuStream<R, W>` as parameter, with
+    /// `R` as the reader type and `W` as the writer type.
+    /// The reader and writer are `BufReader<Stdin>` and `Stdout` by default, so if no specific reader
+    /// has been specified when instantiating the menu, it is not necessary to specify the generic types
+    /// of the `MenuStream`.
+    ///
+    /// The binding function must return a `MenuResult<()>`.
     /// The result return is used to spread the error to the point you built the menu.
     ///
     /// If you want to return a string (or static string slice) error, you can use `MenuError::from` associated function.
-    /// For an IO Error when using `Stdout` methods, you can map the error type by using `Result::map_err`.
+    /// For an IO Error when using `MenuStream` methods, you can map the error type by using `Result::map_err`.
     ///
     /// ## Example
     ///
     /// ```
     /// use ezmenulib::prelude::*;
     /// use std::io::{Stdout, Write};
+    /// # enum Type {
+    /// # MIT,
+    /// # BSD,
+    /// # }
     ///
-    /// fn bsd(e: &mut Stdout) -> MenuResult<()> {
+    /// fn bsd(e: &mut MenuStream) -> MenuResult<()> {
     ///     e.write_all(b"coucou this is from bsd\n").map_err(MenuError::from)
     /// }
     ///
@@ -313,7 +327,7 @@ impl Display for DefaultValue<'_> {
 ///
 /// For a make-license CLI program for example, you can use
 /// ```
-/// use ezmenulib::ValueField;
+/// use ezmenulib::field::ValueField;
 /// let author: String = ValueField::from("Give the author of the license")
 ///     .build_init()
 ///     .unwrap();
@@ -425,13 +439,14 @@ impl<'a> ValueField<'a> {
     ///
     /// Supposing you have declared your own `Stdin` and `Stdout` in your program, you can do so:
     /// ```
-    /// use std::io::{stdin, stdout};
+    /// use std::io::{stdin, stdout, BufReader};
+    /// # use ezmenulib::field::ValueField;
     ///
-    /// let stdin = stdin();
+    /// let mut stdin = BufReader::new(stdin());
     /// let mut stdout = stdout();
     ///
     /// let author: String = ValueField::from("Author")
-    ///     .build(&stdin, &mut stdout)
+    ///     .build(&mut stdin, &mut stdout)
     ///     .unwrap();
     /// ```
     #[inline]
