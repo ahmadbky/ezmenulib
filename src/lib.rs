@@ -101,8 +101,8 @@
 //!
 //! ## Skip fields with default values
 //!
-//! You can provide a default input value to a field with the `ValueField::default` method:
-//! ```rust
+//! You can provide a default input value to a field with the `ValueField::default_value` method:
+//! ```
 //! # use ezmenulib::field::ValueField;
 //! # fn get_field() -> ValueField<'static> {
 //! ValueField::from("Date").default_value("2022")
@@ -125,6 +125,7 @@
 //! # use ezmenulib::prelude::*;
 //! # fn get_field() -> ValueField<'static> {
 //! ValueField::from("Date")
+//!     .default_value("2022")
 //!     .fmt(ValueFieldFormatting::default(false))
 //! # }
 //! ```
@@ -302,6 +303,20 @@ pub mod prelude {
 
     pub use crate::MenuError;
     pub use crate::MenuResult;
+}
+
+/// The re-exportation of the `chrono` crate module.
+///
+/// To get this module, you need to provide the `"date"` feature in the
+/// `Cargo.toml` file, with:
+/// ```toml
+/// [dependencies.ezmenulib]
+/// version = "0.2"
+/// features = ["date"]
+/// ```
+#[cfg(feature = "date")]
+pub mod chrono {
+    pub use chrono::*;
 }
 
 use std::env::VarError;
