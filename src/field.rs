@@ -62,24 +62,24 @@ where
     /// selected.
     ///
     /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
-    pub(crate) fn menu_build<Output>(&mut self, stream: &mut MenuStream<R, W>) -> MenuResult<Output>
+    pub(crate) fn build<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>
     where
         Output: FromStr + 'static,
         Output::Err: 'static + Debug,
     {
         match self {
-            Self::Value(vf) => vf.menu_build(stream),
+            Self::Value(vf) => vf.build_with(stream),
             Self::Select(sm) => sm.next_output_with(stream),
         }
     }
 
-    pub(crate) fn menu_build_or_default<Output>(&mut self, stream: &mut MenuStream<R, W>) -> Output
+    pub(crate) fn build_or_default<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
     where
         Output: FromStr + Default + 'static,
         Output::Err: 'static + Debug,
     {
         match self {
-            Self::Value(vf) => vf.menu_build_or_default(stream),
+            Self::Value(vf) => vf.build_or_default_with(stream),
             Self::Select(sm) => sm.next_or_default_with(stream),
         }
     }
@@ -166,7 +166,10 @@ impl<'a, R, W> SelectField<'a, R, W> {
     }
 
     pub(crate) fn select<T: 'static>(self) -> T {
-        *self.inner.downcast().expect("Incorrect type")
+        *self
+            .inner
+            .downcast()
+            .expect("incorrect output type providing")
     }
 
     /// Defines the function to execute right after the user selected this field.
@@ -420,7 +423,6 @@ impl<'a> ValueField<'a> {
     /// let age: MenuResult<u8> = ValueField::from("How old are you")
     ///     .build_init();
     /// ```
-    #[inline]
     pub fn build_init<T>(&self) -> MenuResult<T>
     where
         T: FromStr,
@@ -449,20 +451,18 @@ impl<'a> ValueField<'a> {
     ///     .build(&mut stdin, &mut stdout)
     ///     .unwrap();
     /// ```
-    #[inline]
     pub fn build<T>(&self, reader: &mut In, writer: &mut Out) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
     {
-        self.menu_build(&mut MenuStream::with(reader, writer))
+        self.build_with(&mut MenuStream::with(reader, writer))
     }
 
     /// Builds the fields with a given menu stream. It prints out the message to the stream
     /// according to its formatting, then returns the corresponding value.
     ///
     /// You need to instantiate beforehand the `MenuStream` to use this method.
-    #[inline]
     pub fn build_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
     where
         T: FromStr,
@@ -470,21 +470,30 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.menu_build(stream)
+        // loops while incorrect input
+        loop {
+            match self.build_once(stream) {
+                Query::Finished(out) => break Ok(out),
+                Query::Loop => {
+                    if let Some(default) = &self.default {
+                        return Ok(default_parse(default));
+                    }
+                }
+                Query::Err(e) => break Err(e),
+            }
+        }
     }
 
     /// Builds the field, or returns the default value from the type.
-    #[inline]
     pub fn build_or_default<T>(&self, reader: &mut In, writer: &mut Out) -> T
     where
         T: FromStr + Default,
         T::Err: 'static + Debug,
     {
-        self.menu_build_or_default(&mut MenuStream::new(reader, writer))
+        self.build_or_default_with(&mut MenuStream::with(reader, writer))
     }
 
     /// Builds the field with a given menu stream, or returns the default value from the type.
-    #[inline]
     pub fn build_or_default_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
     where
         T: FromStr + Default,
@@ -492,57 +501,55 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        self.menu_build_or_default(stream)
-    }
-
-    fn inner_build<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
-    {
-        // outputs the field message with its formatting
-        // see `<ValueField as Display>::fmt`
-        write!(stream, "{}", self)?;
-        stream.flush()?;
-
-        let output = raw_read_input(stream)?;
-        parse_value(output)
-    }
-
-    pub(crate) fn menu_build<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
-    {
-        // loops while incorrect value
-        loop {
-            // try to parse to T, else repeat
-            match self.inner_build(stream) {
-                Ok(t) => break Ok(t),
-                Err(_) => {
-                    if let Some(default) = &self.default {
-                        break Ok(default_parse(default));
-                    }
-                }
-            }
+        match self.build_once(stream) {
+            Query::Finished(out) => out,
+            _ => self.default.as_ref().map(default_parse).unwrap_or_default(),
         }
     }
 
-    pub(crate) fn menu_build_or_default<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
+    fn build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
     where
-        T: FromStr + Default,
+        T: FromStr,
         T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
     {
-        if let Ok(t) = self.inner_build(stream) {
-            t
-        } else {
-            self.default.as_ref().map(default_parse).unwrap_or_default()
+        fn show<R, W>(field: &ValueField<'_>, stream: &mut MenuStream<R, W>) -> MenuResult<String>
+        where
+            R: BufRead,
+            W: Write,
+        {
+            write!(stream, "{}", field)?;
+            stream.flush()?;
+            raw_read_input(stream)
+        }
+
+        show(self, stream).map(parse_value).into()
+    }
+}
+
+pub(crate) enum Query<T> {
+    Finished(T),
+    Err(MenuError),
+    Loop,
+}
+
+impl<T> From<MenuResult<MenuResult<T>>> for Query<T> {
+    fn from(res: MenuResult<MenuResult<T>>) -> Self {
+        match res {
+            Ok(Ok(out)) => Self::Finished(out),
+            Ok(Err(_)) => Self::Loop,
+            Err(e) => Self::Err(e),
+        }
+    }
+}
+
+impl<T> From<Query<T>> for MenuResult<T> {
+    fn from(q: Query<T>) -> Self {
+        match q {
+            Query::Finished(out) => Ok(out),
+            Query::Err(e) => Err(e),
+            Query::Loop => Err(MenuError::from("incorrect input")),
         }
     }
 }
@@ -563,10 +570,11 @@ where
 ///
 /// It is useful because it maps the error according to the [`MenuError`](crate::MenuError)
 /// type definition.
-fn parse_value<T>(s: impl AsRef<str>) -> MenuResult<T>
+pub(crate) fn parse_value<T, S>(s: S) -> MenuResult<T>
 where
     T: FromStr,
     T::Err: 'static + Debug,
+    S: AsRef<str>,
 {
     let s = s.as_ref();
     s.parse()
