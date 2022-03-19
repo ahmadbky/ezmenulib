@@ -1,26 +1,27 @@
-use chrono::prelude::*;
-use ezmenulib::prelude::*;
+use ezmenulib::{chrono::prelude::*, prelude::*};
 use std::io::stdout;
 
 macro_rules! test_menu {
     ($input:expr, $fields:expr, $($name:ident: $ty:ty),* $(,)? => $output:ident $(,)?) => {
-        test_menu!(my_menu,
+        test_menu! {
+            my_menu,
             $input,
             $fields,
             $(let $name: $ty = my_menu.next_output().expect("invalid next output")),*
-            => $output);
+            => $output
+        };
     };
 
     ($name:ident, $input:expr, $fields:expr, $($st:stmt),* => $output:ident $(,)?) => {
-        let input = $input.as_bytes();
-        let output = Vec::<u8>::new();
-        let mut $name = ValueMenu::new(
-            input,
-            output,
+        let mut input = $input.as_bytes();
+        let mut output = Vec::<u8>::new();
+        let mut $name = ValueMenu::with_ref(
+            &mut input,
+            &mut output,
             $fields,
         );
         $($st)*
-        let $output = String::from_utf8($name.retrieve().1).expect("unexpected invalid utf8 output");
+        let $output = String::from_utf8(output).expect("unexpected invalid utf8 output");
     };
 }
 
