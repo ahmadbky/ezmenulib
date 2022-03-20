@@ -55,13 +55,16 @@ This sample code prints the standard menu like above:
 Hello there!
 --> Give your name
 >> Ahmad
+
 --> Give a number
 >> 1000
+
 --> Select a number:
 1 - 0
 2 - 1
 3 - 2
 >> 2
+
 hello Ahmad, you entered 1000 and you selected 2.
 ```
 
