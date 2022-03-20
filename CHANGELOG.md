@@ -11,6 +11,8 @@
 implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function, to bypass this restriction.
 * Fixing IO error never returned in loop.
 * Introducing `ValueMenu::next_output_until` and `ValueField::build_until` methods.
+* Added example showing for `ValueField`.
+  * Separating by comma between default value and example at the prompt, according to the formatting rules.
 
 ## 0.2.10 (migrated from 0.2.9)
 
