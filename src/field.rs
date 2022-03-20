@@ -239,9 +239,9 @@ impl<'a, R, W> SelectField<'a, R, W> {
 
 /// Defines the formatting of a value-menu field.
 ///
-/// The final text formatting looks like above:
+/// The final text formatting looks literally like above:
 /// ```md
-/// <chip><message>{[ (default: <default>)]}{new line}<prefix>
+/// <chip><message>[ ({[default: <default>]}, [example: <example>])]{\n}<prefix>
 /// ```
 /// where:
 /// - `<...>` means a given string slice
@@ -326,13 +326,77 @@ impl Display for DefaultValue<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         #[inline(never)]
         fn write_str(f: &mut Formatter<'_>, s: impl AsRef<str>) -> fmt::Result {
-            write!(f, "(default: {})", s.as_ref())
+            write!(f, "default: {}", s.as_ref())
         }
 
         match self {
             Self::Value(s) => write_str(f, s),
             Self::Env(s) => write_str(f, s),
         }
+    }
+}
+
+struct FieldDetails<'a> {
+    example: Option<&'a str>,
+    default: Option<DefaultValue<'a>>,
+    show_d: bool,
+}
+
+impl<'a> FieldDetails<'a> {
+    fn new(show_d: bool) -> Self {
+        Self {
+            example: None,
+            default: None,
+            show_d,
+        }
+    }
+
+    fn set_example(&mut self, example: &'a str) {
+        self.example = Some(example);
+    }
+
+    fn set_default_value(&mut self, value: &'a str) {
+        self.default = Some(DefaultValue::Value(value));
+    }
+
+    fn set_default_env(&mut self, env: &'a str) -> MenuResult<()> {
+        self.default = Some(DefaultValue::env(env)?);
+        Ok(())
+    }
+
+    fn set_show_d(&mut self, show_d: bool) {
+        self.show_d = show_d;
+    }
+
+    #[inline]
+    fn try_default<T>(&self) -> T
+    where
+        T: FromStr + Default,
+        T::Err: 'static + Debug,
+    {
+        self.default.as_ref().map(default_parse).unwrap_or_default()
+    }
+}
+
+impl Display for FieldDetails<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.example.is_none() && self.default.is_none()
+            || self.example.is_none() && !self.show_d
+        {
+            return Ok(());
+        }
+
+        write!(
+            f,
+            " ({})",
+            match (&self.default, self.example) {
+                (Some(d), None) if self.show_d => format!("{}", d),
+                (Some(d), Some(e)) if self.show_d => format!("example: {}, {}", e, d),
+                (None, Some(e)) => format!("example: {}", e),
+                (Some(_), Some(e)) => format!("example: {}", e),
+                _ => unreachable!(),
+            }
+        )
     }
 }
 
@@ -357,31 +421,30 @@ pub struct ValueField<'a> {
     msg: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
     custom_fmt: bool,
-    default: Option<DefaultValue<'a>>,
+    details: FieldDetails<'a>,
 }
 
 impl<'a> From<&'a str> for ValueField<'a> {
     fn from(msg: &'a str) -> Self {
+        let fmt = Rc::<ValueFieldFormatting<'a>>::default();
+        let show_d = fmt.default;
         Self {
             msg,
-            fmt: Rc::default(),
+            fmt,
             custom_fmt: false,
-            default: None,
+            details: FieldDetails::new(show_d),
         }
     }
 }
 
-impl<'a> Display for ValueField<'a> {
+impl Display for ValueField<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{chip}{msg}{def}{nl}{prefix}",
+            "{chip}{msg}{det}{nl}{prefix}",
             chip = self.fmt.chip,
             msg = self.msg,
-            def = match &self.default {
-                Some(val) if self.fmt.default => format!(" {}", val),
-                _ => "".to_owned(),
-            },
+            det = self.details,
             nl = if self.fmt.new_line { "\n" } else { "" },
             prefix = self.fmt.prefix,
         )
@@ -392,7 +455,9 @@ impl<'a> Display for ValueField<'a> {
 impl<'a> ValueField<'a> {
     /// Give a custom formatting for the field.
     pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
+        let show_d = fmt.default;
         self.fmt = Rc::new(fmt);
+        self.details.set_show_d(show_d);
         self.custom_fmt = true;
         self
     }
@@ -406,12 +471,13 @@ impl<'a> ValueField<'a> {
     /// Give the default value accepted by the field.
     ///
     /// If the value type is incorrect, the [`ValueField::build`] or [`ValueField::build_init`]
-    /// method will return an `Err` value emphasizing that the default value type is incorrect.
+    /// methods will panic at runtime.
     ///
-    /// So when instantiating the field with a provided default value, it will not panic and it will
-    /// print the default value even if it is incorrect (if the format rule `default` is set to `true`).
+    /// The default value and the example (see the [`example`](ValueField::example) method documentation)
+    /// will be displayed inside parenthesis according to its formatting (see [`ValueFieldFormatting`]
+    /// for more information).
     pub fn default_value(mut self, default: &'a str) -> Self {
-        self.default = Some(DefaultValue::Value(default));
+        self.details.set_default_value(default);
         self
     }
 
@@ -421,13 +487,23 @@ impl<'a> ValueField<'a> {
     /// (See [`MenuError::EnvVar`] variant).
     ///
     /// If the value type of the variable is incorrect, the [`ValueField::build`] or [`ValueField::build_init`]
-    /// method will return an `Err` value emphasizing that the default value type is incorrect.
-    ///
-    /// So when instantiating the field with a provided default value, it will not panic and it will
-    /// print the default value even if it is incorrect (if the format rule `default` is set to `true`).
+    /// method will panic at runtime.
     pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
-        self.default = Some(DefaultValue::env(var)?);
+        self.details.set_default_env(var)?;
         Ok(self)
+    }
+
+    /// Give an example of correct value for the field.
+    ///
+    /// Obviously, it is better to give a correct value for the user, but if the value is incorrect,
+    /// it will only mislead the user, and unlike the default value providing,
+    /// the program will not panic at runtime to emphasize the problem.
+    ///
+    /// The example will be shown inside parenthesis according to its formatting
+    /// (see [`ValueFieldFormatting`] for more information).
+    pub fn example(mut self, example: &'a str) -> Self {
+        self.details.set_example(example);
+        self
     }
 
     /// Builds the field without specifying standard input and output files.
@@ -510,7 +586,7 @@ impl<'a> ValueField<'a> {
     {
         match self.build_once(stream) {
             Query::Finished(out) => out,
-            _ => self.default.as_ref().map(default_parse).unwrap_or_default(),
+            _ => self.details.try_default(),
         }
     }
 
@@ -532,7 +608,7 @@ impl<'a> ValueField<'a> {
             match self.build_once(stream) {
                 Query::Finished(out) if until(&out) => break Ok(out),
                 Query::Loop => {
-                    if let Some(default) = &self.default {
+                    if let Some(default) = &self.details.default {
                         return Ok(default_parse(default));
                     }
                 }
