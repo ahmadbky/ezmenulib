@@ -1,6 +1,6 @@
 [package]
 name = "ezmenulib"
-version = "0.2.11"
+version = "0.3.0"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenulib"

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.11
+## 0.3.0
 
 * Removed `T: FromStr` and `<T as FromStr>::Err: 'static + Debug` restrictions for `SelectMenu`.
   * Now the output type `T` has to be `'static`.
