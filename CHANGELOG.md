@@ -9,6 +9,8 @@
   * Retrieving a selectable menu output from a value-menu is no more done with
 `<ValueMenu as MenuBuilder>::next_output` function, because it requests output to
 implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function, to bypass this restriction.
+* Fixing IO error never returned in loop.
+* Introducing `ValueMenu::next_output_until` and `ValueField::build_until` methods.
 
 ## 0.2.10 (migrated from 0.2.9)
 
