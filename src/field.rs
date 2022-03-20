@@ -455,17 +455,21 @@ impl Display for ValueField<'_> {
 impl<'a> ValueField<'a> {
     /// Give a custom formatting for the field.
     pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
-        let show_d = fmt.default;
-        self.fmt = Rc::new(fmt);
-        self.details.set_show_d(show_d);
+        self.set_fmt(Rc::new(fmt));
         self.custom_fmt = true;
         self
     }
 
     pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
         if !self.custom_fmt {
-            self.fmt = fmt;
+            self.set_fmt(fmt);
         }
+    }
+
+    fn set_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
+        let show_d = fmt.default;
+        self.fmt = fmt;
+        self.details.set_show_d(show_d);
     }
 
     /// Give the default value accepted by the field.
