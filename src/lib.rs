@@ -1,9 +1,5 @@
 //! Fast designing menus for your Rust CLI programs.
 //!
-//! > Caution: This library is not completely stable yet.
-//! Many changes may occur depending on versions. I am still looking for a sustainable design
-//! of the library.
-//!
 //! This crate provides a library with structs and traits to easily build menus.
 //! It includes type-checking from the user input, and a formatting customization.
 //!
