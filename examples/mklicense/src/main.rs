@@ -23,7 +23,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .title(SelectTitle::from("Select a license type"))
             .default(0),
         ),
-    ]);
+    ])
+    .title("Describe your project");
 
     let authors: MenuVec<String> = license.next_output()?;
     let name: MenuOption<String> = license.next_output()?;

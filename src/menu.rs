@@ -684,13 +684,11 @@ where
 
                 if fields.get(idx - 1).is_some() {
                     Ok(fields.remove(idx - 1).select())
+                } else if let Some(d) = default {
+                    assert_default_idx(d, fields.len());
+                    Ok(fields.remove(d).select())
                 } else {
-                    if let Some(d) = default {
-                        assert_default_idx(d, fields.len());
-                        Ok(fields.remove(d).select())
-                    } else {
-                        Err(MenuError::Select(s))
-                    }
+                    Err(MenuError::Select(s))
                 }
             })
         })
@@ -811,7 +809,7 @@ where
     /// Returns the next output, if the next output corresponds to an inner selectable menu output.
     ///
     /// If this is the case, it returns the selectable menu output
-    /// (See [`<SelectMenu as MenuBuilder>::next_output`](<SelectMenu as MenuBuilder>::next_output)).
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_output)).
     ///
     /// ## Panic
     ///
@@ -825,7 +823,7 @@ where
     /// using the given menu stream.
     ///
     /// If this is the case, it returns the selectable menu output
-    /// (See [`<SelectMenu as MenuBuilder>::next_output`](<SelectMenu as MenuBuilder>::next_output)).
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_output)).
     ///
     /// ## Panic
     ///
