@@ -46,7 +46,7 @@
 //!
 //! ## Example
 //!
-//! ```
+//! ```no_run
 //! use std::str::FromStr;
 //! use ezmenulib::customs;
 //! use ezmenulib::prelude::*;
@@ -138,7 +138,7 @@ pub trait GetStream<'s, R: 's, W: 's>: Sized {
 ///
 /// ## Example
 ///
-/// ```
+/// ```no_run
 /// use ezmenulib::prelude::*;
 ///
 /// let amount: MenuResult<u8> = SelectMenu::from([
@@ -553,7 +553,7 @@ where
     ///
     /// ## Example
     ///
-    /// ```
+    /// ```no_run
     /// use std::str::FromStr;
     /// use ezmenulib::prelude::*;
     ///
@@ -796,6 +796,13 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
     }
 }
 
+impl<'a, R, W: Write> ValueMenu<'a, R, W> {
+    #[inline]
+    fn show_title(&mut self) -> MenuResult<()> {
+        show_title(&mut self.stream, self.title, &mut self.popped)
+    }
+}
+
 impl<'a, R, W> ValueMenu<'a, R, W>
 where
     R: BufRead,
@@ -810,6 +817,7 @@ where
     ///
     /// If the next field is not a selectable menu, this function will panic.
     pub fn next_select<Output: 'static>(&mut self) -> MenuResult<Output> {
+        self.show_title()?;
         next_select(self.next_field(), &mut self.stream)
     }
 
@@ -826,6 +834,7 @@ where
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
     ) -> MenuResult<Output> {
+        self.show_title()?;
         next_select(self.next_field(), stream)
     }
 
@@ -843,10 +852,18 @@ where
         Output::Err: 'static + Debug,
         F: Fn(&Output) -> bool,
     {
-        print_title(&mut self.stream, self.title, &mut self.popped)?;
+        self.show_title()?;
         self.next_field().build_until(&mut self.stream, w)
     }
 
+    /// Returns the valid next output, if the next output is not a selectable menu, according
+    /// to the given function, using the given stream.
+    ///
+    /// Read [`ValueField::build_until`](crate::field::ValueField::build_until) for more information.
+    ///
+    /// ## Panic
+    ///
+    /// If the next field is not a value-field, this function will panic.
     pub fn next_output_with_until<Output, F>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
@@ -857,7 +874,7 @@ where
         Output::Err: 'static + Debug,
         F: Fn(&Output) -> bool,
     {
-        print_title(stream, self.title, &mut self.popped)?;
+        show_title(stream, self.title, &mut self.popped)?;
         self.next_field().build_until(stream, w)
     }
 }
@@ -892,7 +909,7 @@ where
     /// This function panics if there is no more field in the value-menu,
     /// or if an incorrect value type has been used as default.
     fn next_output(&mut self) -> MenuResult<Output> {
-        print_title(&mut self.stream, self.title, &mut self.popped)?;
+        self.show_title()?;
         self.next_field().build(&mut self.stream)
     }
 
@@ -903,7 +920,7 @@ where
     /// This function panics if there is no more field in the value-menu,
     /// or if an incorrect value type has been used as default.
     fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output> {
-        print_title(&mut self.stream, self.title, &mut self.popped)?;
+        show_title(stream, self.title, &mut self.popped)?;
         self.next_field().build(stream)
     }
 
@@ -949,18 +966,14 @@ where
     W: Write,
     R: BufRead,
 {
-    if print_title(stream, title, popped).is_ok() {
+    if show_title(stream, title, popped).is_ok() {
         field.build_or_default(stream)
     } else {
         Output::default()
     }
 }
 
-fn print_title<R, W>(
-    stream: &mut MenuStream<R, W>,
-    title: &str,
-    popped: &mut bool,
-) -> MenuResult<()>
+fn show_title<R, W>(stream: &mut MenuStream<R, W>, title: &str, popped: &mut bool) -> MenuResult<()>
 where
     W: Write,
 {

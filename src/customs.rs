@@ -11,7 +11,7 @@
 //!
 //! ## Example
 //!
-//! ```
+//! ```no_run
 //! use ezmenulib::{prelude::*, customs::*};
 //!
 //! let mut project = ValueMenu::from([

@@ -120,7 +120,7 @@ pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult<()>;
 ///
 /// ## Example
 ///
-/// ```
+/// ```no_run
 /// use ezmenulib::prelude::*;
 ///
 /// let get_amount = SelectMenu::from([
@@ -209,7 +209,7 @@ impl<'a, R, W> SelectField<'a, R, W> {
     ///
     /// ## Example
     ///
-    /// ```
+    /// ```no_run
     /// use ezmenulib::prelude::*;
     /// use std::io::{Stdout, Write};
     /// # enum Type {
@@ -347,7 +347,7 @@ impl Display for DefaultValue<'_> {
 /// # Examples
 ///
 /// For a make-license CLI program for example, you can use
-/// ```
+/// ```no_run
 /// use ezmenulib::field::ValueField;
 /// let author: String = ValueField::from("Give the author of the license")
 ///     .build_init()
@@ -436,7 +436,7 @@ impl<'a> ValueField<'a> {
     ///
     /// ## Example
     ///
-    /// ```
+    /// ```no_run
     /// use ezmenulib::prelude::*;
     /// let age: MenuResult<u8> = ValueField::from("How old are you")
     ///     .build_init();
@@ -458,7 +458,7 @@ impl<'a> ValueField<'a> {
     /// # Example
     ///
     /// Supposing you have declared your own `Stdin` and `Stdout` in your program, you can do so:
-    /// ```
+    /// ```no_run
     /// use std::io::{stdin, stdout, BufReader};
     /// # use ezmenulib::field::ValueField;
     ///

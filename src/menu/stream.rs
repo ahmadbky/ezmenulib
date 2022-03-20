@@ -64,7 +64,7 @@ impl<T> DerefMut for Stream<'_, T> {
 ///
 /// ## Example
 ///
-/// ```
+/// ```no_run
 /// use std::io::{Read, stdin, stdout};
 /// use ezmenulib::menu::MenuStream;
 ///
@@ -84,7 +84,7 @@ impl<T> DerefMut for Stream<'_, T> {
 /// `BufReader::new(...)`, or use the [`MenuStream::wrap_reader`] method, to directly
 /// instantiate the stream:
 ///
-/// ```
+/// ```no_run
 /// # use std::io::{stdin, stdout};
 /// # use ezmenulib::menu::MenuStream;
 /// # let my_stdin = stdin();
@@ -100,7 +100,7 @@ impl<T> DerefMut for Stream<'_, T> {
 /// You may give a mutable reference to the streams instead of giving the ownership.
 /// In the latter case, you can still get the ownership of the menu stream with the
 /// [`MenuStream::retrieve`] method:
-/// ```
+/// ```no_run
 /// # use std::io::{stdin, stdout};
 /// use ezmenulib::menu::MenuStream;
 /// # let input = stdin();
