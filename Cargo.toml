@@ -18,7 +18,9 @@ exclude = [
 
 [dependencies]
 chrono = { version = "0.4.19", optional = true }
+meval = { version = "0.2.0", optional = true }
 
 [features]
 default = []
 date = ["chrono"]
+expr = ["meval"]

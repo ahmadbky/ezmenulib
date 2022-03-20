@@ -29,6 +29,52 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
+macro_rules! impl_inner {
+    ($name:ident$(<$($generic:ident),*>)?: $ty:ty$(, $meta:meta)?) => {
+        $(#[$meta])?
+        impl$(<$($generic),*>)? AsRef<$ty> for $name$(<$($generic),*>)? {
+            #[inline]
+            fn as_ref(&self) -> &$ty {
+                &self.0
+            }
+        }
+
+        $(#[$meta])?
+        impl$(<$($generic),*>)? AsMut<$ty> for $name$(<$($generic),*>)?  {
+            #[inline]
+            fn as_mut(&mut self) -> &mut $ty {
+                &mut self.0
+            }
+        }
+
+        $(#[$meta])?
+        impl$(<$($generic),*>)? Deref for $name$(<$($generic),*>)?  {
+            type Target = $ty;
+
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.as_ref()
+            }
+        }
+
+        $(#[$meta])?
+        impl$(<$($generic),*>)? DerefMut for $name$(<$($generic),*>)?  {
+            #[inline]
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                self.as_mut()
+            }
+        }
+
+        $(#[$meta])?
+        impl$(<$($generic),*>)? From<$name$(<$($generic),*>)? > for $ty {
+            #[inline]
+            fn from(t: $name$(<$($generic),*>)?) -> Self {
+                t.0
+            }
+        }
+    }
+}
+
 /// Wrapper type used to handle multiple user input.
 ///
 /// Its main feature is to implement FromStr trait,
@@ -48,35 +94,7 @@ use std::str::FromStr;
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MenuVec<T>(pub Vec<T>);
 
-impl<T> AsRef<Vec<T>> for MenuVec<T> {
-    #[inline]
-    fn as_ref(&self) -> &Vec<T> {
-        &self.0
-    }
-}
-
-impl<T> AsMut<Vec<T>> for MenuVec<T> {
-    #[inline]
-    fn as_mut(&mut self) -> &mut Vec<T> {
-        &mut self.0
-    }
-}
-
-impl<T> Deref for MenuVec<T> {
-    type Target = Vec<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl<T> DerefMut for MenuVec<T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
-    }
-}
+impl_inner!(MenuVec<T>: Vec<T>);
 
 /// The error type used for parsing user input into a [`MenuVec<T>`].
 ///
@@ -120,13 +138,6 @@ impl<T: FromStr> FromStr for MenuVec<T> {
     }
 }
 
-impl<T> From<MenuVec<T>> for Vec<T> {
-    #[inline]
-    fn from(m: MenuVec<T>) -> Self {
-        m.0
-    }
-}
-
 /// Wrapper type used to handle a boolean user input value.
 ///
 /// Its main feature is to implemented `FromStr` trait,
@@ -138,40 +149,13 @@ impl<T> From<MenuVec<T>> for Vec<T> {
 pub struct MenuBool(pub bool);
 
 impl Display for MenuBool {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         Display::fmt(&self.0, f)
     }
 }
 
-impl AsRef<bool> for MenuBool {
-    #[inline]
-    fn as_ref(&self) -> &bool {
-        &self.0
-    }
-}
-
-impl AsMut<bool> for MenuBool {
-    #[inline]
-    fn as_mut(&mut self) -> &mut bool {
-        &mut self.0
-    }
-}
-
-impl Deref for MenuBool {
-    type Target = bool;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl DerefMut for MenuBool {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
-    }
-}
+impl_inner!(MenuBool: bool);
 
 impl FromStr for MenuBool {
     type Err = MenuError;
@@ -184,12 +168,6 @@ impl FromStr for MenuBool {
             "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
             _ => Err(MenuError::Other(Box::new("incorrect boolean value"))),
         }
-    }
-}
-
-impl From<MenuBool> for bool {
-    fn from(m: MenuBool) -> Self {
-        m.0
     }
 }
 
@@ -213,42 +191,7 @@ impl<T: Display> Display for MenuOption<T> {
     }
 }
 
-impl<T> AsRef<Option<T>> for MenuOption<T> {
-    #[inline]
-    fn as_ref(&self) -> &Option<T> {
-        &self.0
-    }
-}
-
-impl<T> AsMut<Option<T>> for MenuOption<T> {
-    #[inline]
-    fn as_mut(&mut self) -> &mut Option<T> {
-        &mut self.0
-    }
-}
-
-impl<T> Deref for MenuOption<T> {
-    type Target = Option<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl<T> DerefMut for MenuOption<T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut()
-    }
-}
-
-impl<T> From<MenuOption<T>> for Option<T> {
-    #[inline]
-    fn from(mo: MenuOption<T>) -> Self {
-        mo.0
-    }
-}
+impl_inner!(MenuOption<T>: Option<T>);
 
 impl<T: FromStr> FromStr for MenuOption<T> {
     type Err = T::Err;
@@ -260,5 +203,44 @@ impl<T: FromStr> FromStr for MenuOption<T> {
         } else {
             Ok(Self(Some(s.parse()?)))
         }
+    }
+}
+
+/// Wrapper type used to handle a math expression from the user input.
+///
+/// It uses the [`meval`](https://docs.rs/meval/0.2.0) crate to parse the math expression, thus requires
+/// to set `expr` feature in the `Cargo.toml` file.
+///
+/// You can access the inner value by `&x.0`, `*x`, which is same as `x.as_ref()`.
+///
+/// ## Example
+///
+/// ```
+/// use ezmenulib::customs::MenuNumber;
+///
+/// let a = "43 + 34 - 6";
+/// let a: MenuNumber = a.parse().unwrap();
+/// assert_eq!(*a, 71.);
+/// ```
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[cfg(feature = "expr")]
+pub struct MenuNumber(pub f64);
+
+#[cfg(feature = "expr")]
+impl Display for MenuNumber {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl_inner!(MenuNumber: f64, cfg(feature = "expr"));
+
+#[cfg(feature = "expr")]
+impl FromStr for MenuNumber {
+    type Err = meval::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(meval::eval_str(s)?))
     }
 }

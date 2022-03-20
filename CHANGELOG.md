@@ -10,9 +10,11 @@
 `<ValueMenu as MenuBuilder>::next_output` function, because it requests output to
 implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function, to bypass this restriction.
 * Fixing IO error never returned in loop.
+* [`chrono`](https://docs.rs/chrono/0.4.19) crate is now re-exported and available from the `ezmenulib` crate.
 * Introducing `ValueMenu::next_output_until` and `ValueField::build_until` methods.
 * Added example showing for `ValueField`.
   * Separating by comma between default value and example at the prompt, according to the formatting rules.
+* Added math expression as value type, using [`meval`](https://docs.rs/meval/0.2.0) crate.
 
 ## 0.2.10 (migrated from 0.2.9)
 
