@@ -93,19 +93,52 @@ fn loop_ask() {
 }
 
 #[test]
-fn default_value() {
+fn field_example_value() {
+    // with both example and default value
     test_menu! {
         my_menu,
         "mlzigujz\n",
-        vec![Field::Value(ValueField::from("your age please"))],
+        vec![Field::Value(ValueField::from("your age please").example("19").default_value("18"))],
         let age: u8 = my_menu.next_or_default()
         => output,
     };
 
-    assert_eq!(age, 0u8);
+    assert_eq!(age, 18);
     assert_eq!(
         output,
-        "--> your age please
+        "--> your age please (example: 19, default: 18)
+>> \n"
+    );
+
+    // with only example
+    test_menu! {
+        my_menu,
+        "mlzigujz\n",
+        vec![Field::Value(ValueField::from("your age please").example("19"))],
+        let age: u8 = my_menu.next_or_default()
+        => output,
+    };
+
+    assert_eq!(age, 0);
+    assert_eq!(
+        output,
+        "--> your age please (example: 19)
+>> \n"
+    );
+
+    // with only default value
+    test_menu! {
+        my_menu,
+        "mlzigujz\n",
+        vec![Field::Value(ValueField::from("your age please").default_value("19"))],
+        let age: u8 = my_menu.next_or_default()
+        => output,
+    };
+
+    assert_eq!(age, 19);
+    assert_eq!(
+        output,
+        "--> your age please (default: 19)
 >> \n"
     );
 }

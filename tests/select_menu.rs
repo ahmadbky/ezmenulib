@@ -19,6 +19,7 @@ fn no_field() {
     let _: bool = my_menu.next_output().unwrap();
 }
 
+#[allow(dead_code)]
 enum Type {
     MIT,
     GPL,
