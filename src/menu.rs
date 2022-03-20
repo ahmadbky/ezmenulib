@@ -83,6 +83,32 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
+/// Trait used to return the next output of the menu.
+pub trait MenuBuilder<'a, Output, R, W> {
+    /// Returns the next output from the menu.
+    fn next_output(&mut self) -> MenuResult<Output>;
+
+    /// Returns the next output from the menu using a given menu stream in parameter.
+    fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>;
+
+    /// Returns the next output from the menu, or its default value if an error occurred.
+    fn next_or_default(&mut self) -> Output
+    where
+        Output: Default,
+    {
+        self.next_output().unwrap_or_default()
+    }
+
+    /// Returns the next output from the menu using a given menu stream in parameter,
+    /// or its default value if an error occurred.
+    fn next_or_default_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
+    where
+        Output: Default,
+    {
+        self.next_output_with(stream).unwrap_or_default()
+    }
+}
+
 /// The default input stream used by a menu, using the standard input stream.
 pub type In = BufReader<Stdin>;
 
@@ -802,6 +828,38 @@ where
     ) -> MenuResult<Output> {
         next_select(self.next_field(), stream)
     }
+
+    /// Returns the valid next output, if the next output is not a selectable menu, according
+    /// to the given function.
+    ///
+    /// Read [`ValueField::build_until`](crate::field::ValueField::build_until) for more information.
+    ///
+    /// ## Panic
+    ///
+    /// If the next field is not a value-field, this function will panic.
+    pub fn next_output_until<Output, F>(&mut self, w: F) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+        F: Fn(&Output) -> bool,
+    {
+        print_title(&mut self.stream, self.title, &mut self.popped)?;
+        self.next_field().build_until(&mut self.stream, w)
+    }
+
+    pub fn next_output_with_until<Output, F>(
+        &mut self,
+        stream: &mut MenuStream<'a, R, W>,
+        w: F,
+    ) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+        F: Fn(&Output) -> bool,
+    {
+        print_title(stream, self.title, &mut self.popped)?;
+        self.next_field().build_until(stream, w)
+    }
 }
 
 fn next_select<'a, Output, R, W>(
@@ -816,33 +874,7 @@ where
     if let Field::Select(mut s) = field {
         s.next_output_with(stream)
     } else {
-        panic!("next output of the value-menu is not a selectable menu")
-    }
-}
-
-/// Trait used to return the next output of the menu.
-pub trait MenuBuilder<'a, Output, R, W> {
-    /// Returns the next output from the menu.
-    fn next_output(&mut self) -> MenuResult<Output>;
-
-    /// Returns the next output from the menu using a given menu stream in parameter.
-    fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>;
-
-    /// Returns the next output from the menu, or its default value if an error occurred.
-    fn next_or_default(&mut self) -> Output
-    where
-        Output: Default,
-    {
-        self.next_output().unwrap_or_default()
-    }
-
-    /// Returns the next output from the menu using a given menu stream in parameter,
-    /// or its default value if an error occurred.
-    fn next_or_default_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: Default,
-    {
-        self.next_output_with(stream).unwrap_or_default()
+        panic!("next output of the value-menu is not from a selectable menu")
     }
 }
 

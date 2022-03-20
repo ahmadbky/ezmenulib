@@ -73,6 +73,24 @@ where
         }
     }
 
+    pub(crate) fn build_until<Output, F>(
+        &mut self,
+        stream: &mut MenuStream<'a, R, W>,
+        w: F,
+    ) -> MenuResult<Output>
+    where
+        Output: FromStr,
+        Output::Err: 'static + Debug,
+        F: Fn(&Output) -> bool,
+    {
+        match self {
+            Self::Value(vf) => vf.build_until(stream, w),
+            _ => {
+                panic!("cannot apply a conditional closure to map the output of a selectable menu")
+            }
+        }
+    }
+
     pub(crate) fn build_or_default<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
     where
         Output: FromStr + Default + 'static,
@@ -470,18 +488,7 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        // loops while incorrect input
-        loop {
-            match self.build_once(stream) {
-                Query::Finished(out) => break Ok(out),
-                Query::Loop => {
-                    if let Some(default) = &self.default {
-                        return Ok(default_parse(default));
-                    }
-                }
-                Query::Err(e) => break Err(e),
-            }
-        }
+        self.build_until(stream, |_| true)
     }
 
     /// Builds the field, or returns the default value from the type.
@@ -504,6 +511,34 @@ impl<'a> ValueField<'a> {
         match self.build_once(stream) {
             Query::Finished(out) => out,
             _ => self.default.as_ref().map(default_parse).unwrap_or_default(),
+        }
+    }
+
+    /// Builds the field with a given menu stream, prompting the user input until the condition
+    /// returned by the function is valid.
+    ///
+    /// The function takes a reference to the returned output provided by the user, and returns
+    /// a `bool` to check if the output is correct.
+    pub fn build_until<T, R, W, F>(&self, stream: &mut MenuStream<R, W>, until: F) -> MenuResult<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+        F: Fn(&T) -> bool,
+    {
+        // loops while incorrect input
+        loop {
+            match self.build_once(stream) {
+                Query::Finished(out) if until(&out) => break Ok(out),
+                Query::Loop => {
+                    if let Some(default) = &self.default {
+                        return Ok(default_parse(default));
+                    }
+                }
+                Query::Err(e) => break Err(e),
+                _ => continue,
+            }
         }
     }
 
