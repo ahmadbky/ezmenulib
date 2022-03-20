@@ -1,10 +1,13 @@
 # EZMenuLib
 
-Fast designing menus for your Rust CLI programs.
+<div style="text-align: center;">
 
-> Caution: This library is not completely stable yet.
-Many changes may occur depending on versions. I am still looking for a sustainable design
-of the library.
+![Crates.io](https://img.shields.io/crates/v/ezmenulib)
+![Crates.io](https://img.shields.io/crates/l/ezmenulib)
+![docs.rs](https://img.shields.io/docsrs/ezmenulib)
+</div>
+
+Fast designing menus for your Rust CLI programs.
 
 This crate provides a library with structs and traits to easily build menus.
 It includes type-checking from the user input, and a formatting customization.
