@@ -15,7 +15,7 @@ macro_rules! test_menu {
     ($name:ident, $input:expr, $fields:expr, $($st:stmt),* => $output:ident $(,)?) => {
         let mut input = $input.as_bytes();
         let mut output = Vec::<u8>::new();
-        let mut $name = ValueMenu::with_ref(
+        let mut $name = ValueMenu::new_ref(
             &mut input,
             &mut output,
             $fields,
@@ -140,4 +140,45 @@ fn incorrect_default_value() {
         _age: u8,
         => _output,
     };
+}
+
+#[test]
+fn ask_until() {
+    test_menu! {
+        menu,
+        "402385\nAhmad\n",
+        vec![Field::Value(ValueField::from("Author name"))],
+        let name = menu.next_output_until(|s: &String| !s.parse::<i32>().is_ok()).unwrap()
+        => output,
+    };
+
+    assert_eq!(name, "Ahmad");
+    assert_eq!(
+        output,
+        "--> Author name
+>> 
+--> Author name
+>> \n"
+    );
+
+    test_menu! {
+        menu,
+        "-54\n-34\n0\n23\n",
+        vec![Field::Value(ValueField::from("age"))],
+        let age = menu.next_output_until(|n: &i32| *n > 0).unwrap()
+        => output,
+    };
+
+    assert_eq!(age, 23);
+    assert_eq!(
+        output,
+        "--> age
+>> 
+--> age
+>> 
+--> age
+>> 
+--> age
+>> \n"
+    );
 }
