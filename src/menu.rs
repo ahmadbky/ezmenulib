@@ -179,7 +179,7 @@ where
 }
 
 pub(crate) trait Bind<MenuOut, FieldOut> {
-    fn bind(&mut self, out: FieldOut) -> MenuOut;
+    fn bind(&mut self, out: FieldOut) -> MenuResult<MenuOut>;
 }
 
 /// Used to iterate over the values provided by the user.
@@ -196,7 +196,7 @@ where
     /// Returns the next output of the menu entered by the user, using the given menu stream.
     fn next_output(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<MenuOut> {
         writeln!(stream, "{}", self)?;
-        next_output(stream, self.next_item()?).map(|f| self.bind(f))
+        next_output(stream, self.next_item()?).and_then(|f| self.bind(f))
     }
 
     /// Returns the next output of the menu entered by the user,
@@ -208,7 +208,7 @@ where
     {
         show_menu(stream, self)
             .map(|_| next_or_default(stream, self.next_item()))
-            .map(|f| self.bind(f))
+            .and_then(|f| self.bind(f))
             .unwrap_or_default()
     }
 }
@@ -685,8 +685,8 @@ where
     R: 'a + BufRead,
     W: 'a + Write,
 {
-    fn bind(&mut self, out: usize) -> Output {
-        todo!()
+    fn bind(&mut self, out: usize) -> MenuResult<Output> {
+        self.fields.remove(out).select(&mut self.prompt.stream)
     }
 }
 
@@ -1026,8 +1026,8 @@ where
     W: Write,
 {
     #[inline]
-    fn bind(&mut self, out: Output) -> Output {
-        out
+    fn bind(&mut self, out: Output) -> MenuResult<Output> {
+        Ok(out)
     }
 }
 
