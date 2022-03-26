@@ -1,10 +1,10 @@
-# EZMenuLib
-
 <div style="text-align: center;">
 
-![Crates.io](https://img.shields.io/crates/v/ezmenulib)
-![Crates.io](https://img.shields.io/crates/l/ezmenulib)
-![docs.rs](https://img.shields.io/docsrs/ezmenulib)
+# EZMenuLib
+
+![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)
+![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)
+![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)
 </div>
 
 Fast designing menus for your Rust CLI programs.
@@ -37,16 +37,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         Field::Value(ValueField::from("Give your name")),
         Field::Value(ValueField::from("Give a number")),
         Field::Select(SelectMenu::from([
-            SelectField::from("0"),
-            SelectField::from("1"),
-            SelectField::from("2"),
+            SelectField::new("0", 0u8),
+            SelectField::new("1", 1u8),
+            SelectField::new("2", 2u8),
         ])
         .title(SelectTitle::from("Select a number"))),
     ]);
     
     let name: String = my_menu.next_output()?;
     let number: i32 = my_menu.next_output()?;
-    let amount: u8 = my_menu.next_output()?;
+    let amount: u8 = my_menu.next_select()?;
     
     println!("hello {}, you entered {} and you selected {}.", name, number, amount);
 }
@@ -68,7 +68,7 @@ Hello there!
 3 - 2
 >> 2
 
-hello Ahmad, you entered 1000 and you selected 2.
+hello Ahmad, you entered 1000 and you selected 1.
 ```
 
 ## Documentation
