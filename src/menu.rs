@@ -72,6 +72,48 @@
 //! let ty: Type = license.next_select().unwrap();
 //! ```
 
+/*
+ * How all this module works:
+ *
+ *               ┌────────────┐
+ *       ┌───────│AbstractMenu├─────────┐
+ *       │       ├────────────┤         │
+ *       ├ ─ ─ ─ ┤next_output │         │
+ *       │       └────────────┘         │
+ *       │                         ┌────▼─────┐
+ *       │                         │Streamable│
+ *       │advances                 └────┬─────┘
+ *   ┌───▼────┐                         │gives mutable ref to
+ *   │MenuIter│                    ┌────▼─────┐
+ *   ├────────┤                    │MenuStream│
+ * ├─►prompt0 ├ ─ ─ ─ ─ ─ ─ ─ ┐    └────┬─────┘
+ * │ ├────────┤               ▼         │used by
+ * ├─►prompt1 │  ┌──────────Item────────┼───┐
+ * │ ├────────┤  │                      │   │
+ * ├─►prompt2 │  │   ┌──────────┐       │   │
+ * │ ├────────┤  │   │Promptable◄───────┴─◄─┼──┐
+ * └─►...     │  │   └─────┬────┘           │  │
+ *               │         │prints out once │  │
+ *               │         ▼                │  │
+ *               │  ┌───Prompt────┐         │  │
+ *               │  │>> user input│         │  │
+ *               │  └──────┬──────┘         │  │
+ *               │         │returns         │  │incorrect input
+ *               │  ┌──────▼──────┐         │  │
+ *               │  │Query<Output>│         │  │
+ *               │  └──────┬──────┘         │  │
+ *               │         │                │  │
+ *               └─────────┼────────────────┘  │
+ *                         │                   │
+ *                   ┌─────▼────────┐          │         ┌──────────────────┐
+ *                   │ Loop         ├──────────┘         │MenuResult<Output>│
+ *                   ├──────────────┤                    ├==================┤
+ *                   │ Err(e)       ├───────────────────►│Err(e)            │
+ *                   ├──────────────┤                    ├──────────────────┤
+ *                   │ Finished(out)├───────────────────►│Ok(out)           │
+ *                   └──────────────┘                    └──────────────────┘
+ */
+
 mod stream;
 
 pub use crate::menu::stream::MenuStream;
@@ -81,44 +123,106 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
 use std::rc::Rc;
 use std::str::FromStr;
-use std::vec::IntoIter;
 
-/// Trait used to return the next output of the menu.
-pub trait MenuBuilder<'a, Output, R, W> {
-    /// Returns the next output from the menu.
-    fn next_output(&mut self) -> MenuResult<Output>;
+/// Used to iterate over the values provided by the user in a menu.
+///
+/// Because the values can have different types, it can return at each iteration a different value type.
+/// This is useful for [value-menus](crate::menu::ValueMenu) for example.
+///
+/// It prompts the menu once at each iteration, so if the user is incorrect,
+/// it will return the `Query::Loop` variant.
+///
+/// If you want to prompt the menu while the value entered is incorrect,
+/// you must use the [`AbstractMenu::next_output`] method.
+pub(crate) trait MenuIter {
+    type Item;
 
-    /// Returns the next output from the menu using a given menu stream in parameter.
-    fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>;
+    /// Returns the query of the next item from a menu.
+    fn next_item(&mut self) -> MenuResult<&mut Self::Item>;
+}
 
-    /// Returns the next output from the menu, or its default value if an error occurred.
-    fn next_or_default(&mut self) -> Output
-    where
-        Output: Default,
-    {
-        self.next_output().unwrap_or_default()
-    }
-
-    /// Returns the next output from the menu using a given menu stream in parameter,
-    /// or its default value if an error occurred.
-    fn next_or_default_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: Default,
-    {
-        self.next_output_with(stream).unwrap_or_default()
+fn next_output<'a, R, W, F, Out>(
+    stream: &mut MenuStream<'a, R, W>,
+    field: &mut F,
+) -> MenuResult<Out>
+where
+    F: Promptable<'a, Out, R, W>,
+{
+    loop {
+        match field.prompt_once(stream) {
+            Query::Finished(out) => break Ok(out),
+            Query::Err(e) => break Err(e),
+            _ => continue,
+        }
     }
 }
 
-/// The default input stream used by a menu, using the standard input stream.
-pub type In = BufReader<Stdin>;
+fn show_menu<R, W, M>(stream: &mut MenuStream<'_, R, W>, menu: &M) -> MenuResult<()>
+where
+    W: Write,
+    M: ?Sized + Display,
+{
+    writeln!(stream, "{}", menu).map_err(MenuError::from)
+}
 
-/// The default output stream used by a menu, using the standard output stream.
-pub type Out = Stdout;
+fn next_or_default<'a, R, W, F, Out>(
+    stream: &mut MenuStream<'a, R, W>,
+    field: MenuResult<&mut F>,
+) -> Out
+where
+    F: Promptable<'a, Out, R, W>,
+    Out: Default,
+{
+    field
+        .map(|f| f.prompt_once(stream).or_default())
+        .unwrap_or_default()
+}
+
+pub(crate) trait Bind<MenuOut, FieldOut> {
+    fn bind(&mut self, out: FieldOut) -> MenuOut;
+}
+
+/// Used to iterate over the values provided by the user.
+///
+/// It prompts the user while the value entered is incorrect. See [`MenuIter`] trait documentation
+/// for more information.
+pub(crate) trait AbstractMenu<'a, MenuOut, F, FieldOut, R, W>:
+    MenuIter<Item = F> + Display + Bind<MenuOut, FieldOut>
+where
+    F: Promptable<'a, FieldOut, R, W>,
+    R: 'a,
+    W: 'a + Write,
+{
+    /// Returns the next output of the menu entered by the user, using the given menu stream.
+    fn next_output(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<MenuOut> {
+        writeln!(stream, "{}", self)?;
+        next_output(stream, self.next_item()?).map(|f| self.bind(f))
+    }
+
+    /// Returns the next output of the menu entered by the user,
+    /// or its default value if an error occurred, using the given menu stream.
+    fn next_or_default(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuOut
+    where
+        FieldOut: Default,
+        MenuOut: Default,
+    {
+        show_menu(stream, self)
+            .map(|_| next_or_default(stream, self.next_item()))
+            .map(|f| self.bind(f))
+            .unwrap_or_default()
+    }
+}
 
 /// Used to retrieve the stream contained in a menu.
-pub trait GetStream<'s, R: 's, W: 's>: Sized {
+pub trait Streamable<'s, R: 's, W: 's>: Sized {
     /// Returns the menu stream, consuming the menu.
     fn get_stream(self) -> MenuStream<'s, R, W>;
+
+    /// Returns a reference of the menu stream.
+    fn get_stream_ref(&self) -> &MenuStream<'s, R, W>;
+
+    /// Returns a mutable reference of the menu stream.
+    fn get_stream_ref_mut(&mut self) -> &mut MenuStream<'s, R, W>;
 
     /// Returns the input and output streams, consuming the menu.
     /// See [`MenuStream::retrieve`](stream::MenuStream::retrieve) for more information.
@@ -132,6 +236,12 @@ pub trait GetStream<'s, R: 's, W: 's>: Sized {
         self.get_stream().retrieve()
     }
 }
+
+/// The default input stream used by a menu, using the standard input stream.
+pub type In = BufReader<Stdin>;
+
+/// The default output stream used by a menu, using the standard output stream.
+pub type Out = Stdout;
 
 /// The position of the title for an enum menu.
 /// By default, the title position is at the top.
@@ -288,6 +398,65 @@ impl Display for SelectTitle<'_> {
     }
 }
 
+pub(crate) struct SelectPrompt<'a, R, W> {
+    prefix: &'a str,
+    stream: Stream<'a, MenuStream<'a, R, W>>,
+    // shifted up by 1
+    default: Option<usize>,
+    max: usize,
+}
+
+impl<'a, R, W> Streamable<'a, R, W> for SelectPrompt<'a, R, W> {
+    fn get_stream(self) -> MenuStream<'a, R, W> {
+        self.stream.retrieve()
+    }
+
+    fn get_stream_ref(&self) -> &MenuStream<'a, R, W> {
+        &self.stream
+    }
+
+    fn get_stream_ref_mut(&mut self) -> &mut MenuStream<'a, R, W> {
+        &mut self.stream
+    }
+}
+
+impl<'a, R, W> SelectPrompt<'a, R, W> {
+    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, max: usize, default: Option<usize>) -> Self {
+        Self {
+            prefix: ">> ",
+            stream,
+            max,
+            default,
+        }
+    }
+
+    pub fn set_prefix(&mut self, new: &'a str) {
+        self.prefix = new;
+    }
+
+    pub fn set_default(&mut self, default: usize) {
+        self.default = Some(default + 1);
+    }
+}
+
+impl<R, W> Display for SelectPrompt<'_, R, W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self.prefix, f)
+    }
+}
+
+impl<'a, R, W> Promptable<'a, usize, R, W> for SelectPrompt<'a, R, W>
+where
+    R: BufRead,
+    W: Write,
+{
+    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<usize> {
+        <SelectPrompt<'a, R, W> as Promptable<'a, usize, R, W>>::show(self.prefix, stream)
+            .map(|s| parse_value(s, self.default))
+            .into()
+    }
+}
+
 /// Struct modeling a selective menu.
 ///
 /// ## Example
@@ -328,9 +497,8 @@ impl Display for SelectTitle<'_> {
 pub struct SelectMenu<'a, R = In, W = Out> {
     title: SelectTitle<'a>,
     fields: Vec<SelectField<'a, R, W>>,
-    stream: Stream<'a, MenuStream<'a, R, W>>,
     default: Option<usize>,
-    prefix: &'a str,
+    prompt: SelectPrompt<'a, R, W>,
 }
 
 impl<'a> From<Vec<SelectField<'a>>> for SelectMenu<'a> {
@@ -354,12 +522,12 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
         stream: Stream<'a, MenuStream<'a, R, W>>,
         fields: Vec<SelectField<'a, R, W>>,
     ) -> Self {
+        let max = fields.len();
         Self {
             title: Default::default(),
             fields,
-            stream,
             default: None,
-            prefix: ">> ",
+            prompt: SelectPrompt::new(stream, max, None),
         }
     }
 
@@ -412,6 +580,7 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     /// the default selective field.
     pub fn default(mut self, default: usize) -> Self {
         self.default = Some(default);
+        self.prompt.set_default(default);
         self
     }
 
@@ -419,7 +588,7 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     ///
     /// By default, the prefix used is `">> "`.
     pub fn prefix(mut self, prefix: &'a str) -> Self {
-        self.prefix = prefix;
+        self.prompt.set_prefix(prefix);
         self
     }
 
@@ -440,53 +609,25 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     }
 }
 
-impl<'a, R, W> SelectMenu<'a, R, W>
-where
-    R: BufRead,
-    W: Write,
-{
-    fn run_output<Output: 'static>(
-        &mut self,
-        provided: Option<&mut MenuStream<'a, R, W>>,
-    ) -> MenuResult<Output> {
-        let s = format!("{}", self);
-
-        let stream = if let Some(stream) = provided {
-            stream
-        } else {
-            &mut self.stream
-        };
-
-        stream.write_all(s.as_bytes())?;
-
-        // loops while incorrect input
-        loop {
-            match select_once(stream, self.prefix, self.default, &mut self.fields) {
-                Query::Err(e) => break Err(e),
-                Query::Finished(out) => break Ok(out),
-                Query::Loop => {
-                    if let Some(d) = self.default {
-                        break Ok(default_parse(d, &mut self.fields, &mut self.stream)?);
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl<'a, R, W> GetStream<'a, R, W> for SelectMenu<'a, R, W> {
+impl<'a, R, W> Streamable<'a, R, W> for SelectMenu<'a, R, W> {
     #[inline]
     fn get_stream(self) -> MenuStream<'a, R, W> {
-        self.stream.retrieve()
+        self.prompt.get_stream()
+    }
+
+    #[inline]
+    fn get_stream_ref(&self) -> &MenuStream<'a, R, W> {
+        self.prompt.get_stream_ref()
+    }
+
+    #[inline]
+    fn get_stream_ref_mut(&mut self) -> &mut MenuStream<'a, R, W> {
+        self.prompt.get_stream_ref_mut()
     }
 }
 
 impl<R, W> Display for SelectMenu<'_, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.fields.is_empty() {
-            panic!("empty fields vector for the selection menu");
-        }
-
         // displays title at top
         if let TitlePos::Top = self.title.pos {
             write!(f, "{}", self.title)?;
@@ -511,6 +652,7 @@ impl<R, W> Display for SelectMenu<'_, R, W> {
         if let TitlePos::Bottom = self.title.pos {
             write!(f, "{}", self.title)?;
         }
+
         Ok(())
     }
 }
@@ -525,131 +667,36 @@ fn assert_default_idx(default: usize, max: usize) {
     );
 }
 
-/// Returns the default value among the fields.
-///
-/// If the default value index or the aimed default field type is incorrect,
-/// it will return an error (See [`MenuError::IncorrectType`]).
-fn default_parse<Output, R, W>(
-    default: usize,
-    fields: &mut Vec<SelectField<'_, R, W>>,
-    stream: &mut MenuStream<R, W>,
-) -> MenuResult<Output>
+impl<'a, R, W> MenuIter for SelectMenu<'a, R, W>
 where
-    Output: 'static,
-{
-    assert_default_idx(default, fields.len());
-    let field = fields.remove(default);
-    field.call_bind(stream)?;
-    Ok(field.select())
-}
-
-impl<'a, Output, R, W> MenuBuilder<'a, Output, R, W> for SelectMenu<'a, R, W>
-where
-    Output: 'static,
     R: BufRead,
     W: Write,
 {
-    /// Displays the selective menu to the user, then return the field he selected.
-    ///
-    /// ## Example
-    ///
-    /// ```no_run
-    /// use std::str::FromStr;
-    /// use ezmenulib::prelude::*;
-    ///
-    /// enum Amount {
-    ///     Exact(u8),
-    ///     More,
-    /// }
-    ///
-    /// impl FromStr for Amount {
-    ///     type Err = MenuError;
-    ///
-    ///     fn from_str(s: &str) -> Result<Self, Self::Err> {
-    ///         match s {
-    ///             "one" => Ok(Self::Exact(1)),
-    ///             "two" => Ok(Self::Exact(2)),
-    ///             "three" => Ok(Self::Exact(3)),
-    ///             "more" => Ok(Self::More),
-    ///             _ => Err(MenuError::from("no")),
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// let amount: Amount = SelectMenu::from([
-    ///     SelectField::new("one", Amount::Exact(1)),
-    ///     SelectField::new("two", Amount::Exact(2)),
-    ///     SelectField::new("three", Amount::Exact(3)),
-    ///     SelectField::new("more", Amount::More),
-    /// ])
-    /// .next_output()
-    /// .unwrap();
-    /// ```
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an incorrect index has been specified as default.
-    fn next_output(&mut self) -> MenuResult<Output> {
-        self.run_output(None)
-    }
+    type Item = SelectPrompt<'a, R, W>;
 
-    /// Displays the selective menu to the user, then return the field he selected,
-    /// using the given menu stream.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an incorrect index has been specified as default.
-    fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output> {
-        self.run_output(Some(stream))
+    fn next_item(&mut self) -> MenuResult<&mut Self::Item> {
+        Ok(&mut self.prompt)
     }
+}
 
-    /// Displays the selective menu to the user, then return the field he selected,
-    /// or return the default value of the type specified.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an incorrect index has been specified as default.
-    fn next_or_default(&mut self) -> Output
-    where
-        Output: Default,
-    {
-        if {
-            let s = format!("{}", self);
-            self.stream.write_all(s.as_bytes())
-        }
-        .is_ok()
-        {
-            let res: MenuResult<Output> = select_once(
-                &mut self.stream,
-                self.prefix,
-                self.default,
-                &mut self.fields,
-            )
-            .into();
-            res.unwrap_or_default()
-        } else {
-            Output::default()
-        }
+impl<'a, Output, R, W> Bind<Output, usize> for SelectMenu<'a, R, W>
+where
+    Output: 'static,
+    R: 'a + BufRead,
+    W: 'a + Write,
+{
+    fn bind(&mut self, out: usize) -> Output {
+        todo!()
     }
+}
 
-    /// Displays the selective menu to the user, then return the field he selected,
-    /// or return the default value of the type specified, using the given menu stream.
-    ///
-    /// ## Panic
-    ///
-    /// This method panics if an incorrect index has been specified as default.
-    fn next_or_default_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: Default,
-    {
-        if stream.write_all(format!("{}", self).as_bytes()).is_ok() {
-            let res: MenuResult<Output> =
-                select_once(stream, self.prefix, self.default, &mut self.fields).into();
-            res.unwrap_or_default()
-        } else {
-            Output::default()
-        }
-    }
+impl<'a, Output, R, W> AbstractMenu<'a, Output, SelectPrompt<'a, R, W>, usize, R, W>
+    for SelectMenu<'a, R, W>
+where
+    Output: 'static,
+    R: 'a + BufRead,
+    W: 'a + Write,
+{
 }
 
 // We need to use this function from the owned selectable menu stream,
@@ -677,16 +724,14 @@ where
 
     show(prefix.as_bytes(), stream)
         .map(|s| {
-            parse_value(&s).and_then(|idx: usize| {
+            parse_value(&s, default.map(|i| i + 1)).and_then(|mut idx| {
                 if idx == 0 {
                     return Err(MenuError::Select(s));
                 }
+                idx -= 1;
 
-                if fields.get(idx - 1).is_some() {
-                    Ok(fields.remove(idx - 1).select())
-                } else if let Some(d) = default {
-                    assert_default_idx(d, fields.len());
-                    Ok(fields.remove(d).select())
+                if fields.get(idx).is_some() {
+                    fields.remove(idx).select(stream)
                 } else {
                     Err(MenuError::Select(s))
                 }
@@ -705,9 +750,10 @@ where
 pub struct ValueMenu<'a, R = In, W = Out> {
     title: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
-    fields: IntoIter<Field<'a, R, W>>,
+    fields: Vec<Field<'a, R, W>>,
     stream: Stream<'a, MenuStream<'a, R, W>>,
     popped: bool,
+    cursor: usize,
 }
 
 impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a> {
@@ -730,19 +776,19 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
         stream: Stream<'a, MenuStream<'a, R, W>>,
         mut fields: Vec<Field<'a, R, W>>,
     ) -> Self {
-        let fmt: Rc<ValueFieldFormatting> = Rc::default();
-
         // inherits fmt on submenus title
+        let fmt: Rc<ValueFieldFormatting> = Rc::default();
         for field in fields.iter_mut() {
             field.inherit_fmt(fmt.clone());
         }
 
         Self {
-            fields: fields.into_iter(),
+            fields,
             title: "",
             fmt,
             stream,
             popped: false,
+            cursor: 0,
         }
     }
 
@@ -790,7 +836,7 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
 
     #[inline]
     fn next_field(&mut self) -> Field<'a, R, W> {
-        self.fields.next().expect("no more field in the value-menu")
+        todo!()
     }
 }
 
@@ -819,6 +865,62 @@ where
         next_select(self.next_field(), &mut self.stream)
     }
 
+    pub fn next_value<Output>(&mut self) -> MenuResult<Output>
+    where
+        Output: 'static + FromStr,
+        Output::Err: 'static + Debug,
+    {
+        {
+            let s = format!("{}", self);
+            writeln!(self.stream, "{}", s)?;
+        }
+
+        next_output(
+            &mut self.stream,
+            next_item(&mut self.cursor, &mut self.fields)?,
+        )
+    }
+
+    pub fn next_value_with<Output>(
+        &mut self,
+        stream: &mut MenuStream<'a, R, W>,
+    ) -> MenuResult<Output>
+    where
+        Output: 'static + FromStr,
+        Output::Err: 'static + Debug,
+    {
+        AbstractMenu::next_output(self, stream)
+    }
+
+    pub fn next_value_or_default<Output>(&mut self) -> Output
+    where
+        Output: 'static + FromStr + Default,
+        Output::Err: 'static + Debug,
+    {
+        {
+            let s = format!("{}", self);
+            show_menu(&mut self.stream, &s)
+        }
+        .map(|_| {
+            next_or_default(
+                &mut self.stream,
+                next_item(&mut self.cursor, &mut self.fields),
+            )
+        })
+        .unwrap_or_default()
+    }
+
+    pub fn next_value_or_default_with<Output>(
+        &mut self,
+        stream: &mut MenuStream<'a, R, W>,
+    ) -> Output
+    where
+        Output: 'static + FromStr + Default,
+        Output::Err: 'static + Debug,
+    {
+        AbstractMenu::next_or_default(self, stream)
+    }
+
     /// Returns the next output, if the next output corresponds to an inner selectable menu,
     /// using the given menu stream.
     ///
@@ -844,7 +946,7 @@ where
     /// ## Panic
     ///
     /// If the next field is not a value-field, this function will panic.
-    pub fn next_output_until<Output, F>(&mut self, w: F) -> MenuResult<Output>
+    pub fn next_value_until<Output, F>(&mut self, w: F) -> MenuResult<Output>
     where
         Output: FromStr,
         Output::Err: 'static + Debug,
@@ -862,7 +964,7 @@ where
     /// ## Panic
     ///
     /// If the next field is not a value-field, this function will panic.
-    pub fn next_output_with_until<Output, F>(
+    pub fn next_value_until_with<Output, F>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
         w: F,
@@ -887,88 +989,56 @@ where
     W: Write,
 {
     if let Field::Select(mut s) = field {
-        s.next_output_with(stream)
+        s.next_output(stream)
     } else {
         panic!("next output of the value-menu is not from a selectable menu")
     }
 }
 
-impl<'a, Output, R, W> MenuBuilder<'a, Output, R, W> for ValueMenu<'a, R, W>
-where
-    Output: FromStr + 'static,
-    Output::Err: 'static + Debug,
-    R: BufRead,
-    W: Write,
-{
-    /// Returns the output of the next field if present.
-    ///
-    /// ## Panic
-    ///
-    /// This function panics if there is no more field in the value-menu,
-    /// or if an incorrect value type has been used as default.
-    fn next_output(&mut self) -> MenuResult<Output> {
-        self.show_title()?;
-        self.next_field().build(&mut self.stream)
-    }
+fn next_item<'a, 'b: 'a, R, W>(
+    cursor: &mut usize,
+    fields: &'a mut Vec<Field<'b, R, W>>,
+) -> MenuResult<&'a mut Field<'b, R, W>> {
+    let out = fields.get_mut(*cursor).ok_or(MenuError::EndOfMenu);
+    *cursor += 1;
+    out
+}
 
-    /// Returns the output of the next field if present using the given menu stream.
-    ///
-    /// ## Panic
-    ///
-    /// This function panics if there is no more field in the value-menu,
-    /// or if an incorrect value type has been used as default.
-    fn next_output_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output> {
-        show_title(stream, self.title, &mut self.popped)?;
-        self.next_field().build(stream)
-    }
+impl<'a, R, W> MenuIter for ValueMenu<'a, R, W> {
+    type Item = Field<'a, R, W>;
 
-    /// Returns the output of the next field if present or its default type.
-    ///
-    /// ## Panic
-    ///
-    /// This function panics if there is no more field in the value-menu,
-    /// or if an incorrect value type has been used as default.
-    fn next_or_default(&mut self) -> Output
-    where
-        Output: Default,
-    {
-        let field = self.next_field();
-        next_or_default(&mut self.stream, field, &mut self.popped, self.title)
-    }
-
-    /// Returns the output of the next field if present or its default type,
-    /// using the given menu stream.
-    ///
-    /// ## Panic
-    ///
-    /// This function panics if there is no more field in the value-menu,
-    /// or if an incorrect value type has been used as default.
-    fn next_or_default_with(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: Default,
-    {
-        let field = self.next_field();
-        next_or_default(stream, field, &mut self.popped, self.title)
+    fn next_item(&mut self) -> MenuResult<&mut Self::Item> {
+        next_item(&mut self.cursor, &mut self.fields)
     }
 }
 
-fn next_or_default<'a, Output, R, W>(
-    stream: &mut MenuStream<'a, R, W>,
-    mut field: Field<'a, R, W>,
-    popped: &mut bool,
-    title: &str,
-) -> Output
-where
-    Output: FromStr + Default + 'static,
-    Output::Err: 'static + Debug,
-    W: Write,
-    R: BufRead,
-{
-    if show_title(stream, title, popped).is_ok() {
-        field.build_or_default(stream)
-    } else {
-        Output::default()
+impl<R, W> Display for ValueMenu<'_, R, W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self.title, f)
     }
+}
+
+impl<'a, Output, R, W> Bind<Output, Output> for ValueMenu<'a, R, W>
+where
+    Output: 'static + FromStr,
+    Output::Err: 'static + Debug,
+    R: BufRead,
+    W: Write,
+{
+    #[inline]
+    fn bind(&mut self, out: Output) -> Output {
+        out
+    }
+}
+
+impl<'a, Output, R, W> AbstractMenu<'a, Output, Field<'a, R, W>, Output, R, W>
+    for ValueMenu<'a, R, W>
+where
+    Output: 'static + FromStr,
+    Output::Err: 'static + Debug,
+    R: BufRead,
+    W: Write,
+{
 }
 
 fn show_title<R, W>(stream: &mut MenuStream<R, W>, title: &str, popped: &mut bool) -> MenuResult<()>
@@ -982,7 +1052,7 @@ where
     Ok(())
 }
 
-impl<'a, R, W> GetStream<'a, R, W> for ValueMenu<'a, R, W> {
+impl<'a, R, W> Streamable<'a, R, W> for ValueMenu<'a, R, W> {
     /// Returns the menu stream, consuming the menu.
     ///
     /// ## Panic
@@ -993,4 +1063,31 @@ impl<'a, R, W> GetStream<'a, R, W> for ValueMenu<'a, R, W> {
     fn get_stream(self) -> MenuStream<'a, R, W> {
         self.stream.retrieve()
     }
+
+    fn get_stream_ref(&self) -> &MenuStream<'a, R, W> {
+        &self.stream
+    }
+
+    fn get_stream_ref_mut(&mut self) -> &mut MenuStream<'a, R, W> {
+        &mut self.stream
+    }
 }
+//
+// pub enum Kind<'a, R, W> {
+//     Select(SelectMenu<'a, R, W>),
+//     Values(ValueMenu<'a, R, W>),
+//     Menu(Menu<'a, R, W>),
+//     Bind(Binding<R, W>),
+// }
+//
+// pub struct Item<'a, R, W> {
+//     msg: &'a str,
+//     kind: Kind<'a, R, W>,
+//     bind: Option<Binding<R, W>>,
+// }
+//
+// pub struct Menu<'a, R = In, W = Out> {
+//     title: &'a str,
+//     items: Vec<Item<'a, R, W>>,
+// }
+//

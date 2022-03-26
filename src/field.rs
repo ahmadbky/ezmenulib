@@ -25,6 +25,36 @@ use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
+/// See the diagram in the `menu` module for more information.
+pub(crate) trait Promptable<'a, Output, R, W> {
+    fn show<P>(pr: &P, stream: &mut MenuStream<R, W>) -> MenuResult<String>
+    where
+        R: BufRead,
+        W: Write,
+        P: ?Sized + Display,
+    {
+        write!(stream, "{}", pr)?;
+        stream.flush()?;
+        raw_read_input(stream)
+    }
+
+    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output>;
+
+    fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Output>
+    where
+        F: Fn(&Output) -> bool,
+    {
+        // loops while incorrect input
+        loop {
+            match self.prompt_once(stream) {
+                Query::Finished(out) if til(&out) => break Ok(out),
+                Query::Err(e) => break Err(e),
+                _ => continue,
+            }
+        }
+    }
+}
+
 /// A field contained in a [`ValueMenu`](crate::menu::ValueMenu) menu.
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
@@ -34,6 +64,26 @@ pub enum Field<'a, R = In, W = Out> {
     Value(ValueField<'a>),
     /// A field proposing selectable values to the user.
     Select(SelectMenu<'a, R, W>),
+}
+
+impl<'a, Output, R, W> Promptable<'a, Output, R, W> for Field<'a, R, W>
+where
+    R: BufRead,
+    W: Write,
+    Output: 'static + FromStr,
+    Output::Err: 'static + Debug,
+{
+    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output> {
+        match self {
+            Self::Value(vf) => vf.build_once(stream),
+            Self::Select(sm) => {
+                AbstractMenu::<'a, Output, SelectPrompt<'a, R, W>, usize, R, W>::next_output(
+                    sm, stream,
+                )
+                .into()
+            }
+        }
+    }
 }
 
 impl<'a, R, W> Field<'a, R, W> {
@@ -55,24 +105,6 @@ where
     R: BufRead,
     W: Write,
 {
-    /// Builds the field according to its type.
-    ///
-    /// That is, if it is a value-field, it will ask the user a value then return it,
-    /// while if it is a selectable menu, it will display the menu to the user then return the value
-    /// selected.
-    ///
-    /// See [`ValueField::build`] and [`SelectMenu::next_output`] for more information.
-    pub(crate) fn build<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>
-    where
-        Output: FromStr + 'static,
-        Output::Err: 'static + Debug,
-    {
-        match self {
-            Self::Value(vf) => vf.build_with(stream),
-            Self::Select(sm) => sm.next_output_with(stream),
-        }
-    }
-
     pub(crate) fn build_until<Output, F>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
@@ -88,17 +120,6 @@ where
             _ => {
                 panic!("cannot apply a conditional closure to map the output of a selectable menu")
             }
-        }
-    }
-
-    pub(crate) fn build_or_default<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: FromStr + Default + 'static,
-        Output::Err: 'static + Debug,
-    {
-        match self {
-            Self::Value(vf) => vf.build_or_default_with(stream),
-            Self::Select(sm) => sm.next_or_default_with(stream),
         }
     }
 }
@@ -176,18 +197,12 @@ impl<'a, R, W> SelectField<'a, R, W> {
         }
     }
 
-    pub(crate) fn call_bind(&self, stream: &mut MenuStream<R, W>) -> MenuResult<()> {
+    pub(crate) fn select<T: 'static>(self, stream: &mut MenuStream<R, W>) -> MenuResult<T> {
         if let Some(b) = self.bind {
             b(stream)?;
         }
-        Ok(())
-    }
 
-    pub(crate) fn select<T: 'static>(self) -> T {
-        *self
-            .inner
-            .downcast()
-            .expect("incorrect output type providing")
+        Ok(*self.inner.downcast().expect("invalid output type downcast"))
     }
 
     /// Defines the function to execute right after the user selected this field.
@@ -280,9 +295,9 @@ macro_rules! impl_constructors {
 }
 
 impl_constructors!(
-    /// Sets the chip of the formatting (`--> ` by default).
+    /// Sets the chip of the formatting (`"--> "` by default).
     chip: &'a str,
-    /// Sets the prefix of the formatting (`>> ` by default).
+    /// Sets the prefix of the formatting (`">> "` by default).
     prefix: &'a str,
     /// Defines if there is a new line between the message and the prefix with the user input (`true` by default).
     new_line: bool,
@@ -309,7 +324,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
 }
 
 // should not be accessed from outer module
-enum DefaultValue<'a> {
+pub(crate) enum DefaultValue<'a> {
     Value(&'a str),
     Env(String),
 }
@@ -599,7 +614,7 @@ impl<'a> ValueField<'a> {
     ///
     /// The function takes a reference to the returned output provided by the user, and returns
     /// a `bool` to check if the output is correct.
-    pub fn build_until<T, R, W, F>(&self, stream: &mut MenuStream<R, W>, until: F) -> MenuResult<T>
+    pub fn build_until<T, R, W, F>(&self, stream: &mut MenuStream<R, W>, til: F) -> MenuResult<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
@@ -610,7 +625,7 @@ impl<'a> ValueField<'a> {
         // loops while incorrect input
         loop {
             match self.build_once(stream) {
-                Query::Finished(out) if until(&out) => break Ok(out),
+                Query::Finished(out) if til(&out) => break Ok(out),
                 Query::Loop => {
                     if let Some(default) = &self.details.default {
                         return Ok(default_parse(default));
@@ -622,39 +637,94 @@ impl<'a> ValueField<'a> {
         }
     }
 
-    fn build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
+    /// Builds the field with a given menu stream once.
+    pub fn build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
     where
         T: FromStr,
         T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
     {
-        fn show<R, W>(field: &ValueField<'_>, stream: &mut MenuStream<R, W>) -> MenuResult<String>
-        where
-            R: BufRead,
-            W: Write,
-        {
-            write!(stream, "{}", field)?;
-            stream.flush()?;
-            raw_read_input(stream)
-        }
-
-        show(self, stream).map(parse_value).into()
+        <ValueField<'a> as Promptable<'a, T, R, W>>::show(self, stream)
+            .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
+            .into()
     }
 }
 
-pub(crate) enum Query<T> {
+impl<'a, Out, R, W> Promptable<'a, Out, R, W> for ValueField<'a>
+where
+    Out: FromStr,
+    Out::Err: 'static + Debug,
+    R: BufRead,
+    W: Write,
+{
+    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Out> {
+        self.build_once(stream)
+    }
+
+    fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Out>
+    where
+        F: Fn(&Out) -> bool,
+    {
+        self.build_until(stream, til)
+    }
+}
+
+/// The return type of each iteration when prompting a value to the user.
+///
+/// `T` represents the output type of the field or menu.
+pub enum Query<T> {
+    /// The user entered a correct value, so it has been parsed to its corresponding type.
     Finished(T),
+    /// An error occurred when prompting a value.
     Err(MenuError),
+    /// The user entered an incorrect value.
     Loop,
 }
 
+impl<T> Query<T> {
+    /// Calls `op` if the result is [`Finished`](Query::Finished), otherwise returns the [`Err`]
+    /// or [`Loop`] value of `self`.
+    ///
+    /// This function is used for control flow based on `Query` values.
+    pub fn then<U, O: FnOnce(T) -> Query<U>>(self, op: O) -> Query<U> {
+        match self {
+            Self::Finished(t) => op(t),
+            Self::Err(e) => Query::Err(e),
+            _ => Query::Loop,
+        }
+    }
+}
+
+impl<T: Default> Query<T> {
+    pub fn or_default(self) -> T {
+        match self {
+            Self::Finished(out) => out,
+            _ => T::default(),
+        }
+    }
+}
+
+/// The inner Result represents the parsing result of the output type.
+/// The outer Result represents the other error types.
 impl<T> From<MenuResult<MenuResult<T>>> for Query<T> {
     fn from(res: MenuResult<MenuResult<T>>) -> Self {
         match res {
             Ok(Ok(out)) => Self::Finished(out),
             Ok(Err(_)) => Self::Loop,
             Err(e) => Self::Err(e),
+        }
+    }
+}
+
+impl<T, E> From<Result<T, E>> for Query<T>
+where
+    MenuError: From<E>,
+{
+    fn from(res: Result<T, E>) -> Self {
+        match res {
+            Ok(t) => Self::Finished(t),
+            Err(e) => Self::Err(MenuError::from(e)),
         }
     }
 }
@@ -685,15 +755,17 @@ where
 ///
 /// It is useful because it maps the error according to the [`MenuError`](crate::MenuError)
 /// type definition.
-pub(crate) fn parse_value<T, S>(s: S) -> MenuResult<T>
+pub(crate) fn parse_value<T, S>(s: S, default: Option<T>) -> MenuResult<T>
 where
     T: FromStr,
     T::Err: 'static + Debug,
     S: AsRef<str>,
 {
     let s = s.as_ref();
-    s.parse()
-        .map_err(|e| MenuError::Parse(s.to_owned(), Box::new(e)))
+    match (s.parse(), default) {
+        (Ok(out), _) | (Err(_), Some(out)) => Ok(out),
+        (Err(e), None) => Err(MenuError::Parse(s.to_owned(), Box::new(e))),
+    }
 }
 
 pub(crate) fn default_parse_failed<S, E>(s: S, e: E) -> !
