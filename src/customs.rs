@@ -20,8 +20,8 @@
 //! ])
 //! .title("Describe a project.");
 //!
-//! let authors: MenuVec<String> = project.next_output().unwrap();
-//! let hard: MenuBool = project.next_output().unwrap();
+//! let authors: MenuVec<String> = project.next_value().unwrap();
+//! let hard: MenuBool = project.next_value().unwrap();
 //! ```
 
 use crate::MenuError;
