@@ -7,7 +7,7 @@ macro_rules! test_menu {
             my_menu,
             $input,
             $fields,
-            $(let $name: $ty = my_menu.next_output().expect("invalid next output")),*
+            $(let $name: $ty = my_menu.next_value().expect("invalid next output")),*
             => $output
         };
     };
@@ -30,7 +30,7 @@ macro_rules! test_menu {
 fn no_field() {
     let input = "".as_bytes();
     let mut my_menu = ValueMenu::new(input, stdout(), Vec::new());
-    let _: bool = my_menu.next_output().unwrap();
+    let _: bool = my_menu.next_value().unwrap();
 }
 
 #[test]
@@ -41,11 +41,7 @@ fn one_field() {
         _name: String,
         => output,
     };
-    assert_eq!(
-        output,
-        "--> your name please
->> \n"
-    );
+    assert_eq!(output, "--> your name please\n>> ");
 }
 
 #[test]
@@ -63,10 +59,8 @@ fn retrieve_value() {
 
     assert_eq!(
         output,
-        "--> your name please
->> 
---> how old are you
->> \n"
+        "--> your name please\n>> \
+--> how old are you\n>> "
     );
 
     assert_eq!(name, "Ahmad");
@@ -83,13 +77,7 @@ fn loop_ask() {
     };
 
     assert_eq!(age, 86u8);
-    assert_eq!(
-        output,
-        "--> your age please
->> 
---> your age please
->> \n"
-    );
+    assert_eq!(output, "--> your age please\n>> >> ");
 }
 
 #[test]
@@ -99,15 +87,14 @@ fn field_example_value() {
         my_menu,
         "mlzigujz\n",
         vec![Field::Value(ValueField::from("your age please").example("19").default_value("18"))],
-        let age: u8 = my_menu.next_or_default()
+        let age: u8 = my_menu.next_value_or_default()
         => output,
     };
 
     assert_eq!(age, 18);
     assert_eq!(
         output,
-        "--> your age please (example: 19, default: 18)
->> \n"
+        "--> your age please (example: 19, default: 18)\n>> "
     );
 
     // with only example
@@ -115,32 +102,24 @@ fn field_example_value() {
         my_menu,
         "mlzigujz\n",
         vec![Field::Value(ValueField::from("your age please").example("19"))],
-        let age: u8 = my_menu.next_or_default()
+        let age: u8 = my_menu.next_value_or_default()
         => output,
     };
 
     assert_eq!(age, 0);
-    assert_eq!(
-        output,
-        "--> your age please (example: 19)
->> \n"
-    );
+    assert_eq!(output, "--> your age please (example: 19)\n>> ");
 
     // with only default value
     test_menu! {
         my_menu,
         "mlzigujz\n",
         vec![Field::Value(ValueField::from("your age please").default_value("19"))],
-        let age: u8 = my_menu.next_or_default()
+        let age: u8 = my_menu.next_value_or_default()
         => output,
     };
 
     assert_eq!(age, 19);
-    assert_eq!(
-        output,
-        "--> your age please (default: 19)
->> \n"
-    );
+    assert_eq!(output, "--> your age please (default: 19)\n>> ");
 }
 
 #[test]
@@ -153,11 +132,7 @@ fn date_value() {
     };
 
     assert_eq!(date, NaiveDate::from_ymd(2015, 04, 29));
-    assert_eq!(
-        output,
-        "--> date (default: 2015-04-29)
->> \n"
-    );
+    assert_eq!(output, "--> date (default: 2015-04-29)\n>> ");
 }
 
 #[test]
@@ -181,37 +156,21 @@ fn ask_until() {
         menu,
         "402385\nAhmad\n",
         vec![Field::Value(ValueField::from("Author name"))],
-        let name = menu.next_output_until(|s: &String| !s.parse::<i32>().is_ok()).unwrap()
+        let name = menu.next_value_until(|s: &String| !s.parse::<i32>().is_ok()).unwrap()
         => output,
     };
 
     assert_eq!(name, "Ahmad");
-    assert_eq!(
-        output,
-        "--> Author name
->> 
---> Author name
->> \n"
-    );
+    assert_eq!(output, "--> Author name\n>> >> ");
 
     test_menu! {
         menu,
         "-54\n-34\n0\n23\n",
         vec![Field::Value(ValueField::from("age"))],
-        let age = menu.next_output_until(|n: &i32| *n > 0).unwrap()
+        let age = menu.next_value_until(|n: &i32| *n > 0).unwrap()
         => output,
     };
 
     assert_eq!(age, 23);
-    assert_eq!(
-        output,
-        "--> age
->> 
---> age
->> 
---> age
->> 
---> age
->> \n"
-    );
+    assert_eq!(output, "--> age\n>> >> >> >> ");
 }

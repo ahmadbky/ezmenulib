@@ -6,7 +6,7 @@ macro_rules! test_menu {
         let mut input = $input.as_bytes();
         let mut output = Vec::<u8>::new();
         let mut my_menu = SelectMenu::new_ref(&mut input, &mut output, $fields);
-        let $var: $ty = my_menu.next_output().expect("invalid next output");
+        let $var: $ty = my_menu.select().expect("invalid next output");
         let $output = String::from_utf8(output).expect("unexpected invalid utf8 output");
     };
 }
@@ -16,7 +16,7 @@ macro_rules! test_menu {
 fn no_field() {
     let input = "zmlerkjg".as_bytes();
     let mut my_menu = SelectMenu::new(input, stdout(), vec![]);
-    let _: bool = my_menu.next_output().unwrap();
+    let _: bool = my_menu.select().unwrap();
 }
 
 #[allow(dead_code)]
@@ -35,12 +35,5 @@ fn one_field() {
         => output,
     };
 
-    assert_eq!(
-        output,
-        "1 - MIT
->> 
->> 
->> 
->> \n"
-    );
+    assert_eq!(output, "1 - MIT\n>> >> >> >> ");
 }
