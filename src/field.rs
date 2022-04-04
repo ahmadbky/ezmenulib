@@ -18,6 +18,7 @@
 //! independently from the global formatting rules.
 
 use crate::prelude::*;
+use crate::DEFAULT_FMT;
 use std::any::Any;
 use std::env;
 use std::fmt::{self, Debug, Display, Formatter};
@@ -26,24 +27,22 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 /// See the diagram in the `menu` module for more information.
-pub(crate) trait Promptable<'a, Output, R, W> {
-    fn show<P>(pr: &P, stream: &mut MenuStream<R, W>) -> MenuResult<String>
-    where
-        R: BufRead,
-        W: Write,
-        P: ?Sized + Display,
-    {
-        write!(stream, "{}", pr)?;
-        stream.flush()?;
-        raw_read_input(stream)
-    }
-
+pub trait Promptable<'a, Output, R, W>: Display {
     fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output>;
+
+    fn prompt(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>
+    where
+        W: Write,
+    {
+        self.prompt_until(stream, |_| true)
+    }
 
     fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Output>
     where
         F: Fn(&Output) -> bool,
+        W: Write,
     {
+        show(self, stream)?;
         // loops while incorrect input
         loop {
             match self.prompt_once(stream) {
@@ -52,6 +51,16 @@ pub(crate) trait Promptable<'a, Output, R, W> {
                 _ => continue,
             }
         }
+    }
+
+    fn prompt_or_default(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
+    where
+        Output: Default,
+        W: Write,
+    {
+        show(self, stream)
+            .and(self.prompt_once(stream).into())
+            .unwrap_or_default()
     }
 }
 
@@ -66,6 +75,18 @@ pub enum Field<'a, R = In, W = Out> {
     Select(SelectMenu<'a, R, W>),
 }
 
+impl<'a, R, W> Display for Field<'a, R, W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(
+            match self {
+                Self::Value(vf) => vf as &dyn Display,
+                Self::Select(sm) => sm as &dyn Display,
+            },
+            f,
+        )
+    }
+}
+
 impl<'a, Output, R, W> Promptable<'a, Output, R, W> for Field<'a, R, W>
 where
     R: BufRead,
@@ -75,13 +96,8 @@ where
 {
     fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output> {
         match self {
-            Self::Value(vf) => vf.build_once(stream),
-            Self::Select(sm) => {
-                AbstractMenu::<'a, Output, SelectPrompt<'a, R, W>, usize, R, W>::next_output(
-                    sm, stream,
-                )
-                .into()
-            }
+            Self::Value(vf) => vf.prompt_once(stream),
+            Self::Select(sm) => sm.prompt_once(stream),
         }
     }
 }
@@ -96,30 +112,6 @@ impl<'a, R, W> Field<'a, R, W> {
         match self {
             Self::Value(vf) => vf.inherit_fmt(fmt),
             Self::Select(sm) => sm.inherit_fmt(fmt),
-        }
-    }
-}
-
-impl<'a, R, W> Field<'a, R, W>
-where
-    R: BufRead,
-    W: Write,
-{
-    pub(crate) fn build_until<Output, F>(
-        &mut self,
-        stream: &mut MenuStream<'a, R, W>,
-        w: F,
-    ) -> MenuResult<Output>
-    where
-        Output: FromStr,
-        Output::Err: 'static + Debug,
-        F: Fn(&Output) -> bool,
-    {
-        match self {
-            Self::Value(vf) => vf.build_until(stream, w),
-            _ => {
-                panic!("cannot apply a conditional closure to map the output of a selectable menu")
-            }
         }
     }
 }
@@ -269,8 +261,6 @@ pub struct ValueFieldFormatting<'a> {
     pub chip: &'a str,
     /// The small string slice displayed before the user input (by default set as `">> "`).
     pub prefix: &'a str,
-    /// Sets the user input with its prefix on a new line or not (by default set as `true`).
-    pub new_line: bool,
     /// Display default value or not (by default set as `true`).
     pub default: bool,
 }
@@ -299,8 +289,6 @@ impl_constructors!(
     chip: &'a str,
     /// Sets the prefix of the formatting (`">> "` by default).
     prefix: &'a str,
-    /// Defines if there is a new line between the message and the prefix with the user input (`true` by default).
-    new_line: bool,
     /// Defines if it displays the default value or not (`true` by default).
     default: bool
 );
@@ -314,12 +302,7 @@ impl_constructors!(
 /// ```
 impl<'a> Default for ValueFieldFormatting<'a> {
     fn default() -> Self {
-        Self {
-            chip: "--> ",
-            prefix: ">> ",
-            new_line: true,
-            default: true,
-        }
+        DEFAULT_FMT
     }
 }
 
@@ -454,14 +437,12 @@ impl<'a> From<&'a str> for ValueField<'a> {
 
 impl Display for ValueField<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
-            "{chip}{msg}{det}{nl}{prefix}",
+            "{chip}{msg}{det}",
             chip = self.fmt.chip,
             msg = self.msg,
             det = self.details,
-            nl = if self.fmt.new_line { "\n" } else { "" },
-            prefix = self.fmt.prefix,
         )
     }
 }
@@ -626,7 +607,7 @@ impl<'a> ValueField<'a> {
         loop {
             match self.build_once(stream) {
                 Query::Finished(out) if til(&out) => break Ok(out),
-                Query::Loop => {
+                Query::Continue => {
                     if let Some(default) = &self.details.default {
                         return Ok(default_parse(default));
                     }
@@ -645,7 +626,20 @@ impl<'a> ValueField<'a> {
         R: BufRead,
         W: Write,
     {
-        <ValueField<'a> as Promptable<'a, T, R, W>>::show(self, stream)
+        match show(self, stream) {
+            Ok(()) => self.inner_build_once(stream),
+            Err(e) => Query::Err(e),
+        }
+    }
+
+    fn inner_build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
+    where
+        T: FromStr,
+        T::Err: 'static + Debug,
+        R: BufRead,
+        W: Write,
+    {
+        prompt(self.fmt.prefix, stream)
             .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
             .into()
     }
@@ -659,83 +653,7 @@ where
     W: Write,
 {
     fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Out> {
-        self.build_once(stream)
-    }
-
-    fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Out>
-    where
-        F: Fn(&Out) -> bool,
-    {
-        self.build_until(stream, til)
-    }
-}
-
-/// The return type of each iteration when prompting a value to the user.
-///
-/// `T` represents the output type of the field or menu.
-pub enum Query<T> {
-    /// The user entered a correct value, so it has been parsed to its corresponding type.
-    Finished(T),
-    /// An error occurred when prompting a value.
-    Err(MenuError),
-    /// The user entered an incorrect value.
-    Loop,
-}
-
-impl<T> Query<T> {
-    /// Calls `op` if the result is [`Finished`](Query::Finished), otherwise returns the [`Err`]
-    /// or [`Loop`] value of `self`.
-    ///
-    /// This function is used for control flow based on `Query` values.
-    pub fn then<U, O: FnOnce(T) -> Query<U>>(self, op: O) -> Query<U> {
-        match self {
-            Self::Finished(t) => op(t),
-            Self::Err(e) => Query::Err(e),
-            _ => Query::Loop,
-        }
-    }
-}
-
-impl<T: Default> Query<T> {
-    pub fn or_default(self) -> T {
-        match self {
-            Self::Finished(out) => out,
-            _ => T::default(),
-        }
-    }
-}
-
-/// The inner Result represents the parsing result of the output type.
-/// The outer Result represents the other error types.
-impl<T> From<MenuResult<MenuResult<T>>> for Query<T> {
-    fn from(res: MenuResult<MenuResult<T>>) -> Self {
-        match res {
-            Ok(Ok(out)) => Self::Finished(out),
-            Ok(Err(_)) => Self::Loop,
-            Err(e) => Self::Err(e),
-        }
-    }
-}
-
-impl<T, E> From<Result<T, E>> for Query<T>
-where
-    MenuError: From<E>,
-{
-    fn from(res: Result<T, E>) -> Self {
-        match res {
-            Ok(t) => Self::Finished(t),
-            Err(e) => Self::Err(MenuError::from(e)),
-        }
-    }
-}
-
-impl<T> From<Query<T>> for MenuResult<T> {
-    fn from(q: Query<T>) -> Self {
-        match q {
-            Query::Finished(out) => Ok(out),
-            Query::Err(e) => Err(e),
-            Query::Loop => Err(MenuError::from("incorrect input")),
-        }
+        self.inner_build_once(stream)
     }
 }
 
@@ -747,7 +665,6 @@ where
 {
     let mut out = String::new();
     stream.read_line(&mut out)?;
-    stream.write_all(b"\n")?;
     Ok(out.trim().to_owned())
 }
 
