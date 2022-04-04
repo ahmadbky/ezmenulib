@@ -26,7 +26,7 @@
 //!
 //! Here is an example of how to use this menu:
 //!
-//! ```
+//! ```no_run
 //! use ezmenulib::prelude::*;
 //!
 //! let mut my_menu = ValueMenu::from([
@@ -35,8 +35,8 @@
 //! ])
 //! .title("Hello there!");
 //!
-//! let name: String = my_menu.next_output().unwrap();
-//! let number: i32 = my_menu.next_output().unwrap();
+//! let name: String = my_menu.next_value().unwrap();
+//! let number: i32 = my_menu.next_value().unwrap();
 //!
 //! println!("values provided: name={}, number={}", name, number);
 //! ```
@@ -137,7 +137,7 @@
 //!
 //! ### Example
 //!
-//! ```rust
+//! ```no_run
 //! use std::str::FromStr;
 //! use ezmenulib::field::ValueField;
 //!
@@ -186,7 +186,7 @@
 //!
 //! ## Example
 //!
-//! ```
+//! ```no_run
 //! use std::str::FromStr;
 //! use ezmenulib::prelude::*;
 //!
@@ -203,7 +203,7 @@
 //! ])
 //! .title(SelectTitle::from("Choose a license type"))
 //! .default(0)
-//! .next_output()
+//! .select()
 //! .unwrap();
 //! ```
 //!
@@ -292,10 +292,13 @@ pub mod customs;
 pub mod field;
 pub mod menu;
 
+mod query;
+
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
     pub use crate::field::*;
     pub use crate::menu::*;
+    pub use crate::query::*;
 
     pub use crate::MenuError;
     pub use crate::MenuResult;
@@ -315,10 +318,17 @@ pub mod chrono {
     pub use chrono::*;
 }
 
+use crate::field::ValueFieldFormatting;
 use std::env::VarError;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, io};
+
+pub(crate) const DEFAULT_FMT: ValueFieldFormatting<'static> = ValueFieldFormatting {
+    chip: "--> ",
+    prefix: ">> ",
+    default: true,
+};
 
 /// The error type used by the menu builder.
 #[non_exhaustive]
