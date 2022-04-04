@@ -7,7 +7,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         SelectField::new("1", 1),
         SelectField::new("2", 2),
     ])
-    .next_output()?;
+    .default(0)
+    .select()
+    .unwrap();
 
     println!("you selected {}", amount);
     Ok(())
