@@ -2,7 +2,7 @@
 
 # EZMenuLib
 
-[![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](https://google.com)
+[![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](./LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib)
 [![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
 </div>
