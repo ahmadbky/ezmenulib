@@ -21,14 +21,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SelectField::new("BSD", Type::BSD),
             ])
             .title(SelectTitle::from("Select a license type"))
-            .default(0),
+            .default(1),
         ),
     ])
     .title("Describe your project");
 
-    let authors: MenuVec<String> = license.next_output()?;
-    let name: MenuOption<String> = license.next_output()?;
-    let date: u16 = license.next_output()?;
+    let authors: MenuVec<String> = license.next_value()?;
+    let name: MenuOption<String> = license.next_value()?;
+    let date: u16 = license.next_value()?;
     let ty: Type = license.next_select()?;
 
     println!(
