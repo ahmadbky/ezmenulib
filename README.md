@@ -2,9 +2,9 @@
 
 # EZMenuLib
 
-![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)
-![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)
-![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)
+[![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](https://google.com)
+[![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib)
+[![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
 </div>
 
 Fast designing menus for your Rust CLI programs.
@@ -44,11 +44,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .title(SelectTitle::from("Select a number"))),
     ]);
     
-    let name: String = my_menu.next_output()?;
-    let number: i32 = my_menu.next_output()?;
+    let name: String = my_menu.next_value()?;
+    let number: i32 = my_menu.next_value()?;
     let amount: u8 = my_menu.next_select()?;
     
-    println!("hello {}, you entered {} and you selected {}.", name, number, amount);
+    println!("hello {}, you entered {} and you selected the amount: {}.", name, number, amount);
 }
 ```
 
@@ -58,17 +58,14 @@ This sample code prints the standard menu like above:
 Hello there!
 --> Give your name
 >> Ahmad
-
 --> Give a number
 >> 1000
-
 --> Select a number:
 1 - 0
 2 - 1
 3 - 2
 >> 2
-
-hello Ahmad, you entered 1000 and you selected 1.
+hello Ahmad, you entered 1000 and you selected the amount: 1.
 ```
 
 ## Documentation
