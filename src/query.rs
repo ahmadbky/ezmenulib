@@ -14,10 +14,13 @@ pub enum Query<T> {
 
 impl<T> Query<T> {
     /// Calls `op` if the result is [`Finished`](Query::Finished), otherwise returns the [`Err`]
-    /// or [`Loop`] value of `self`.
+    /// or [`Loop`](Query::Loop) value of `self`.
     ///
     /// This function is used for control flow based on `Query` values.
-    pub fn then<U, O: FnOnce(T) -> Query<U>>(self, op: O) -> Query<U> {
+    pub fn then<U, O>(self, op: O) -> Query<U>
+    where
+        O: FnOnce(T) -> Query<U>,
+    {
         match self {
             Self::Finished(t) => op(t),
             Self::Err(e) => Query::Err(e),
@@ -27,6 +30,17 @@ impl<T> Query<T> {
 }
 
 impl<T: Default> Query<T> {
+    /// Consumes the query and return the value it contains if it is
+    /// [`Finished`](Query::Finished), else returns its default value.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// let a = Query::Finished(45);
+    /// assert_eq!(a.or_default(), 45);
+    /// let a: Query<i32> = Query::Loop;
+    /// assert_eq!(a.or_default(), 0);
+    /// ```
     pub fn or_default(self) -> T {
         match self {
             Self::Finished(out) => out,
@@ -38,6 +52,8 @@ impl<T: Default> Query<T> {
 /// The inner Result represents the parsing result of the output type.
 /// The outer Result represents the other error types.
 impl<T> From<MenuResult<MenuResult<T>>> for Query<T> {
+    /// The inner Result represents the parsing result of the output type.
+    /// The outer Result represents the other error types.
     fn from(res: MenuResult<MenuResult<T>>) -> Self {
         match res {
             Ok(Ok(out)) => Self::Finished(out),

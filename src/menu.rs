@@ -64,7 +64,7 @@
 //!         SelectField::new("GPL", Type::GPL),
 //!         SelectField::new("BSD", Type::BSD),
 //!     ])
-//!     .default(0)
+//!     .default(1)
 //!     .title(SelectTitle::from("Select the license type"))),
 //! ]);
 //!
@@ -302,7 +302,7 @@ impl Display for SelectTitle<'_> {
 ///     SelectField::new("BSD", Type::BSD),
 /// ])
 /// .title(SelectTitle::from("Choose a license type"))
-/// .default(0)
+/// .default(1)
 /// .select()
 /// .unwrap();
 /// ```
@@ -410,11 +410,26 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
         self
     }
 
-    /// Sets the default selective field.
+    /// Sets the default selective field with a given index.
     ///
     /// If you have specified a default field, the latter will be marked as `"(default)"`.
     /// Thus, if the user skips the selective menu (by pressing enter without input), it will return
     /// the default selective field.
+    ///
+    /// # Note
+    ///
+    /// You have to give the index as the user has to enter, so it is shifted up by 1.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// let hello = SelectMenu::from([
+    ///     SelectField::from("hey", 0),
+    ///     SelectField::from("hello", 1),
+    ///     SelectField::from("bonjour", 2),
+    /// ])
+    /// .default(1); // binds the default value to "hey"
+    /// ```
     pub fn default(mut self, default: usize) -> Self {
         self.default = Some(default);
         self
@@ -450,6 +465,15 @@ where
     R: BufRead,
     W: Write,
 {
+    /// Prompts the selectable menu to the user, then returns the
+    /// value he selected.
+    ///
+    /// The output value corresponds to the bound value of the field the user selected.
+    ///
+    /// # Panic
+    ///
+    /// If the bound value has a different type than the output value, this function
+    /// will panic at runtime.
     pub fn select<Output: 'static>(&mut self) -> MenuResult<Output> {
         {
             let s = format!("{}", self);
@@ -469,6 +493,15 @@ where
         }
     }
 
+    /// Prompts the selectable menu to the user, then returns the
+    /// value he selected, using the given `MenuStream`.
+    ///
+    /// The output value corresponds to the bound value of the field the user selected.
+    ///
+    /// # Panic
+    ///
+    /// If the bound value has a different type than the output value, this function
+    /// will panic at runtime.
     pub fn select_with<Output: 'static>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
@@ -476,6 +509,17 @@ where
         self.prompt(stream)
     }
 
+    /// Prompts the selectable menu to the user, then returns the
+    /// value he selected, or returns the default value.
+    ///
+    /// The output value corresponds to the bound value of the field the user selected.
+    /// If an error occurred (see [`MenuError`](crate::MenuError)), or if the user
+    /// provided an incorrect input, it will return the default value.
+    ///
+    /// # Panic
+    ///
+    /// If the bound value has a different type than the output value, this function
+    /// will panic at runtime.
     pub fn select_or_default<Output>(&mut self) -> Output
     where
         Output: 'static + Default,
@@ -496,6 +540,18 @@ where
         .unwrap_or_default()
     }
 
+    /// Prompts the selectable menu to the user, then returns the
+    /// value he selected, or returns the default value, using the given
+    /// `MenuStream`.
+    ///
+    /// The output value corresponds to the bound value of the field the user selected.
+    /// If an error occurred (see [`MenuError`](crate::MenuError)), or if the user
+    /// provided an incorrect input, it will return the default value.
+    ///
+    /// # Panic
+    ///
+    /// If the bound value has a different type than the output value, this function
+    /// will panic at runtime.
     pub fn select_or_default_with<Output>(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
     where
         Output: 'static + Default,
@@ -719,6 +775,16 @@ where
         next_select(self.next_field()?, stream)
     }
 
+    /// Returns the next output provided by the user.
+    ///
+    /// It prompts the user until the value entered is correct.
+    /// If the next field is a selectable menu, it will prompt the selectable menu,
+    /// requiring the output type to be `'static`.
+    /// Otherwise, it will prompt the value-field, requiring the output type to implement
+    /// `FromStr` trait.
+    ///
+    /// If there is no more field to prompt in the menu, this function will return an error
+    /// (see [`MenuError::EndOfMenu`](crate::MenuError::EndOfMenu)).
     pub fn next_value<Output>(&mut self) -> MenuResult<Output>
     where
         Output: 'static + FromStr,
@@ -728,6 +794,16 @@ where
         self.next_field()?.prompt(&mut self.stream)
     }
 
+    /// Returns the next output provided by the user, using the given menu stream.
+    ///
+    /// It prompts the user until the value entered is correct.
+    /// If the next field is a selectable menu, it will prompt the selectable menu,
+    /// requiring the output type to be `'static`.
+    /// Otherwise, it will prompt the value-field, requiring the output type to implement
+    /// `FromStr` trait.
+    ///
+    /// If there is no more field to prompt in the menu, this function will return an error
+    /// (see [`MenuError::EndOfMenu`](crate::MenuError::EndOfMenu)).
     pub fn next_value_with<Output>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
@@ -740,6 +816,18 @@ where
         self.next_field()?.prompt(stream)
     }
 
+    /// Returns the next output provided by the user, or its default value if an error occurred.
+    ///
+    /// It prompts the user once, and if the value entered is incorrect, it returns the
+    /// default value.
+    ///
+    /// If the next field is a selectable menu, it will prompt the selectable menu,
+    /// requiring the output type to be `'static`.
+    /// Otherwise, it will prompt the value-field, requiring the output type to implement
+    /// `FromStr` trait.
+    ///
+    /// If there is no more field to prompt in the menu, this function will return an error
+    /// (see [`MenuError::EndOfMenu`](crate::MenuError::EndOfMenu)).
     pub fn next_value_or_default<Output>(&mut self) -> Output
     where
         Output: 'static + FromStr + Default,
@@ -751,6 +839,19 @@ where
             .unwrap_or_default()
     }
 
+    /// Returns the next output provided by the user, or its default value if an error occurred,
+    /// using the given menu stream.
+    ///
+    /// It prompts the user once, and if the value entered is incorrect, it returns the
+    /// default value.
+    ///
+    /// If the next field is a selectable menu, it will prompt the selectable menu,
+    /// requiring the output type to be `'static`.
+    /// Otherwise, it will prompt the value-field, requiring the output type to implement
+    /// `FromStr` trait.
+    ///
+    /// If there is no more field to prompt in the menu, this function will return an error
+    /// (see [`MenuError::EndOfMenu`](crate::MenuError::EndOfMenu)).
     pub fn next_value_or_default_with<Output>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,
@@ -773,6 +874,10 @@ where
     /// ## Panic
     ///
     /// If the next field is not a value-field, this function will panic.
+    /// In fact, you can prompt the selectable menu until a given operation is accomplished,
+    /// as it implements the [`Promptable`](crate::Promptable) trait
+    /// (see [`prompt_until`](crate::Promptable::prompt_until) function), but it is a falsity,
+    /// as a selectable menu has to list all the correct values to the user.
     pub fn next_value_until<Output, F>(&mut self, w: F) -> MenuResult<Output>
     where
         Output: 'static + FromStr,
@@ -791,6 +896,10 @@ where
     /// ## Panic
     ///
     /// If the next field is not a value-field, this function will panic.
+    /// In fact, you can prompt the selectable menu until a given operation is accomplished,
+    /// as it implements the [`Promptable`](crate::Promptable) trait
+    /// (see [`prompt_until`](crate::Promptable::prompt_until) function), but it is a falsity,
+    /// as a selectable menu has to list all the correct values to the user.
     pub fn next_value_until_with<Output, F>(
         &mut self,
         stream: &mut MenuStream<'a, R, W>,

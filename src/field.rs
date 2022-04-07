@@ -26,10 +26,16 @@ use std::io::{BufRead, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
-/// See the diagram in the `menu` module for more information.
+/// Used to return a value entered by the user.
 pub trait Promptable<'a, Output, R, W>: Display {
+    /// Prompts the user once and returns the output wrapped in a `Query`.
+    ///
+    /// The implementation only prints out the prefix, then reads the user input.
     fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output>;
 
+    /// Displays the prompt, then returns the value entered by the user.
+    ///
+    /// It prompts the user until the value entered is correct.
     fn prompt(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>
     where
         W: Write,
@@ -37,6 +43,7 @@ pub trait Promptable<'a, Output, R, W>: Display {
         self.prompt_until(stream, |_| true)
     }
 
+    /// Returns the value entered by the user until the operation returns `true`.
     fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Output>
     where
         F: Fn(&Output) -> bool,
@@ -53,6 +60,7 @@ pub trait Promptable<'a, Output, R, W>: Display {
         }
     }
 
+    /// Returns the value entered by the user, or its default value if it is incorrect.
     fn prompt_or_default(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
     where
         Output: Default,
@@ -306,7 +314,7 @@ impl<'a> Default for ValueFieldFormatting<'a> {
     }
 }
 
-// should not be accessed from outer module
+// Should not be accessed from outer module
 pub(crate) enum DefaultValue<'a> {
     Value(&'a str),
     Env(String),
@@ -341,32 +349,6 @@ struct FieldDetails<'a> {
 }
 
 impl<'a> FieldDetails<'a> {
-    fn new(show_d: bool) -> Self {
-        Self {
-            example: None,
-            default: None,
-            show_d,
-        }
-    }
-
-    fn set_example(&mut self, example: &'a str) {
-        self.example = Some(example);
-    }
-
-    fn set_default_value(&mut self, value: &'a str) {
-        self.default = Some(DefaultValue::Value(value));
-    }
-
-    fn set_default_env(&mut self, env: &'a str) -> MenuResult<()> {
-        self.default = Some(DefaultValue::env(env)?);
-        Ok(())
-    }
-
-    fn set_show_d(&mut self, show_d: bool) {
-        self.show_d = show_d;
-    }
-
-    #[inline]
     fn try_default<T>(&self) -> T
     where
         T: FromStr + Default,
@@ -430,7 +412,11 @@ impl<'a> From<&'a str> for ValueField<'a> {
             msg,
             fmt,
             custom_fmt: false,
-            details: FieldDetails::new(show_d),
+            details: FieldDetails {
+                example: None,
+                default: None,
+                show_d,
+            },
         }
     }
 }
@@ -463,9 +449,8 @@ impl<'a> ValueField<'a> {
     }
 
     fn set_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        let show_d = fmt.default;
+        self.details.show_d = fmt.default;
         self.fmt = fmt;
-        self.details.set_show_d(show_d);
     }
 
     /// Give the default value accepted by the field.
@@ -477,7 +462,7 @@ impl<'a> ValueField<'a> {
     /// will be displayed inside parenthesis according to its formatting (see [`ValueFieldFormatting`]
     /// for more information).
     pub fn default_value(mut self, default: &'a str) -> Self {
-        self.details.set_default_value(default);
+        self.details.default = Some(DefaultValue::Value(default));
         self
     }
 
@@ -489,7 +474,7 @@ impl<'a> ValueField<'a> {
     /// If the value type of the variable is incorrect, the [`ValueField::build`] or [`ValueField::build_init`]
     /// method will panic at runtime.
     pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
-        self.details.set_default_env(var)?;
+        self.details.default = Some(DefaultValue::env(var)?);
         Ok(self)
     }
 
@@ -502,7 +487,7 @@ impl<'a> ValueField<'a> {
     /// The example will be shown inside parenthesis according to its formatting
     /// (see [`ValueFieldFormatting`] for more information).
     pub fn example(mut self, example: &'a str) -> Self {
-        self.details.set_example(example);
+        self.details.example = Some(example);
         self
     }
 
