@@ -423,10 +423,11 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     /// # Example
     ///
     /// ```no_run
+    /// # use ezmenulib::prelude::*;
     /// let hello = SelectMenu::from([
-    ///     SelectField::from("hey", 0),
-    ///     SelectField::from("hello", 1),
-    ///     SelectField::from("bonjour", 2),
+    ///     SelectField::new("hey", 0),
+    ///     SelectField::new("hello", 1),
+    ///     SelectField::new("bonjour", 2),
     /// ])
     /// .default(1); // binds the default value to "hey"
     /// ```

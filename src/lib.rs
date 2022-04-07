@@ -293,6 +293,7 @@ pub mod field;
 pub mod menu;
 
 mod query;
+pub use query::Query;
 
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {

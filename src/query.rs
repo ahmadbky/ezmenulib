@@ -36,9 +36,11 @@ impl<T: Default> Query<T> {
     /// ## Example
     ///
     /// ```
+    /// use ezmenulib::Query;
+    /// 
     /// let a = Query::Finished(45);
     /// assert_eq!(a.or_default(), 45);
-    /// let a: Query<i32> = Query::Loop;
+    /// let a: Query<i32> = Query::Continue;
     /// assert_eq!(a.or_default(), 0);
     /// ```
     pub fn or_default(self) -> T {
