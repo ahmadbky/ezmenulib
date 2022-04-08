@@ -30,8 +30,8 @@
 //!
 //! ## Outputs
 //!
-//! The values entered by the user are provided by the [`MenuBuilder`] trait.
-//! This trait is implemented on both menus type and uses the [`MenuBuilder::next_output`] method
+//! The values entered by the user are provided by the [`Promptable`] trait.
+//! This trait is implemented on both menus type and uses the [`MenuBuilder::prompt`] method
 //! to return the next output provided by the user.
 //!
 //! When calling this method, you need to provide your own type to convert the input from.
@@ -71,6 +71,9 @@
 //! let authors: customs::MenuVec<String> = license.next_value().unwrap();
 //! let ty: Type = license.next_select().unwrap();
 //! ```
+
+#[cfg(test)]
+mod tests;
 
 mod stream;
 
@@ -749,7 +752,7 @@ where
     /// Returns the next output, if the next output corresponds to an inner selectable menu output.
     ///
     /// If this is the case, it returns the selectable menu output
-    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_output)).
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_value)).
     ///
     /// ## Panic
     ///
@@ -763,7 +766,7 @@ where
     /// using the given menu stream.
     ///
     /// If this is the case, it returns the selectable menu output
-    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_output)).
+    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_value)).
     ///
     /// ## Panic
     ///
@@ -876,8 +879,8 @@ where
     ///
     /// If the next field is not a value-field, this function will panic.
     /// In fact, you can prompt the selectable menu until a given operation is accomplished,
-    /// as it implements the [`Promptable`](crate::Promptable) trait
-    /// (see [`prompt_until`](crate::Promptable::prompt_until) function), but it is a falsity,
+    /// as it implements the [`Promptable`](crate::prelude::Promptable) trait
+    /// (see [`prompt_until`](crate::Promptable::prelude::prompt_until) function), but it is a falsity,
     /// as a selectable menu has to list all the correct values to the user.
     pub fn next_value_until<Output, F>(&mut self, w: F) -> MenuResult<Output>
     where
@@ -898,8 +901,8 @@ where
     ///
     /// If the next field is not a value-field, this function will panic.
     /// In fact, you can prompt the selectable menu until a given operation is accomplished,
-    /// as it implements the [`Promptable`](crate::Promptable) trait
-    /// (see [`prompt_until`](crate::Promptable::prompt_until) function), but it is a falsity,
+    /// as it implements the [`Promptable`](crate::prelude::Promptable) trait
+    /// (see [`prompt_until`](crate::prelude::Promptable::prompt_until) function), but it is a falsity,
     /// as a selectable menu has to list all the correct values to the user.
     pub fn next_value_until_with<Output, F>(
         &mut self,
@@ -968,4 +971,16 @@ impl<'a, R, W> Streamable<'a, R, W> for ValueMenu<'a, R, W> {
     fn get_stream_ref_mut(&mut self) -> &mut MenuStream<'a, R, W> {
         &mut self.stream
     }
+}
+
+pub enum MField<'a, R, W> {
+    Values(ValueMenu<'a, R, W>),
+    Value(ValueField<'a>),
+    SubMenu(Menu<'a, R, W>),
+    Select(SelectMenu<'a, R, W>),
+}
+
+pub struct Menu<'a, R, W> {
+    fields: Vec<MField<'a, R, W>>,
+    go_back: bool,
 }

@@ -14,7 +14,7 @@ pub enum Query<T> {
 
 impl<T> Query<T> {
     /// Calls `op` if the result is [`Finished`](Query::Finished), otherwise returns the [`Err`]
-    /// or [`Loop`](Query::Loop) value of `self`.
+    /// or [`Continue`](Query::Continue) value of `self`.
     ///
     /// This function is used for control flow based on `Query` values.
     pub fn then<U, O>(self, op: O) -> Query<U>
@@ -37,7 +37,7 @@ impl<T: Default> Query<T> {
     ///
     /// ```
     /// use ezmenulib::Query;
-    /// 
+    ///
     /// let a = Query::Finished(45);
     /// assert_eq!(a.or_default(), 45);
     /// let a: Query<i32> = Query::Continue;
