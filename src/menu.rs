@@ -972,15 +972,16 @@ impl<'a, R, W> Streamable<'a, R, W> for ValueMenu<'a, R, W> {
         &mut self.stream
     }
 }
-
-pub enum MField<'a, R, W> {
-    Values(ValueMenu<'a, R, W>),
-    Value(ValueField<'a>),
-    SubMenu(Menu<'a, R, W>),
-    Select(SelectMenu<'a, R, W>),
-}
-
-pub struct Menu<'a, R, W> {
-    fields: Vec<MField<'a, R, W>>,
-    go_back: bool,
-}
+// 
+// pub enum MField<'a, R, W> {
+//     Values(ValueMenu<'a, R, W>),
+//     Value(ValueField<'a>),
+//     SubMenu(Menu<'a, R, W>),
+//     Select(SelectMenu<'a, R, W>),
+// }
+// 
+// pub struct Menu<'a, R, W> {
+//     fields: Vec<MField<'a, R, W>>,
+//     go_back: bool,
+// }
+// 
