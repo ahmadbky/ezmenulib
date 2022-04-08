@@ -24,6 +24,9 @@
 //! let hard: MenuBool = project.next_value().unwrap();
 //! ```
 
+#[cfg(test)]
+mod tests;
+
 use crate::MenuError;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::ops::{Deref, DerefMut};
