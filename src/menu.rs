@@ -651,28 +651,31 @@ where
 pub struct ValueMenu<'a, R = In, W = Out> {
     title: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
-    fields: IntoIter<Field<'a, R, W>>,
+    fields: IntoIter<ValueField<'a, R, W>>,
     stream: Stream<'a, MenuStream<'a, R, W>>,
     began: bool,
 }
 
-impl<'a, const N: usize> From<[Field<'a>; N]> for ValueMenu<'a> {
+impl<'a, const N: usize> From<[ValueField<'a>; N]> for ValueMenu<'a> {
     /// Instantiate the value-menu from its value-fields array.
     #[inline]
-    fn from(fields: [Field<'a>; N]) -> Self {
+    fn from(fields: [ValueField<'a>; N]) -> Self {
         Self::from(Vec::from(fields))
     }
 }
 
-impl<'a> From<Vec<Field<'a>>> for ValueMenu<'a> {
+impl<'a> From<Vec<ValueField<'a>>> for ValueMenu<'a> {
     #[inline]
-    fn from(fields: Vec<Field<'a>>) -> Self {
+    fn from(fields: Vec<ValueField<'a>>) -> Self {
         Self::with_owned(MenuStream::default(), fields)
     }
 }
 
 impl<'a, R, W> ValueMenu<'a, R, W> {
-    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Vec<Field<'a, R, W>>) -> Self {
+    fn inner_new(
+        stream: Stream<'a, MenuStream<'a, R, W>>,
+        fields: Vec<ValueField<'a, R, W>>,
+    ) -> Self {
         // inherits fmt on submenus title
         let fmt: Rc<ValueFieldFormatting> = Rc::default();
         let mut fields = fields.into_iter();
@@ -691,25 +694,32 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
 
     /// Builds the menu from its owned menu stream, with its fields vector.
     #[inline]
-    pub fn with_owned(stream: MenuStream<'a, R, W>, fields: Vec<Field<'a, R, W>>) -> Self {
+    pub fn with_owned(stream: MenuStream<'a, R, W>, fields: Vec<ValueField<'a, R, W>>) -> Self {
         Self::inner_new(Stream::Owned(stream), fields)
     }
 
     /// Builds the menu from a mutable reference of a menu stream, with its fields vector.
     #[inline]
-    pub fn with_ref(stream: &'a mut MenuStream<'a, R, W>, fields: Vec<Field<'a, R, W>>) -> Self {
+    pub fn with_ref(
+        stream: &'a mut MenuStream<'a, R, W>,
+        fields: Vec<ValueField<'a, R, W>>,
+    ) -> Self {
         Self::inner_new(Stream::Borrowed(stream), fields)
     }
 
     /// Builds the menu from its owned input and output streams, with its fields vector.
     #[inline]
-    pub fn new(reader: R, writer: W, fields: Vec<Field<'a, R, W>>) -> Self {
+    pub fn new(reader: R, writer: W, fields: Vec<ValueField<'a, R, W>>) -> Self {
         Self::with_owned(MenuStream::new(reader, writer), fields)
     }
 
     /// Builds the menu from mutable references of the reader and writer, with its fields vector.
     #[inline]
-    pub fn new_ref(reader: &'a mut R, writer: &'a mut W, fields: Vec<Field<'a, R, W>>) -> Self {
+    pub fn new_ref(
+        reader: &'a mut R,
+        writer: &'a mut W,
+        fields: Vec<ValueField<'a, R, W>>,
+    ) -> Self {
         Self::with_owned(MenuStream::with(reader, writer), fields)
     }
 
@@ -732,7 +742,7 @@ impl<'a, R, W> ValueMenu<'a, R, W> {
     }
 
     #[inline]
-    fn next_field(&mut self) -> MenuResult<Field<'a, R, W>> {
+    fn next_field(&mut self) -> MenuResult<ValueField<'a, R, W>> {
         self.fields.next().ok_or(MenuError::EndOfMenu)
     }
 }
@@ -920,7 +930,7 @@ where
 }
 
 fn next_select<'a, Output, R, W>(
-    field: Field<'a, R, W>,
+    field: ValueField<'a, R, W>,
     stream: &mut MenuStream<'a, R, W>,
 ) -> MenuResult<Output>
 where
@@ -928,7 +938,7 @@ where
     R: BufRead,
     W: Write,
 {
-    if let Field::Select(mut s) = field {
+    if let ValueField::Select(mut s) = field {
         s.prompt(stream)
     } else {
         panic!("next output of the value-menu is not from a selectable menu")
@@ -972,16 +982,60 @@ impl<'a, R, W> Streamable<'a, R, W> for ValueMenu<'a, R, W> {
         &mut self.stream
     }
 }
-// 
-// pub enum MField<'a, R, W> {
-//     Values(ValueMenu<'a, R, W>),
-//     Value(ValueField<'a>),
-//     SubMenu(Menu<'a, R, W>),
-//     Select(SelectMenu<'a, R, W>),
-// }
-// 
-// pub struct Menu<'a, R, W> {
-//     fields: Vec<MField<'a, R, W>>,
-//     go_back: bool,
-// }
-// 
+
+pub struct Field<'a, R = In, W = Out> {
+    msg: &'a str,
+    kind: Kind<'a, R, W>,
+}
+
+impl<'a, R, W> Field<'a, R, W> {
+    pub fn new(msg: &'a str, kind: Kind<'a, R, W>) -> Self {
+        Self { msg, kind }
+    }
+}
+
+pub enum Kind<'a, R, W> {
+    Unit(Binding<R, W>),
+    SubMenu(Vec<Field<'a, R, W>>),
+    Quit,
+}
+
+pub struct Menu<'a, R = In, W = Out> {
+    fields: Vec<Field<'a, R, W>>,
+    stream: Stream<'a, MenuStream<'a, R, W>>,
+    go_back: bool,
+    repeat: bool,
+}
+
+impl<'a> From<Vec<Field<'a>>> for Menu<'a> {
+    fn from(fields: Vec<Field<'a>>) -> Self {
+        Self {
+            fields,
+            stream: Stream::Owned(MenuStream::default()),
+            go_back: true,
+            repeat: false,
+        }
+    }
+}
+
+impl<'a, const N: usize> From<[Field<'a>; N]> for Menu<'a> {
+    fn from(fields: [Field<'a>; N]) -> Self {
+        Self::from(Vec::from(fields))
+    }
+}
+
+impl<'a, R, W> Menu<'a, R, W> {
+    pub fn go_back(mut self, go_back: bool) -> Self {
+        self.go_back = go_back;
+        self
+    }
+
+    pub fn repeat(mut self, repeat: bool) -> Self {
+        self.repeat = repeat;
+        self
+    }
+
+    pub fn run(&mut self) -> MenuResult<()> {
+        Ok(())
+    }
+}
