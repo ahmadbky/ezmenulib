@@ -286,7 +286,7 @@
 //! .title("Describe the project license");
 //! ```
 
-#![warn(missing_docs, missing_copy_implementations, unused_allocation)]
+#![warn(missing_copy_implementations, unused_allocation)]
 
 pub mod customs;
 pub mod field;
@@ -401,3 +401,13 @@ impl From<String> for MenuError {
 
 /// The main result type used in the EZMenu library.
 pub type MenuResult<T> = Result<T, MenuError>;
+
+use crate::menu::ValueMenu;
+use std::io::{BufRead, Write};
+
+pub trait FromValues: Sized {
+    fn from_values<R, W>(values: ValueMenu<'_, R, W>) -> MenuResult<Self>
+    where
+        R: BufRead,
+        W: Write;
+}
