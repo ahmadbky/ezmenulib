@@ -39,7 +39,7 @@ fn no_field() {
 fn one_field() {
     test_menu! {
         "Ahmad\n",
-        vec![Field::Value(ValueField::from("your name please"))],
+        vec![ValueField::Value(Value::from("your name please"))],
         _name: String,
         => output,
     };
@@ -51,8 +51,8 @@ fn retrieve_value() {
     test_menu! {
         "Ahmad\n19\n",
         vec![
-            Field::Value(ValueField::from("your name please")),
-            Field::Value(ValueField::from("how old are you")),
+            ValueField::Value(Value::from("your name please")),
+            ValueField::Value(Value::from("how old are you")),
         ],
         name: String,
         age: u8,
@@ -73,7 +73,7 @@ fn retrieve_value() {
 fn loop_ask() {
     test_menu! {
         "zmelkfjz\n86\n",
-        vec![Field::Value(ValueField::from("your age please"))],
+        vec![ValueField::Value(Value::from("your age please"))],
         age: u8,
         => output,
     };
@@ -88,7 +88,7 @@ fn field_example_value() {
     test_menu! {
         my_menu,
         "mlzigujz\n",
-        vec![Field::Value(ValueField::from("your age please").example("19").default_value("18"))],
+        vec![ValueField::Value(Value::from("your age please").example("19").default_value("18"))],
         let age: u8 = my_menu.next_value_or_default()
         => output,
     };
@@ -103,7 +103,7 @@ fn field_example_value() {
     test_menu! {
         my_menu,
         "mlzigujz\n",
-        vec![Field::Value(ValueField::from("your age please").example("19"))],
+        vec![ValueField::Value(Value::from("your age please").example("19"))],
         let age: u8 = my_menu.next_value_or_default()
         => output,
     };
@@ -115,7 +115,7 @@ fn field_example_value() {
     test_menu! {
         my_menu,
         "mlzigujz\n",
-        vec![Field::Value(ValueField::from("your age please").default_value("19"))],
+        vec![ValueField::Value(Value::from("your age please").default_value("19"))],
         let age: u8 = my_menu.next_value_or_default()
         => output,
     };
@@ -129,7 +129,7 @@ fn field_example_value() {
 fn date_value() {
     test_menu! {
         "lol\n",
-        vec![Field::Value(ValueField::from("date").default_value("2015-04-29"))],
+        vec![ValueField::Value(Value::from("date").default_value("2015-04-29"))],
         date: NaiveDate,
         => output,
     };
@@ -144,8 +144,8 @@ fn incorrect_default_value() {
     test_menu! {
         "Ahmad\nno",
         vec![
-            Field::Value(ValueField::from("name")),
-            Field::Value(ValueField::from("age").default_value("yep")),
+            ValueField::Value(Value::from("name")),
+            ValueField::Value(Value::from("age").default_value("yep")),
         ],
         _name: String,
         _age: u8,
@@ -158,7 +158,7 @@ fn ask_until() {
     test_menu! {
         menu,
         "402385\nAhmad\n",
-        vec![Field::Value(ValueField::from("Author name"))],
+        vec![ValueField::Value(Value::from("Author name"))],
         let name = menu.next_value_until(|s: &String| !s.parse::<i32>().is_ok()).unwrap()
         => output,
     };
@@ -169,7 +169,7 @@ fn ask_until() {
     test_menu! {
         menu,
         "-54\n-34\n0\n23\n",
-        vec![Field::Value(ValueField::from("age"))],
+        vec![ValueField::Value(Value::from("age"))],
         let age = menu.next_value_until(|n: &i32| *n > 0).unwrap()
         => output,
     };

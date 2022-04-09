@@ -76,14 +76,14 @@ pub trait Promptable<'a, Output, R, W>: Display {
 ///
 /// A field of a menu returning values can be an asked value ([`ValueField`]),
 /// or a menu of selectable values ([`SelectMenu`]).
-pub enum Field<'a, R = In, W = Out> {
+pub enum ValueField<'a, R = In, W = Out> {
     /// A field asking a value to the user.
-    Value(ValueField<'a>),
+    Value(Value<'a>),
     /// A field proposing selectable values to the user.
     Select(SelectMenu<'a, R, W>),
 }
 
-impl<'a, R, W> Display for Field<'a, R, W> {
+impl<'a, R, W> Display for ValueField<'a, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(
             match self {
@@ -95,7 +95,7 @@ impl<'a, R, W> Display for Field<'a, R, W> {
     }
 }
 
-impl<'a, Output, R, W> Promptable<'a, Output, R, W> for Field<'a, R, W>
+impl<'a, Output, R, W> Promptable<'a, Output, R, W> for ValueField<'a, R, W>
 where
     R: BufRead,
     W: Write,
@@ -110,7 +110,7 @@ where
     }
 }
 
-impl<'a, R, W> Field<'a, R, W> {
+impl<'a, R, W> ValueField<'a, R, W> {
     /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
     ///
     /// If it is aimed on a selectable menu, the formatting rules will be applied on its title,
@@ -397,14 +397,14 @@ impl Display for FieldDetails<'_> {
 ///     .build_init()
 ///     .unwrap();
 /// ```
-pub struct ValueField<'a> {
+pub struct Value<'a> {
     msg: &'a str,
     fmt: Rc<ValueFieldFormatting<'a>>,
     custom_fmt: bool,
     details: FieldDetails<'a>,
 }
 
-impl<'a> From<&'a str> for ValueField<'a> {
+impl<'a> From<&'a str> for Value<'a> {
     fn from(msg: &'a str) -> Self {
         let fmt = Rc::<ValueFieldFormatting<'a>>::default();
         let show_d = fmt.default;
@@ -421,7 +421,7 @@ impl<'a> From<&'a str> for ValueField<'a> {
     }
 }
 
-impl Display for ValueField<'_> {
+impl Display for Value<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -434,7 +434,7 @@ impl Display for ValueField<'_> {
 }
 
 /// Constructor methods defining how the field behaves
-impl<'a> ValueField<'a> {
+impl<'a> Value<'a> {
     /// Give a custom formatting for the field.
     pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
         self.set_fmt(Rc::new(fmt));
@@ -630,7 +630,7 @@ impl<'a> ValueField<'a> {
     }
 }
 
-impl<'a, Out, R, W> Promptable<'a, Out, R, W> for ValueField<'a>
+impl<'a, Out, R, W> Promptable<'a, Out, R, W> for Value<'a>
 where
     Out: FromStr,
     Out::Err: 'static + Debug,

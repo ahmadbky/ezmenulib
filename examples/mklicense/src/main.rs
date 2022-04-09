@@ -11,10 +11,10 @@ enum Type {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut license = ValueMenu::from([
-        Field::Value(ValueField::from("Authors").default_value("zmlfkgj")),
-        Field::Value(ValueField::from("Project name")),
-        Field::Value(ValueField::from("License date").default_value("2022")),
-        Field::Select(
+        ValueField::Value(Value::from("Authors").default_value("zmlfkgj")),
+        ValueField::Value(Value::from("Project name")),
+        ValueField::Value(Value::from("License date").default_value("2022")),
+        ValueField::Select(
             SelectMenu::from([
                 SelectField::new("MIT", Type::MIT),
                 SelectField::new("GPL", Type::GPL),
