@@ -325,7 +325,7 @@ impl Display for SelectTitle<'_> {
 pub struct SelectMenu<'a, R = In, W = Out> {
     prefix: &'a str,
     title: SelectTitle<'a>,
-    fields: Vec<SelectField<'a, R, W>>,
+    fields: Vec<SelectField<'a>>,
     default: Option<usize>,
     stream: Stream<'a, MenuStream<'a, R, W>>,
 }
@@ -360,7 +360,7 @@ impl<'a, const N: usize> From<[SelectField<'a>; N]> for SelectMenu<'a> {
 impl<'a, R, W> SelectMenu<'a, R, W> {
     fn inner_new(
         stream: Stream<'a, MenuStream<'a, R, W>>,
-        fields: Vec<SelectField<'a, R, W>>,
+        fields: Vec<SelectField<'a>>,
     ) -> Self {
         Self {
             prefix: DEFAULT_FMT.prefix,
@@ -373,7 +373,7 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
 
     /// Builds the menu from its owned menu stream, with its fields vector.
     #[inline]
-    pub fn with_owned(stream: MenuStream<'a, R, W>, fields: Vec<SelectField<'a, R, W>>) -> Self {
+    pub fn with_owned(stream: MenuStream<'a, R, W>, fields: Vec<SelectField<'a>>) -> Self {
         Self::inner_new(Stream::Owned(stream), fields)
     }
 
@@ -381,14 +381,14 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     #[inline]
     pub fn with_ref(
         stream: &'a mut MenuStream<'a, R, W>,
-        fields: Vec<SelectField<'a, R, W>>,
+        fields: Vec<SelectField<'a>>,
     ) -> Self {
         Self::inner_new(Stream::Borrowed(stream), fields)
     }
 
     /// Builds the menu from its owned reader and writer, with its fields vector.
     #[inline]
-    pub fn new(reader: R, writer: W, fields: Vec<SelectField<'a, R, W>>) -> Self {
+    pub fn new(reader: R, writer: W, fields: Vec<SelectField<'a>>) -> Self {
         Self::with_owned(MenuStream::new(reader, writer), fields)
     }
 
@@ -397,7 +397,7 @@ impl<'a, R, W> SelectMenu<'a, R, W> {
     pub fn new_ref(
         reader: &'a mut R,
         writer: &'a mut W,
-        fields: Vec<SelectField<'a, R, W>>,
+        fields: Vec<SelectField<'a>>,
     ) -> Self {
         Self::with_owned(MenuStream::with(reader, writer), fields)
     }
@@ -582,8 +582,8 @@ impl<'a, R: 'a, W: 'a> Streamable<'a, R, W> for SelectMenu<'a, R, W> {
 impl<R, W> Display for SelectMenu<'_, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // displays fields
-        fn list_fields<R, W>(
-            fields: &[SelectField<R, W>],
+        fn list_fields(
+            fields: &[SelectField],
             default: Option<usize>,
             f: &mut Formatter<'_>,
         ) -> fmt::Result {
@@ -624,7 +624,7 @@ fn select_once<Output, R, W>(
     stream: &mut MenuStream<'_, R, W>,
     prefix: &str,
     default: Option<usize>,
-    fields: &mut Vec<SelectField<R, W>>,
+    fields: &mut Vec<SelectField>,
 ) -> Query<Output>
 where
     R: BufRead,
@@ -634,7 +634,7 @@ where
     prompt(prefix, stream)
         .map(|s| {
             parse_value(&s, default).and_then(|idx| match idx.checked_sub(1) {
-                Some(i) if fields.get(i).is_some() => fields.remove(i).select(stream),
+                Some(i) if fields.get(i).is_some() => fields.remove(i).select(),
                 _ => Err(MenuError::Select(s)),
             })
         })

@@ -149,22 +149,21 @@ pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult<()>;
 ///     SelectField::new("two", 2),
 /// ]);
 /// ```
-pub struct SelectField<'a, R = In, W = Out> {
+pub struct SelectField<'a> {
     pub(crate) msg: &'a str,
     chip: &'a str,
     custom_chip: bool,
-    bind: Option<Binding<R, W>>,
     inner: Box<dyn Any>,
 }
 
-impl<R, W> Display for SelectField<'_, R, W> {
+impl Display for SelectField<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self.chip, f)?;
         Display::fmt(self.msg, f)
     }
 }
 
-impl<'a, R, W> SelectField<'a, R, W> {
+impl<'a> SelectField<'a> {
     /// Creates a selection field with its message and its associated output value.
     ///
     /// This value corresponds to the output returned in case the user selected this field.
@@ -173,7 +172,6 @@ impl<'a, R, W> SelectField<'a, R, W> {
             msg,
             chip: " - ",
             custom_chip: false,
-            bind: None,
             inner: Box::new(inner),
         }
     }
@@ -197,58 +195,11 @@ impl<'a, R, W> SelectField<'a, R, W> {
         }
     }
 
-    pub(crate) fn select<T: 'static>(self, stream: &mut MenuStream<R, W>) -> MenuResult<T> {
-        if let Some(b) = self.bind {
-            b(stream)?;
+    pub(crate) fn select<T: 'static>(self) -> MenuResult<T> {
+        match self.inner.downcast() {
+            Ok(t) => Ok(*t),
+            Err(_) => Err(MenuError::IncorrectType),
         }
-
-        Ok(*self.inner.downcast().expect("invalid output type downcast"))
-    }
-
-    /// Defines the function to execute right after the user selected this field.
-    ///
-    /// It is optional, and is useful if you have many modes in your program with
-    /// procedures defined for each mode.
-    ///
-    /// The function must take a `&mut MenuStream<R, W>` as parameter, with
-    /// `R` as the reader type and `W` as the writer type.
-    /// The reader and writer are `BufReader<Stdin>` and `Stdout` by default, so if no specific reader
-    /// has been specified when instantiating the menu, it is not necessary to specify the generic types
-    /// of the `MenuStream`.
-    ///
-    /// The binding function must return a `MenuResult<()>`.
-    /// The result return is used to spread the error to the point you built the menu.
-    ///
-    /// If you want to return a string (or static string slice) error, you can use `MenuError::from` associated function.
-    /// For an IO Error when using `MenuStream` methods, you can map the error type by using `Result::map_err`.
-    ///
-    /// ## Example
-    ///
-    /// ```no_run
-    /// use ezmenulib::prelude::*;
-    /// use std::io::{Stdout, Write};
-    /// # enum Type {
-    /// # MIT,
-    /// # BSD,
-    /// # }
-    ///
-    /// fn bsd(e: &mut MenuStream) -> MenuResult<()> {
-    ///     e.write_all(b"coucou this is from bsd\n").map_err(MenuError::from)
-    /// }
-    ///
-    /// fn main() {
-    ///     let selected = SelectMenu::from([
-    ///         SelectField::new("MIT", Type::MIT).bind(|_| Ok(println!("you selected MIT!!!"))),
-    ///         SelectField::new("BSD", Type::BSD).bind(bsd),
-    ///         // ...
-    ///     ]);
-    /// }
-    /// ```
-    ///
-    /// For other error, you can simply use the `MenuError::Other` variant and box your custom error type.
-    pub fn bind(mut self, bind: Binding<R, W>) -> Self {
-        self.bind = Some(bind);
-        self
     }
 }
 

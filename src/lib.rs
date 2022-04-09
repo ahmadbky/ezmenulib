@@ -344,6 +344,8 @@ pub enum MenuError {
     Select(String),
     /// There is no more field to prompt in the menu.
     EndOfMenu,
+    /// An incorrect type has been requested.
+    IncorrectType,
     /// A custom error type.
     /// You can define this type when mapping the output value of the `Menu::next_map` method,
     /// by returning an `Err(MenuError::Other(...))`
@@ -371,6 +373,7 @@ impl Display for MenuError {
                     v, e
                 ),
                 Self::EndOfMenu => "end of menu reached".to_owned(),
+                Self::IncorrectType => "an incorrect type has been provided".to_owned(),
                 Self::Select(s) => format!("incorrect selection input: `{}`", s),
                 Self::Other(e) => format!("an error occurred: {:?}", e),
             }
