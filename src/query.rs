@@ -3,52 +3,13 @@ use crate::{MenuError, MenuResult};
 /// The return type of each iteration when prompting a value to the user.
 ///
 /// `T` represents the output type of the field or menu.
-pub enum Query<T> {
+pub(crate) enum Query<T> {
     /// The user entered an incorrect value.
     Continue,
     /// The user entered a correct value, so it has been parsed to its corresponding type.
     Finished(T),
     /// An error occurred when prompting a value.
     Err(MenuError),
-}
-
-impl<T> Query<T> {
-    /// Calls `op` if the result is [`Finished`](Query::Finished), otherwise returns the [`Err`]
-    /// or [`Continue`](Query::Continue) value of `self`.
-    ///
-    /// This function is used for control flow based on `Query` values.
-    pub fn then<U, O>(self, op: O) -> Query<U>
-    where
-        O: FnOnce(T) -> Query<U>,
-    {
-        match self {
-            Self::Finished(t) => op(t),
-            Self::Err(e) => Query::Err(e),
-            _ => Query::Continue,
-        }
-    }
-}
-
-impl<T: Default> Query<T> {
-    /// Consumes the query and return the value it contains if it is
-    /// [`Finished`](Query::Finished), else returns its default value.
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use ezmenulib::Query;
-    ///
-    /// let a = Query::Finished(45);
-    /// assert_eq!(a.or_default(), 45);
-    /// let a: Query<i32> = Query::Continue;
-    /// assert_eq!(a.or_default(), 0);
-    /// ```
-    pub fn or_default(self) -> T {
-        match self {
-            Self::Finished(out) => out,
-            _ => T::default(),
-        }
-    }
 }
 
 /// The inner Result represents the parsing result of the output type.
