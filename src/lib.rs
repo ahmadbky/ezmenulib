@@ -293,13 +293,11 @@ pub mod field;
 pub mod menu;
 
 mod query;
-pub use query::Query;
 
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
     pub use crate::field::*;
     pub use crate::menu::*;
-    pub use crate::query::*;
 
     pub use crate::MenuError;
     pub use crate::MenuResult;
@@ -319,16 +317,17 @@ pub mod chrono {
     pub use chrono::*;
 }
 
-use crate::field::ValueFieldFormatting;
+use crate::field::Format;
 use std::env::VarError;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, io};
 
-pub(crate) const DEFAULT_FMT: ValueFieldFormatting<'static> = ValueFieldFormatting {
-    chip: "--> ",
-    prefix: ">> ",
-    default: true,
+pub(crate) const DEFAULT_FMT: Format<'static> = Format {
+    prefix: "--> ",
+    chip: " - ",
+    show_default: true,
+    suffix: ">> ",
 };
 
 /// The error type used by the menu builder.
@@ -337,18 +336,12 @@ pub enum MenuError {
     /// An IO error, when flushing, reading or writing values.
     IOError(io::Error),
     /// A parsing error for a value.
-    Parse(String, Box<dyn Debug>),
+    Input,
     /// An environment variable error.
     EnvVar(String, VarError),
-    /// An incorrect selection input has been provided.
-    Select(String),
-    /// There is no more field to prompt in the menu.
-    EndOfMenu,
-    /// An incorrect type has been requested.
-    IncorrectType,
-    /// A custom error type.
-    /// You can define this type when mapping the output value of the `Menu::next_map` method,
-    /// by returning an `Err(MenuError::Other(...))`
+    /// An error occurred when formatting a field.
+    Format(fmt::Error),
+    /// A custom error.
     Other(Box<dyn Debug>),
 }
 
@@ -366,16 +359,13 @@ impl Display for MenuError {
             "{}",
             match self {
                 Self::IOError(e) => format!("IO error: {}", e),
-                Self::Parse(v, e) =>
-                    format!("the input value provided `{}` is incorrect: {:?}", v, e),
+                Self::Input => "an incorrect input has been provided".to_owned(),
                 Self::EnvVar(v, e) => format!(
                     "attempted to get a default value from the environment variable `{}`: {}",
                     v, e
                 ),
-                Self::EndOfMenu => "end of menu reached".to_owned(),
-                Self::IncorrectType => "an incorrect type has been provided".to_owned(),
-                Self::Select(s) => format!("incorrect selection input: `{}`", s),
-                Self::Other(e) => format!("an error occurred: {:?}", e),
+                Self::Format(e) => format!("an error occurred while formatting a field: {:?}", e),
+                Self::Other(d) => format!("{:?}", d),
             }
         ))
     }
@@ -402,15 +392,41 @@ impl From<String> for MenuError {
     }
 }
 
+impl From<fmt::Error> for MenuError {
+    fn from(e: fmt::Error) -> Self {
+        Self::Format(e)
+    }
+}
+
 /// The main result type used in the EZMenu library.
-pub type MenuResult<T> = Result<T, MenuError>;
+pub type MenuResult<T = ()> = Result<T, MenuError>;
 
-use crate::menu::ValueMenu;
-use std::io::{BufRead, Write};
+use self::prelude::*;
 
-pub trait FromValues: Sized {
-    fn from_values<R, W>(values: ValueMenu<'_, R, W>) -> MenuResult<Self>
+pub trait Selectable: Sized {
+    fn values() -> Vec<(&'static str, Self)>;
+}
+
+pub trait FromValues<'a, R: 'a, W: 'a>: Sized {
+    fn from_stream(stream: MenuStream<R, W>) -> MenuResult<Self>;
+
+    fn from_io(reader: R, writer: W) -> MenuResult<Self> {
+        Self::from_stream(MenuStream::new(reader, writer))
+    }
+
+    fn from_menu_safe() -> MenuResult<Self>
     where
-        R: BufRead,
-        W: Write;
+        Self: FromValues<'a, In, Out>,
+    {
+        use std::io::{stdin, stdout, BufReader};
+        <Self as FromValues<In, Out>>::from_io(BufReader::new(stdin()), stdout())
+    }
+
+    fn from_menu() -> Self
+    where
+        Self: FromValues<'a, In, Out>,
+    {
+        <Self as FromValues<In, Out>>::from_menu_safe()
+            .expect("An error occurred while prompting the value-menu")
+    }
 }
