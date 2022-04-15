@@ -1,6 +1,7 @@
 use ezmenulib::customs::{MenuOption, MenuVec};
-use ezmenulib::prelude::*;
+use ezmenulib::{prelude::*, Selectable};
 use std::error::Error;
+use std::io::Write;
 
 #[derive(Debug)]
 enum Type {
@@ -9,27 +10,29 @@ enum Type {
     BSD,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut license = ValueMenu::from([
-        ValueField::Value(Value::from("Authors").default_value("zmlfkgj")),
-        ValueField::Value(Value::from("Project name")),
-        ValueField::Value(Value::from("License date").default_value("2022")),
-        ValueField::Select(
-            SelectMenu::from([
-                SelectField::new("MIT", Type::MIT),
-                SelectField::new("GPL", Type::GPL),
-                SelectField::new("BSD", Type::BSD),
-            ])
-            .title(SelectTitle::from("Select a license type"))
-            .default(1),
-        ),
-    ])
-    .title("Describe your project");
+impl Default for Type {
+    fn default() -> Self {
+        Self::MIT
+    }
+}
 
-    let authors: MenuVec<String> = license.next_value()?;
-    let name: MenuOption<String> = license.next_value()?;
-    let date: u16 = license.next_value()?;
-    let ty: Type = license.next_select()?;
+impl Selectable for Type {
+    fn values() -> Vec<(&'static str, Self)> {
+        vec![("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
+    }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut stream = MenuStream::default();
+    writeln!(stream, "Describe your project")?;
+
+    let mut license_menu = Values::from_ref(&mut stream);
+
+    let authors: MenuVec<String> =
+        license_menu.written(&Written::from("Authors").default_value("defaulmzlkejft"))?;
+    let name: MenuOption<String> = license_menu.written(&Written::from("Project name"))?;
+    let date: u16 = license_menu.written(&Written::from("License date").default_value("2022"))?;
+    let ty: Type = license_menu.selected_or_default(Selected::from("Select a license type"));
 
     println!(
         "{:?} License, Copyright (C) {} {}\n{}",
