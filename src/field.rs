@@ -17,239 +17,87 @@
 //! You can still edit the formatting rules of its title (see [`SelectTitle`](crate::menu::SelectTitle))
 //! independently from the global formatting rules.
 
-use crate::prelude::*;
+#[cfg(test)]
+mod tests;
+
+use crate::query::Query;
 use crate::DEFAULT_FMT;
-use std::any::Any;
+use crate::{prelude::*, Selectable};
 use std::env;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, Write};
-use std::rc::Rc;
 use std::str::FromStr;
-
-/// Used to return a value entered by the user.
-pub trait Promptable<'a, Output, R, W>: Display {
-    /// Prompts the user once and returns the output wrapped in a `Query`.
-    ///
-    /// The implementation only prints out the prefix, then reads the user input.
-    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output>;
-
-    /// Displays the prompt, then returns the value entered by the user.
-    ///
-    /// It prompts the user until the value entered is correct.
-    fn prompt(&mut self, stream: &mut MenuStream<'a, R, W>) -> MenuResult<Output>
-    where
-        W: Write,
-    {
-        self.prompt_until(stream, |_| true)
-    }
-
-    /// Returns the value entered by the user until the operation returns `true`.
-    fn prompt_until<F>(&mut self, stream: &mut MenuStream<'a, R, W>, til: F) -> MenuResult<Output>
-    where
-        F: Fn(&Output) -> bool,
-        W: Write,
-    {
-        show(self, stream)?;
-        // loops while incorrect input
-        loop {
-            match self.prompt_once(stream) {
-                Query::Finished(out) if til(&out) => break Ok(out),
-                Query::Err(e) => break Err(e),
-                _ => continue,
-            }
-        }
-    }
-
-    /// Returns the value entered by the user, or its default value if it is incorrect.
-    fn prompt_or_default(&mut self, stream: &mut MenuStream<'a, R, W>) -> Output
-    where
-        Output: Default,
-        W: Write,
-    {
-        show(self, stream)
-            .and(self.prompt_once(stream).into())
-            .unwrap_or_default()
-    }
-}
-
-/// A field contained in a [`ValueMenu`](crate::menu::ValueMenu) menu.
-///
-/// A field of a menu returning values can be an asked value ([`ValueField`]),
-/// or a menu of selectable values ([`SelectMenu`]).
-pub enum ValueField<'a, R = In, W = Out> {
-    /// A field asking a value to the user.
-    Value(Value<'a>),
-    /// A field proposing selectable values to the user.
-    Select(SelectMenu<'a, R, W>),
-}
-
-impl<'a, R, W> Display for ValueField<'a, R, W> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(
-            match self {
-                Self::Value(vf) => vf as &dyn Display,
-                Self::Select(sm) => sm as &dyn Display,
-            },
-            f,
-        )
-    }
-}
-
-impl<'a, Output, R, W> Promptable<'a, Output, R, W> for ValueField<'a, R, W>
-where
-    R: BufRead,
-    W: Write,
-    Output: 'static + FromStr,
-    Output::Err: 'static + Debug,
-{
-    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Output> {
-        match self {
-            Self::Value(vf) => vf.prompt_once(stream),
-            Self::Select(sm) => sm.prompt_once(stream),
-        }
-    }
-}
-
-impl<'a, R, W> ValueField<'a, R, W> {
-    /// Inherits the formatting rules from a parent menu (the [`ValueMenu`](crate::ValueMenu)).
-    ///
-    /// If it is aimed on a selectable menu, the formatting rules will be applied on its title,
-    /// to integrate it in the value-fields of the parent menu.
-    /// The title of the selectable menu will however save its prefix.
-    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        match self {
-            Self::Value(vf) => vf.inherit_fmt(fmt),
-            Self::Select(sm) => sm.inherit_fmt(fmt),
-        }
-    }
-}
 
 /// Type used to handle the binding function executed right after
 /// the corresponding field has been selected by the user.
-pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult<()>;
+pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
 
-/// Struct modeling a field of a selective menu.
-///
-/// Unlike [`ValueField`], this struct should not be used alone, without a context.
-/// You must instantiate it in an array in the constructor of the [`SelectMenu`](crate::menu::SelectMenu) struct.
-///
-/// Just like [`ValueFieldFormatting`], it contains an editable `chip` string slice, placed
-/// after the selection index (`X`):
-/// ```text
-/// X<chip><message>
-/// ```
-///
-/// ## Example
-///
-/// ```no_run
-/// use ezmenulib::prelude::*;
-///
-/// let get_amount = SelectMenu::from([
-///     SelectField::new("one", 1),
-///     SelectField::new("two", 2),
-/// ]);
-/// ```
-pub struct SelectField<'a> {
-    pub(crate) msg: &'a str,
-    chip: &'a str,
-    custom_chip: bool,
-    inner: Box<dyn Any>,
-}
-
-impl Display for SelectField<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(self.chip, f)?;
-        Display::fmt(self.msg, f)
-    }
-}
-
-impl<'a> SelectField<'a> {
-    /// Creates a selection field with its message and its associated output value.
-    ///
-    /// This value corresponds to the output returned in case the user selected this field.
-    pub fn new<T: 'static>(msg: &'a str, inner: T) -> Self {
-        Self {
-            msg,
-            chip: " - ",
-            custom_chip: false,
-            inner: Box::new(inner),
-        }
-    }
-
-    /// Edits the chip of the selection field.
-    ///
-    /// The default chip is `" - "`. It includes spaces by default, so you can remove them.
-    /// It is placed next right to the selection menu index (`X`):
-    /// ```text
-    /// X<chip><message>
-    /// ```
-    pub fn chip(mut self, chip: &'a str) -> Self {
-        self.chip = chip;
-        self.custom_chip = true;
-        self
-    }
-
-    pub(crate) fn set_chip(&mut self, chip: &'a str) {
-        if !self.custom_chip {
-            self.chip = chip;
-        }
-    }
-
-    pub(crate) fn select<T: 'static>(self) -> MenuResult<T> {
-        match self.inner.downcast() {
-            Ok(t) => Ok(*t),
-            Err(_) => Err(MenuError::IncorrectType),
-        }
-    }
-}
-
-/// Defines the formatting of a value-menu field.
-///
-/// The final text formatting looks literally like above:
-/// ```md
-/// <chip><message>[ ({[default: <default>]}, [example: <example>])]{\n}<prefix>
-/// ```
-/// where:
-/// - `<...>` means a given string slice
-/// - `{...}` means the value inside is displayed or not (boolean)
-/// - `[...]` means the value inside is displayed if it is available
-#[derive(Clone)]
-pub struct ValueFieldFormatting<'a> {
-    /// The small string slice displayed before the message acting as a list style attribute
-    /// (by default set as `"--> "`).
-    pub chip: &'a str,
-    /// The small string slice displayed before the user input (by default set as `">> "`).
-    pub prefix: &'a str,
-    /// Display default value or not (by default set as `true`).
-    pub default: bool,
-}
-
-/// Builds the constructors of the [`ValueFieldFormatting`] struct
+/// Builds the associated functions of the [`Format`] struct
 /// according to its fields.
-macro_rules! impl_constructors {
-    ($(
-        #[doc = $doc:expr]
-        $i:ident: $t:ty
+macro_rules! impl_fmt {
+    ($(#[doc = $main_doc:expr])*
+    ,
+    $(
+        $(#[doc = $doc:expr])*
+        $i:ident: $t:ty $(,)?
     ),*) => {
-        impl<'a> ValueFieldFormatting<'a> {$(
-            #[doc = $doc]
+        $(#[doc = $main_doc])*
+        #[derive(Clone)]
+        pub struct Format<'a> {$(
+            $(#[doc = $doc])*
+            pub $i: $t,
+        )*}
+
+        impl<'a> Format<'a> {
+            pub fn merged(&self, r: &Format<'a>) -> Self {
+                Self {$(
+                    $i: {
+                        match self.$i == DEFAULT_FMT.$i {
+                            true => r.$i,
+                            false => self.$i,
+                        }
+                    },
+                )*}
+            }
+
+            pub(crate) fn merge(&mut self, r: &Format<'a>) {
+                *self = self.merged(r)
+            }
+
+            // Constructors
+            $(
+            $(#[doc = $doc])*
             pub fn $i($i: $t) -> Self {
                 Self {
                     $i,
                     ..Default::default()
                 }
             }
-        )*}
+            )*
+        }
     }
 }
 
-impl_constructors!(
+impl_fmt!(
+    /// Defines the formatting of a value-menu field.
+    ///
+    /// The final text formatting looks literally like above:
+    /// ```md
+    /// <chip><message>[ ({[default: <default>]}, [example: <example>])]\\n<prefix>
+    /// ```
+    /// where:
+    /// - `<...>` means a given string slice.
+    /// - `{...}` means that the value inside is chose to be displayed or not (boolean).
+    /// - `[...]` means that the value inside is displayed if it is available.
+    ,
     /// Sets the chip of the formatting (`"--> "` by default).
-    chip: &'a str,
-    /// Sets the prefix of the formatting (`">> "` by default).
     prefix: &'a str,
+    /// Defines the chip as marker type for lists (`" - "` by default).
+    chip: &'a str,
     /// Defines if it displays the default value or not (`true` by default).
-    default: bool
+    show_default: bool,
+    /// Sets the prefix of the formatting (`">> "` by default).
+    suffix: &'a str,
 );
 
 /// Default formatting for a field is `"--> "` as a chip and `">> "` as prefix.
@@ -259,7 +107,7 @@ impl_constructors!(
 /// ```md
 /// * <message>[ (default: <default>)]:
 /// ```
-impl<'a> Default for ValueFieldFormatting<'a> {
+impl<'a> Default for Format<'a> {
     fn default() -> Self {
         DEFAULT_FMT
     }
@@ -299,21 +147,9 @@ struct FieldDetails<'a> {
     show_d: bool,
 }
 
-impl<'a> FieldDetails<'a> {
-    fn try_default<T>(&self) -> T
-    where
-        T: FromStr + Default,
-        T::Err: 'static + Debug,
-    {
-        self.default.as_ref().map(default_parse).unwrap_or_default()
-    }
-}
-
 impl Display for FieldDetails<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.example.is_none() && self.default.is_none()
-            || self.example.is_none() && !self.show_d
-        {
+        if self.example.is_none() && (self.default.is_none() || !self.show_d) {
             return Ok(());
         }
 
@@ -348,21 +184,19 @@ impl Display for FieldDetails<'_> {
 ///     .build_init()
 ///     .unwrap();
 /// ```
-pub struct Value<'a> {
+pub struct Written<'a> {
     msg: &'a str,
-    fmt: Rc<ValueFieldFormatting<'a>>,
-    custom_fmt: bool,
+    fmt: Format<'a>,
     details: FieldDetails<'a>,
 }
 
-impl<'a> From<&'a str> for Value<'a> {
+impl<'a> From<&'a str> for Written<'a> {
     fn from(msg: &'a str) -> Self {
-        let fmt = Rc::<ValueFieldFormatting<'a>>::default();
-        let show_d = fmt.default;
+        let fmt = Format::default();
+        let show_d = fmt.show_default;
         Self {
             msg,
             fmt,
-            custom_fmt: false,
             details: FieldDetails {
                 example: None,
                 default: None,
@@ -372,36 +206,29 @@ impl<'a> From<&'a str> for Value<'a> {
     }
 }
 
-impl Display for Value<'_> {
+impl Display for Written<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "{chip}{msg}{det}",
-            chip = self.fmt.chip,
-            msg = self.msg,
-            det = self.details,
-        )
+        self.show_with_pref(f, self.fmt.prefix)
     }
 }
 
 /// Constructor methods defining how the field behaves
-impl<'a> Value<'a> {
+impl<'a> Written<'a> {
+    fn show_with_pref<S: fmt::Write>(&self, s: &mut S, pref: &'a str) -> fmt::Result {
+        writeln!(
+            s,
+            "{pref}{msg}{det}",
+            pref = pref,
+            msg = self.msg,
+            det = self.details,
+        )
+    }
+
     /// Give a custom formatting for the field.
-    pub fn fmt(mut self, fmt: ValueFieldFormatting<'a>) -> Self {
-        self.set_fmt(Rc::new(fmt));
-        self.custom_fmt = true;
+    pub fn format(mut self, fmt: &Format<'a>) -> Self {
+        self.fmt.merge(fmt);
+        self.details.show_d = fmt.show_default;
         self
-    }
-
-    pub(crate) fn inherit_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        if !self.custom_fmt {
-            self.set_fmt(fmt);
-        }
-    }
-
-    fn set_fmt(&mut self, fmt: Rc<ValueFieldFormatting<'a>>) {
-        self.details.show_d = fmt.default;
-        self.fmt = fmt;
     }
 
     /// Give the default value accepted by the field.
@@ -442,154 +269,97 @@ impl<'a> Value<'a> {
         self
     }
 
-    /// Builds the field without specifying standard input and output files.
-    ///
-    /// It initializes instance of `Stdin` and `Stdout`.
-    ///
-    /// ## Example
-    ///
-    /// ```no_run
-    /// use ezmenulib::prelude::*;
-    /// let age: MenuResult<u8> = ValueField::from("How old are you")
-    ///     .build_init();
-    /// ```
-    pub fn build_init<T>(&self) -> MenuResult<T>
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
-    {
-        self.build_with(&mut MenuStream::default())
+    fn prompt_once<R: BufRead, W: Write, T: FromStr>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        suffix: &'a str,
+    ) -> Query<T> {
+        prompt(suffix, stream)
+            .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
+            .into()
     }
 
-    /// Builds the field. It prints the message according to its formatting,
-    /// then returns the corresponding value.
-    ///
-    /// You need to provide the reader for the input, and the writer for the output.
-    /// It returns a MenuResult if there was an IO error, or if the default value type is incorrect.
-    ///
-    /// # Example
-    ///
-    /// Supposing you have declared your own `Stdin` and `Stdout` in your program, you can do so:
-    /// ```no_run
-    /// use std::io::{stdin, stdout, BufReader};
-    /// # use ezmenulib::field::ValueField;
-    ///
-    /// let mut stdin = BufReader::new(stdin());
-    /// let mut stdout = stdout();
-    ///
-    /// let author: String = ValueField::from("Author")
-    ///     .build(&mut stdin, &mut stdout)
-    ///     .unwrap();
-    /// ```
-    pub fn build<T>(&self, reader: &mut In, writer: &mut Out) -> MenuResult<T>
+    pub fn prompt_until_with<R, W, T, F>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        til: F,
+        fmt: &Format<'a>,
+    ) -> MenuResult<T>
     where
-        T: FromStr,
-        T::Err: 'static + Debug,
-    {
-        self.build_with(&mut MenuStream::with(reader, writer))
-    }
-
-    /// Builds the fields with a given menu stream. It prints out the message to the stream
-    /// according to its formatting, then returns the corresponding value.
-    ///
-    /// You need to instantiate beforehand the `MenuStream` to use this method.
-    pub fn build_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
-    where
-        T: FromStr,
-        T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
-    {
-        self.build_until(stream, |_| true)
-    }
-
-    /// Builds the field, or returns the default value from the type.
-    pub fn build_or_default<T>(&self, reader: &mut In, writer: &mut Out) -> T
-    where
-        T: FromStr + Default,
-        T::Err: 'static + Debug,
-    {
-        self.build_or_default_with(&mut MenuStream::with(reader, writer))
-    }
-
-    /// Builds the field with a given menu stream, or returns the default value from the type.
-    pub fn build_or_default_with<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> T
-    where
-        T: FromStr + Default,
-        T::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
-    {
-        match self.build_once(stream) {
-            Query::Finished(out) => out,
-            _ => self.details.try_default(),
-        }
-    }
-
-    /// Builds the field with a given menu stream, prompting the user input until the condition
-    /// returned by the function is valid.
-    ///
-    /// The function takes a reference to the returned output provided by the user, and returns
-    /// a `bool` to check if the output is correct.
-    pub fn build_until<T, R, W, F>(&self, stream: &mut MenuStream<R, W>, til: F) -> MenuResult<T>
-    where
         T: FromStr,
-        T::Err: 'static + Debug,
-        R: BufRead,
-        W: Write,
         F: Fn(&T) -> bool,
     {
-        // loops while incorrect input
+        let fmt = self.fmt.merged(fmt);
+
+        self.show_with_pref(stream, fmt.prefix)?;
         loop {
-            match self.build_once(stream) {
+            match self.prompt_once(stream, fmt.suffix) {
                 Query::Finished(out) if til(&out) => break Ok(out),
-                Query::Continue => {
-                    if let Some(default) = &self.details.default {
-                        return Ok(default_parse(default));
-                    }
-                }
                 Query::Err(e) => break Err(e),
                 _ => continue,
             }
         }
     }
 
-    /// Builds the field with a given menu stream once.
-    pub fn build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
+    pub fn prompt_until<R, W, T, F>(&self, stream: &mut MenuStream<R, W>, til: F) -> MenuResult<T>
     where
-        T: FromStr,
-        T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
+        T: FromStr,
+        F: Fn(&T) -> bool,
     {
-        match show(self, stream) {
-            Ok(()) => self.inner_build_once(stream),
-            Err(e) => Query::Err(e),
-        }
+        self.prompt_until_with(stream, til, &self.fmt)
     }
 
-    fn inner_build_once<T, R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<T>
+    pub fn prompt_with<R, W, T>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'a>,
+    ) -> MenuResult<T>
     where
-        T: FromStr,
-        T::Err: 'static + Debug,
         R: BufRead,
         W: Write,
+        T: FromStr,
     {
-        prompt(self.fmt.prefix, stream)
-            .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
-            .into()
+        self.prompt_until_with(stream, |_| true, fmt)
     }
-}
 
-impl<'a, Out, R, W> Promptable<'a, Out, R, W> for Value<'a>
-where
-    Out: FromStr,
-    Out::Err: 'static + Debug,
-    R: BufRead,
-    W: Write,
-{
-    fn prompt_once(&mut self, stream: &mut MenuStream<'a, R, W>) -> Query<Out> {
-        self.inner_build_once(stream)
+    pub fn prompt<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+    {
+        self.prompt_with(stream, &self.fmt)
+    }
+
+    pub fn prompt_or_default_with<R, W, T>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'a>,
+    ) -> T
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr + Default,
+    {
+        let fmt = self.fmt.merged(fmt);
+
+        self.show_with_pref(stream, fmt.prefix)
+            .map_err(MenuError::from)
+            .and(self.prompt_once(stream, fmt.suffix).into())
+            .unwrap_or_default()
+    }
+
+    pub fn prompt_or_default<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> T
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr + Default,
+    {
+        self.prompt_or_default_with(stream, &self.fmt)
     }
 }
 
@@ -611,26 +381,13 @@ where
 pub(crate) fn parse_value<T, S>(s: S, default: Option<T>) -> MenuResult<T>
 where
     T: FromStr,
-    T::Err: 'static + Debug,
     S: AsRef<str>,
 {
     let s = s.as_ref();
     match (s.parse(), default) {
         (Ok(out), _) | (Err(_), Some(out)) => Ok(out),
-        (Err(e), None) => Err(MenuError::Parse(s.to_owned(), Box::new(e))),
+        (Err(_), None) => Err(MenuError::Input),
     }
-}
-
-pub(crate) fn default_parse_failed<S, E>(s: S, e: E) -> !
-where
-    S: ToString,
-    E: 'static + Debug,
-{
-    panic!(
-        "`{}` has been used as default value but its type is incorrect: {:?}",
-        s.to_string(),
-        e
-    )
 }
 
 /// Function that parses the default value with a check if the default value is incorrect.
@@ -639,10 +396,123 @@ where
 fn default_parse<T>(default: &DefaultValue<'_>) -> T
 where
     T: FromStr,
-    T::Err: 'static + Debug,
 {
+    fn unwrap<T: FromStr>(s: impl AsRef<str>) -> T {
+        let s = s.as_ref();
+        s.parse().unwrap_or_else(|_| {
+            panic!(
+                "`{}` has been used as default value but its type is incorrect",
+                s
+            )
+        })
+    }
+
     match default {
-        DefaultValue::Value(s) => s.parse().unwrap_or_else(|e| default_parse_failed(s, e)),
-        DefaultValue::Env(s) => s.parse().unwrap_or_else(|e| default_parse_failed(s, e)),
+        DefaultValue::Value(s) => unwrap(s),
+        DefaultValue::Env(s) => unwrap(s),
+    }
+}
+
+pub struct Selected<'a, T> {
+    fmt: Format<'a>,
+    msg: &'a str,
+    fields: Vec<(&'a str, T)>,
+    default: Option<usize>,
+}
+
+impl<'a, T> From<&'a str> for Selected<'a, T>
+where
+    T: Selectable,
+{
+    fn from(msg: &'a str) -> Self {
+        Self::new(msg, T::values())
+    }
+}
+
+impl<'a, T> Selected<'a, T> {
+    pub fn new(msg: &'a str, fields: Vec<(&'a str, T)>) -> Self {
+        if fields.is_empty() {
+            panic!("empty fields for the selectable value");
+        }
+
+        Self {
+            fmt: Default::default(),
+            msg,
+            fields,
+            default: None,
+        }
+    }
+
+    pub fn format(mut self, fmt: &Format<'a>) -> Self {
+        self.fmt.merge(fmt);
+        self
+    }
+
+    pub fn default(mut self, default: usize) -> Self {
+        self.default = Some(default);
+        self
+    }
+
+    fn prompt_once<R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<usize>
+    where
+        R: BufRead,
+        W: Write,
+    {
+        prompt(self.fmt.suffix, stream)
+            .map(|s| match parse_value(&s, self.default) {
+                Ok(i) if i >= 1 && i <= self.fields.len() => Ok(i - 1),
+                Ok(_) => Err(MenuError::Input),
+                Err(e) => Err(e),
+            })
+            .into()
+    }
+
+    pub fn select<R, W>(mut self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
+    where
+        R: BufRead,
+        W: Write,
+    {
+        show(&self, stream)?;
+        loop {
+            match self.prompt_once(stream) {
+                Query::Finished(out) => break Ok(self.fields.swap_remove(out).1),
+                Query::Err(e) => break Err(e),
+                Query::Continue => continue,
+            }
+        }
+    }
+}
+
+impl<'a, T> Selected<'a, T>
+where
+    T: Default,
+{
+    pub fn select_or_default<R: BufRead, W: Write>(mut self, stream: &mut MenuStream<R, W>) -> T {
+        show(&self, stream)
+            .and(self.prompt_once(stream).into())
+            .map(|i| self.fields.swap_remove(i).1)
+            .unwrap_or_default()
+    }
+}
+
+impl<T> Display for Selected<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}", self.msg)?;
+
+        for (i, (msg, _)) in self.fields.iter().enumerate() {
+            writeln!(
+                f,
+                "{i}{chip}{msg}{default}",
+                i = i + 1,
+                chip = self.fmt.chip,
+                msg = msg,
+                default = match self.default {
+                    Some(x) if x == i + 1 => " (default)",
+                    _ => "",
+                }
+            )?;
+        }
+
+        Ok(())
     }
 }
