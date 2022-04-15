@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fmt::Arguments;
 use std::io::{self, stdin, stdout, BufRead, BufReader, IoSlice, IoSliceMut, Read, Write};
 use std::ops::{Deref, DerefMut};
@@ -18,6 +19,12 @@ macro_rules! map_impl {
 pub(super) enum Stream<'a, T> {
     Owned(T),
     Borrowed(&'a mut T),
+}
+
+impl<T: Default> Default for Stream<'_, T> {
+    fn default() -> Self {
+        Self::Owned(T::default())
+    }
 }
 
 impl<T> Stream<'_, T> {
@@ -188,4 +195,13 @@ impl<R, W: Write> Write for MenuStream<'_, R, W> {
         write_all(buf: &[u8]) -> io::Result<()>,
         write_fmt(fmt: Arguments<'_>) -> io::Result<()>,
     );
+}
+
+impl<R, W: Write> fmt::Write for MenuStream<'_, R, W> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.writer
+            .write_all(s.as_bytes())
+            .and(self.writer.flush())
+            .map_err(|_| fmt::Error)
+    }
 }
