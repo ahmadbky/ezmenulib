@@ -328,6 +328,7 @@ pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     chip: " - ",
     show_default: true,
     suffix: ">> ",
+    line_brk: true,
 };
 
 /// The error type used by the menu builder.
@@ -393,6 +394,7 @@ impl From<String> for MenuError {
 }
 
 impl From<fmt::Error> for MenuError {
+    #[inline]
     fn from(e: fmt::Error) -> Self {
         Self::Format(e)
     }
