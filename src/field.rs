@@ -36,11 +36,10 @@ pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
 /// according to its fields.
 macro_rules! impl_fmt {
     ($(#[doc = $main_doc:expr])*
-    ,
     $(
+        $i:ident: $t:ty,
         $(#[doc = $doc:expr])*
-        $i:ident: $t:ty $(,)?
-    ),*) => {
+    )*) => {
         $(#[doc = $main_doc])*
         #[derive(Clone)]
         pub struct Format<'a> {$(
@@ -81,23 +80,46 @@ macro_rules! impl_fmt {
 impl_fmt!(
     /// Defines the formatting of a value-menu field.
     ///
-    /// The final text formatting looks literally like above:
+    /// The final text format for a written field looks literally like above:
     /// ```md
-    /// <chip><message>[ ({[default: <default>]}, [example: <example>])]\\n<prefix>
+    /// <prefix><message>[ ({[default: <default>]}, [example: <example>])]{\n}<suffix>
+    /// ```
+    /// For a selectable value, it looks like above:
+    /// ```md
+    /// <prefix><message>
+    /// X<chip><field message>{[ (default)]}
+    /// X<chip><field message>{[ (default)]}
+    /// ...
+    /// <suffix>
     /// ```
     /// where:
     /// - `<...>` means a given string slice.
     /// - `{...}` means that the value inside is chose to be displayed or not (boolean).
     /// - `[...]` means that the value inside is displayed if it is available.
-    ,
-    /// Sets the chip of the formatting (`"--> "` by default).
     prefix: &'a str,
-    /// Defines the chip as marker type for lists (`" - "` by default).
+    /// Sets the chip of the formatting (`"--> "` by default).
     chip: &'a str,
-    /// Defines if it displays the default value or not (`true` by default).
+    /// Defines the chip as marker type for lists (`" - "` by default).
+    ///
+    /// It is displayed between the index and the field message among the selectable fields.
     show_default: bool,
-    /// Sets the prefix of the formatting (`">> "` by default).
+    /// Defines if it displays the default value or not (`true` by default).
+    ///
+    /// If an example is provided in the current written field,
+    /// the latter will always be displayed.
     suffix: &'a str,
+    /// Sets the prefix of the formatting (`">> "` by default).
+    ///
+    /// It is displayed right before the user input, on the same line.
+    line_brk: bool,
+    /// Defines if it breaks the line right before the suffix (`true` by default).
+    ///
+    /// If it does, re-prompting the field will not display the message again,
+    /// but only the suffix. Otherwise, because it is on the same line, it will display
+    /// the whole message again.
+    ///
+    /// For selectable fields, if `new_line` format specification is set as `false`,
+    /// it will use the default suffix, and always use a line break, for more convenience.
 );
 
 /// Default formatting for a field is `"--> "` as a chip and `">> "` as prefix.
@@ -208,14 +230,18 @@ impl<'a> From<&'a str> for Written<'a> {
 
 impl Display for Written<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.show_with_pref(f, self.fmt.prefix)
+        self.show_with_pref(f, self.fmt.prefix)?;
+        f.write_str(match self.fmt.line_brk {
+            true => "\n",
+            false => self.fmt.suffix,
+        })
     }
 }
 
 /// Constructor methods defining how the field behaves
 impl<'a> Written<'a> {
     fn show_with_pref<S: fmt::Write>(&self, s: &mut S, pref: &'a str) -> fmt::Result {
-        writeln!(
+        write!(
             s,
             "{pref}{msg}{det}",
             pref = pref,
@@ -274,9 +300,16 @@ impl<'a> Written<'a> {
         stream: &mut MenuStream<R, W>,
         suffix: &'a str,
     ) -> Query<T> {
-        prompt(suffix, stream)
-            .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
-            .into()
+        prompt(
+            &if self.fmt.line_brk {
+                suffix.to_owned()
+            } else {
+                format!("{}", self)
+            },
+            stream,
+        )
+        .map(|s| parse_value(s, self.details.default.as_ref().map(default_parse)))
+        .into()
     }
 
     pub fn prompt_until_with<R, W, T, F>(
@@ -293,7 +326,13 @@ impl<'a> Written<'a> {
     {
         let fmt = self.fmt.merged(fmt);
 
-        self.show_with_pref(stream, fmt.prefix)?;
+        // Displays the field message.
+        if fmt.line_brk {
+            self.show_with_pref(stream, fmt.prefix)?;
+            stream.write_all("\n".as_bytes())?;
+        }
+
+        // Loops while incorrect input.
         loop {
             match self.prompt_once(stream, fmt.suffix) {
                 Query::Finished(out) if til(&out) => break Ok(out),
@@ -345,12 +384,19 @@ impl<'a> Written<'a> {
         W: Write,
         T: FromStr + Default,
     {
-        let fmt = self.fmt.merged(fmt);
+        fn inner_prompt<R: BufRead, W: Write, T: FromStr + Default>(
+            stream: &mut MenuStream<R, W>,
+            fmt: Format<'_>,
+            w: &Written<'_>,
+        ) -> MenuResult<T> {
+            if fmt.line_brk {
+                w.show_with_pref(stream, fmt.prefix)?;
+                stream.write_all("\n".as_bytes())?;
+            }
+            w.prompt_once(stream, fmt.suffix).into()
+        }
 
-        self.show_with_pref(stream, fmt.prefix)
-            .map_err(MenuError::from)
-            .and(self.prompt_once(stream, fmt.suffix).into())
-            .unwrap_or_default()
+        inner_prompt(stream, self.fmt.merged(fmt), self).unwrap_or_default()
     }
 
     pub fn prompt_or_default<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> T
@@ -445,14 +491,30 @@ impl<'a, T> Selected<'a, T> {
 
     pub fn format(mut self, fmt: &Format<'a>) -> Self {
         self.fmt.merge(fmt);
+        // Saves the default suffix if asked to break the line,
+        // because it would be ugly to have for instance ": " as suffix.
+        // This is useful if the format is inherited (see [`Values::selected`] function).
+        if !self.fmt.line_brk {
+            self.fmt.suffix = DEFAULT_FMT.suffix;
+        }
         self
     }
 
+    /// Defines the default value among the the selectable values, by its index.
+    ///
+    /// # Note
+    ///
+    /// If the index is out of bounds, it will not panic at runtime. Therefore,
+    /// if the user enters an incorrect index, it will not use the default index.
     pub fn default(mut self, default: usize) -> Self {
-        self.default = Some(default);
+        self.default = Some(default + 1);
         self
     }
 
+    /// Prompts the selected menu once.
+    ///
+    /// In fact, it only displays the suffix, and gets the user input, then returns
+    /// the correct index wrapped in a `Query`.
     fn prompt_once<R, W>(&self, stream: &mut MenuStream<R, W>) -> Query<usize>
     where
         R: BufRead,
@@ -507,7 +569,7 @@ impl<T> Display for Selected<'_, T> {
                 chip = self.fmt.chip,
                 msg = msg,
                 default = match self.default {
-                    Some(x) if x == i + 1 => " (default)",
+                    Some(x) if x == i + 1 && self.fmt.show_default => " (default)",
                     _ => "",
                 }
             )?;
