@@ -80,7 +80,7 @@ mod stream;
 pub use crate::menu::stream::MenuStream;
 use crate::menu::stream::Stream;
 use crate::prelude::*;
-use std::fmt::{self, Display};
+use std::fmt::Display;
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -91,14 +91,19 @@ pub type In = BufReader<Stdin>;
 /// The default output stream used by a menu, using the standard output stream.
 pub type Out = Stdout;
 
+/// Shows the text using the given stream and maps the `io::Error` into a `MenuError`.
 pub(crate) fn show<T, S>(text: &T, stream: &mut S) -> MenuResult
 where
     T: ?Sized + Display,
-    S: fmt::Write,
+    S: Write,
 {
-    write!(stream, "{}", text).map_err(MenuError::Format)
+    write!(stream, "{}", text)?;
+    stream.flush()?;
+    Ok(())
 }
 
+/// Shows the text using the given stream, then prompts a value to the user and
+/// returns the corresponding String.
 pub(crate) fn prompt<S, R, W>(text: &S, stream: &mut MenuStream<R, W>) -> MenuResult<String>
 where
     R: BufRead,
@@ -124,7 +129,7 @@ pub struct Values<'a, R = In, W = Out> {
 // Cannot use the derivable implementation of `Default`
 // because generic parameters R and W need to implement `Default`.
 // Here, we use the `Default` implementation of `MenuStream`, which
-// uses `BufReader::new(stdin())` and `stdout()`.
+// uses `BufReader<Stdin>` as `R` and `Stdout` as `W`.
 #[allow(clippy::derivable_impls)]
 impl Default for Values<'_> {
     fn default() -> Self {
