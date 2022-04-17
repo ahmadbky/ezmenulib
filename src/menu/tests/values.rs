@@ -3,7 +3,6 @@ use std::error::Error;
 #[cfg(feature = "date")]
 use crate::chrono::prelude::*;
 use crate::prelude::*;
-use crate::Selectable;
 
 type Res = Result<(), Box<dyn Error>>;
 
@@ -11,7 +10,7 @@ macro_rules! test_menu {
     ($name:ident, $input:expr, $($st:stmt),* $(,)?) => {{
         let mut input = $input.as_bytes();
         let mut output = Vec::<u8>::new();
-        let mut $name = Values::from_owned(MenuStream::with(&mut input, &mut output));
+        let mut $name = Values::from(MenuStream::with(&mut input, &mut output));
         {$($st)*}
         String::from_utf8(output)
     }};
@@ -154,7 +153,7 @@ fn select_no_field() {
     let _output = test_menu! {
         menu,
         "hello",
-        let _msg: MenuResult<()> = menu.selected(Selected::new("hey", vec![])),
+        let _msg: MenuResult = menu.selected(Selected::new("hey", [])),
     };
 }
 
@@ -168,7 +167,7 @@ fn select_one_field() -> Res {
     let output = test_menu! {
         menu,
         "3\n-4\n340\n1\n",
-        let name = menu.selected(Selected::new("select the type", vec![("mit", Type1::MIT)]))?,
+        let name = menu.selected(Selected::new("select the type", [("mit", Type1::MIT)]))?,
         assert_eq!(name, Type1::MIT),
     }?;
 
@@ -189,9 +188,9 @@ impl Default for Type2 {
     }
 }
 
-impl Selectable for Type2 {
-    fn values() -> Vec<(&'static str, Self)> {
-        vec![("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
+impl Selectable<3> for Type2 {
+    fn values() -> [(&'static str, Self); 3] {
+        [("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
     }
 }
 
