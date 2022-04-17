@@ -140,24 +140,24 @@ impl Default for Values<'_> {
     }
 }
 
+impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
+    fn from(stream: MenuStream<'a, R, W>) -> Self {
+        Self::inner_new(Stream::Owned(stream))
+    }
+}
+
+impl<'a, R, W> From<&'a mut MenuStream<'a, R, W>> for Values<'a, R, W> {
+    fn from(stream: &'a mut MenuStream<'a, R, W>) -> Self {
+        Self::inner_new(Stream::Borrowed(stream))
+    }
+}
+
 impl<'a, R, W> Values<'a, R, W> {
     fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>) -> Self {
         Self {
             fmt: Default::default(),
             stream,
         }
-    }
-
-    /// Builds the menu from its owned menu stream, with its fields vector.
-    #[inline]
-    pub fn from_owned(stream: MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Owned(stream))
-    }
-
-    /// Builds the menu from a mutable reference of a menu stream, with its fields vector.
-    #[inline]
-    pub fn from_ref(stream: &'a mut MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Borrowed(stream))
     }
 
     /// Give the global formatting applied to all the fields the menu contains.
@@ -198,12 +198,15 @@ where
     /// ## Panic
     ///
     /// If the next field is not a selectable menu, this function will panic.
-    pub fn selected<T>(&mut self, sel: Selected<'a, T>) -> MenuResult<T> {
+    pub fn selected<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> MenuResult<T> {
         show(&self.fmt.prefix, self.stream.deref_mut())?;
         sel.format(&self.fmt).select(&mut self.stream)
     }
 
-    pub fn selected_or_default<T: Default>(&mut self, sel: Selected<'a, T>) -> T {
+    pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> T
+    where
+        T: Default,
+    {
         show(&self.fmt.prefix, self.stream.deref_mut())
             .map(|_| sel.format(&self.fmt).select_or_default(&mut self.stream))
             .unwrap_or_default()
@@ -233,62 +236,5 @@ where
 
     pub fn written_or_default<T: FromStr + Default>(&mut self, written: &Written<'a>) -> T {
         written.prompt_or_default_with(&mut self.stream, &self.fmt)
-    }
-}
-
-pub struct Field<'a, R = In, W = Out> {
-    msg: &'a str,
-    kind: Kind<'a, R, W>,
-}
-
-impl<'a, R, W> Field<'a, R, W> {
-    pub fn new(msg: &'a str, kind: Kind<'a, R, W>) -> Self {
-        Self { msg, kind }
-    }
-}
-
-pub enum Kind<'a, R, W> {
-    Unit(Binding<R, W>),
-    SubMenu(Vec<Field<'a, R, W>>),
-    Quit,
-}
-
-pub struct Menu<'a, R = In, W = Out> {
-    fields: Vec<Field<'a, R, W>>,
-    stream: Stream<'a, MenuStream<'a, R, W>>,
-    go_back: bool,
-    repeat: bool,
-}
-
-impl<'a> From<Vec<Field<'a>>> for Menu<'a> {
-    fn from(fields: Vec<Field<'a>>) -> Self {
-        Self {
-            fields,
-            stream: Stream::Owned(MenuStream::default()),
-            go_back: true,
-            repeat: false,
-        }
-    }
-}
-
-impl<'a, const N: usize> From<[Field<'a>; N]> for Menu<'a> {
-    fn from(fields: [Field<'a>; N]) -> Self {
-        Self::from(Vec::from(fields))
-    }
-}
-
-impl<'a, R, W> Menu<'a, R, W> {
-    pub fn go_back(mut self, go_back: bool) -> Self {
-        self.go_back = go_back;
-        self
-    }
-
-    pub fn repeat(mut self, repeat: bool) -> Self {
-        self.repeat = repeat;
-        self
-    }
-
-    pub fn run(&mut self) -> MenuResult {
-        Ok(())
     }
 }
