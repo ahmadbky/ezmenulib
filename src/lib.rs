@@ -286,13 +286,11 @@
 //! .title("Describe the project license");
 //! ```
 
-#![warn(missing_copy_implementations, unused_allocation)]
+#![warn(missing_docs, missing_copy_implementations, unused_allocation)]
 
 pub mod customs;
 pub mod field;
 pub mod menu;
-
-mod query;
 
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
@@ -402,33 +400,3 @@ impl From<fmt::Error> for MenuError {
 
 /// The main result type used in the EZMenu library.
 pub type MenuResult<T = ()> = Result<T, MenuError>;
-
-use self::prelude::*;
-
-pub trait Selectable: Sized {
-    fn values() -> Vec<(&'static str, Self)>;
-}
-
-pub trait FromValues<'a, R: 'a, W: 'a>: Sized {
-    fn from_stream(stream: MenuStream<R, W>) -> MenuResult<Self>;
-
-    fn from_io(reader: R, writer: W) -> MenuResult<Self> {
-        Self::from_stream(MenuStream::new(reader, writer))
-    }
-
-    fn from_menu_safe() -> MenuResult<Self>
-    where
-        Self: FromValues<'a, In, Out>,
-    {
-        use std::io::{stdin, stdout, BufReader};
-        <Self as FromValues<In, Out>>::from_io(BufReader::new(stdin()), stdout())
-    }
-
-    fn from_menu() -> Self
-    where
-        Self: FromValues<'a, In, Out>,
-    {
-        <Self as FromValues<In, Out>>::from_menu_safe()
-            .expect("An error occurred while prompting the value-menu")
-    }
-}
