@@ -1,5 +1,5 @@
 use ezmenulib::customs::{MenuOption, MenuVec};
-use ezmenulib::{prelude::*, Selectable};
+use ezmenulib::prelude::*;
 use std::error::Error;
 use std::io::Write;
 
@@ -16,9 +16,9 @@ impl Default for Type {
     }
 }
 
-impl Selectable for Type {
-    fn values() -> Vec<(&'static str, Self)> {
-        vec![("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
+impl Selectable<3> for Type {
+    fn values() -> [(&'static str, Self); 3] {
+        [("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
     }
 }
 
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = MenuStream::default();
     writeln!(stream, "Describe your project")?;
 
-    let mut license_menu = Values::from_ref(&mut stream);
+    let mut license_menu = Values::from(&mut stream);
 
     let authors: MenuVec<String> =
         license_menu.written(&Written::from("Authors").default_value("defaulmzlkejft"))?;
