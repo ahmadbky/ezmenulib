@@ -52,7 +52,7 @@ macro_rules! impl_fmt {
             /// If it a specification corresponds to the default specification
             /// (see [`Format::default`]), for instance `prefix`, it will be replaced
             /// by the `r` specification of `prefix`.
-            pub fn merged(&self, r: &Format<'a>) -> Self {
+            pub(crate) fn merged(&self, r: &Format<'a>) -> Self {
                 Self {$(
                     $i: {
                         match self.$i == DEFAULT_FMT.$i {
@@ -61,13 +61,6 @@ macro_rules! impl_fmt {
                         }
                     },
                 )*}
-            }
-
-            /// Merges `self` with `r` format.
-            ///
-            /// See [`Format::merged`] for more information.
-            pub fn merge(&mut self, r: &Format<'a>) {
-                *self = self.merged(r)
             }
 
             // Constructors
@@ -225,7 +218,8 @@ impl Display for WrittenDetails<'_> {
 /// ```
 pub struct Written<'a> {
     msg: &'a str,
-    fmt: Format<'a>,
+    /// The format of the written field value.
+    pub fmt: Format<'a>,
     details: WrittenDetails<'a>,
 }
 
@@ -276,11 +270,11 @@ impl<'a> Written<'a> {
     /// # Example
     ///
     /// ```
-    /// let w = Written::from("hello").format(&Format::prefix("==> "));
+    /// let w = Written::from("hello").format(Format::prefix("==> "));
     /// ```
-    pub fn format(mut self, fmt: &Format<'a>) -> Self {
-        self.fmt.merge(fmt);
+    pub fn format(mut self, fmt: Format<'a>) -> Self {
         self.details.show_d = fmt.show_default;
+        self.fmt = fmt;
         self
     }
 
@@ -639,7 +633,8 @@ pub trait Selectable<const N: usize>: Sized {
 ///     .unwrap();
 /// ```
 pub struct Selected<'a, T, const N: usize> {
-    fmt: Format<'a>,
+    /// The format used by the selected field value.
+    pub fmt: Format<'a>,
     msg: &'a str,
     fields: [(&'a str, T); N],
     default: Option<usize>,
@@ -698,10 +693,10 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     ///     ("GPL", Type::GPL),
     ///     ("BSD", Type::BSD),
     /// ])
-    /// .format(&Format::prefix("==> "));
+    /// .format(Format::prefix("==> "));
     /// ```
-    pub fn format(mut self, fmt: &Format<'a>) -> Self {
-        self.fmt.merge(fmt);
+    pub fn format(mut self, fmt: Format<'a>) -> Self {
+        self.fmt = fmt;
         // Saves the default suffix if asked to break the line,
         // because it would be ugly to have for instance ": " as suffix.
         // This is useful if the format is inherited (see [`Values::selected`] function).
@@ -784,17 +779,17 @@ where
 
 impl<T, const N: usize> Display for Selected<'_, T, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}", self.msg)?;
+        writeln!(f, "{pref}{msg}", pref = self.fmt.prefix, msg = self.msg)?;
 
-        for (i, (msg, _)) in self.fields.iter().enumerate() {
+        for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
             writeln!(
                 f,
                 "{i}{chip}{msg}{default}",
-                i = i + 1,
+                i = i,
                 chip = self.fmt.chip,
                 msg = msg,
                 default = match self.default {
-                    Some(x) if x == i + 1 && self.fmt.show_default => " (default)",
+                    Some(x) if x == i && self.fmt.show_default => " (default)",
                     _ => "",
                 }
             )?;

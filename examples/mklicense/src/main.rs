@@ -26,13 +26,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = MenuStream::default();
     writeln!(stream, "Describe your project")?;
 
-    let mut license_menu = Values::from(&mut stream);
+    let mut lic = Values::from(&mut stream).format(Format {
+        prefix: "==> ",
+        chip: " = ",
+        ..Default::default()
+    });
 
-    let authors: MenuVec<String> =
-        license_menu.written(&Written::from("Authors").default_value("defaulmzlkejft"))?;
-    let name: MenuOption<String> = license_menu.written(&Written::from("Project name"))?;
-    let date: u16 = license_menu.written(&Written::from("License date").default_value("2022"))?;
-    let ty: Type = license_menu.selected_or_default(Selected::from("Select a license type"));
+    let authors: MenuVec<String> = lic.written(&Written::from("Authors"))?;
+    let name: MenuOption<String> = lic.written(&Written::from("Project name"))?;
+    let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
+    let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
 
     println!(
         "{:?} License, Copyright (C) {} {}\n{}",
