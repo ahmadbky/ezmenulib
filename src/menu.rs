@@ -82,7 +82,6 @@ use crate::menu::stream::Stream;
 use crate::prelude::*;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
-use std::ops::DerefMut;
 use std::str::FromStr;
 
 /// The default input stream used by a menu, using the standard input stream.
@@ -98,8 +97,7 @@ where
     S: Write,
 {
     write!(stream, "{}", text)?;
-    stream.flush()?;
-    Ok(())
+    stream.flush().map_err(MenuError::from)
 }
 
 /// Shows the text using the given stream, then prompts a value to the user and
@@ -114,18 +112,67 @@ where
     raw_read_input(stream)
 }
 
-/// Represents a value-menu type, which means a menu that retrieves values from the user inputs.
+/// Container used to handle the [stream](MenuStream) and the global [format](Format).
 ///
-/// The `R` type parameter represents its reader type, and the `W` type parameter means its writer type.
+/// The `R` type parameter represents its reader type,
+/// and the `W` type parameter represents its writer type.
 /// By default, it uses the standard input and output streams to get values from the user.
 /// It wraps the streams into a [`MenuStream`].
 ///
-/// It has a global formatting applied to the fields it contains by inheritance.
+/// It has a global formatting applied to the fields it gets values from by inheritance.
+/// The inheritance saves the custom format specifications of the field.
+///
+/// # Example
+///
+/// ```no_run
+/// use ezmenulib::prelude::*;
+/// let mut menu = Values::from(Format::prefix("->> "));
+/// // Inherits the prefix specification on the written field
+/// let name: String = menu.written(&Written::from("What is your name")).unwrap();
+/// // Uses the custom prefix specification of the selectable field
+/// let amount: u8 = menu
+///     .selected(
+///         Selected::new("Select an amount", [("one", 1), ("two", 2), ("three", 3)])
+///         .format(&Format::prefix("-- "))
+///     )
+///     .unwrap();
+/// ```
+///
+/// # Streams
+///
+/// By default, the container uses the standard input and output stream.
+/// You can provide your own stream types, wrapped in a [`MenuStream`], and
+/// borrow them to the container, or take the stream by ownership at the end.
+///
+/// ## Example
+///
+/// Taking the stream from the container by ownership:
+/// ```no_run
+/// # use ezmenulib::prelude::*;
+/// let mut menu = Values::default();
+/// // ...
+/// let stream = menu.take_stream();
+/// // or:
+/// # let mut menu = Values::default();
+/// let (reader, writer) = menu.take_io();
+/// ```
+///
+/// Giving a mutable reference to the stream to the container:
+/// ```no_run
+/// # use ezmenulib::prelude::*;
+/// let mut my_stream = MenuStream::default();
+/// let mut menu = Values::from(&mut my_stream);
+/// // We can also give the ownership:
+/// let mut menu = Values::from(my_stream);
+/// ```
 pub struct Values<'a, R = In, W = Out> {
-    fmt: Format<'a>,
+    /// The global format of the container.
+    pub fmt: Format<'a>,
     stream: Stream<'a, MenuStream<'a, R, W>>,
 }
 
+/// Returns the default container, which corresponds to the
+/// [default format](Format::default) and the [owned default stream](MenuStream::default).
 // Cannot use the derivable implementation of `Default`
 // because generic parameters R and W need to implement `Default`.
 // Here, we use the `Default` implementation of `MenuStream`, which
@@ -140,92 +187,136 @@ impl Default for Values<'_> {
     }
 }
 
+/// Creates the container from an owned stream.
+///
+/// You can still take the stream at the end of the usage, with [`Values::take_stream`].
 impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
     fn from(stream: MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Owned(stream))
+        Self::inner_new(Stream::Owned(stream), Format::default())
     }
 }
 
+/// Creates the container from a mutably borrowed stream.
+///
+/// This is useful if you still want to access the given streams while using the
+/// container to retrieve values.
 impl<'a, R, W> From<&'a mut MenuStream<'a, R, W>> for Values<'a, R, W> {
     fn from(stream: &'a mut MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Borrowed(stream))
+        Self::inner_new(Stream::Borrowed(stream), Format::default())
+    }
+}
+
+impl<'a> From<Format<'a>> for Values<'a> {
+    fn from(fmt: Format<'a>) -> Self {
+        Self::inner_new(Stream::default(), fmt)
     }
 }
 
 impl<'a, R, W> Values<'a, R, W> {
-    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>) -> Self {
-        Self {
-            fmt: Default::default(),
-            stream,
-        }
+    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
+        Self { fmt, stream }
     }
 
-    /// Give the global formatting applied to all the fields the menu contains.
-    /// If a field has a custom formatting, it will uses the formatting rules of the field
+    /// Defines the global formatting applied to all the fields the menu retrieves the values from.
+    ///
+    /// If the field contains custom formatting specifications, it will save them
     /// when printing to the writer.
-    pub fn format(mut self, fmt: &Format<'a>) -> Self {
-        self.fmt.merge(fmt);
+    pub fn format(mut self, fmt: Format<'a>) -> Self {
+        self.fmt = fmt;
         self
     }
 
+    /// Returns the ownership of the stream it contains, consuming `self`.
+    ///
+    /// # Panics
+    ///
+    /// If the container does not own the stream (meaning it has been constructed
+    /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
     pub fn take_stream(self) -> MenuStream<'a, R, W> {
         self.stream.retrieve()
     }
 
+    /// Returns the ownership of the reader and writer, consuming `self`.
+    ///
+    /// # Panics
+    ///
+    /// If the container does not own the stream (meaning it has been constructed
+    /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
     pub fn take_io(self) -> (R, W) {
-        self.stream.retrieve().retrieve()
+        self.take_stream().retrieve()
     }
 
+    /// Returns a reference to the stream the container uses.
     pub fn get_stream(&self) -> &MenuStream<'a, R, W> {
         &self.stream
     }
 
+    /// Returns a mutable reference to the stream the container uses.
     pub fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
         &mut self.stream
     }
 }
 
+/// Associated functions that concerns retrieving values from the user,
+/// thus using the reader and writer stream.
 impl<'a, R, W> Values<'a, R, W>
 where
     R: BufRead,
     W: Write,
 {
-    /// Returns the next output, if the next output corresponds to an inner selectable menu output.
+    /// Returns the next value selected by the user.
     ///
-    /// If this is the case, it returns the selectable menu output
-    /// (See [`<SelectMenu as MenuBuilder>::next_output`](SelectMenu::next_value)).
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the selectable fields.
     ///
-    /// ## Panic
-    ///
-    /// If the next field is not a selectable menu, this function will panic.
+    /// See [`Selected::select`] function fore more information.
     pub fn selected<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> MenuResult<T> {
-        show(&self.fmt.prefix, self.stream.deref_mut())?;
-        sel.format(&self.fmt).select(&mut self.stream)
+        let fmt = sel.fmt.merged(&self.fmt);
+        sel.format(fmt).select(&mut self.stream)
     }
 
+    /// Returns the next value selected by the user, or the default value of the output type
+    /// if any error occurred.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the selectable fields.
+    ///
+    /// See [`Selected::select_or_default`] function for more information.
     pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> T
     where
         T: Default,
     {
-        show(&self.fmt.prefix, self.stream.deref_mut())
-            .map(|_| sel.format(&self.fmt).select_or_default(&mut self.stream))
-            .unwrap_or_default()
+        let fmt = sel.fmt.merged(&self.fmt);
+        sel.format(fmt).select_or_default(&mut self.stream)
     }
 
-    /// Returns the next output provided by the user.
+    /// Returns the next value written by the user.
     ///
-    /// It prompts the user until the value entered is correct.
-    /// If the next field is a selectable menu, it will prompt the selectable menu,
-    /// requiring the output type to be `'static`.
-    /// Otherwise, it will prompt the value-field, requiring the output type to implement
-    /// `FromStr` trait.
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
     ///
-    /// If there is no more field to prompt in the menu, this function will return an error
-    /// (see [`MenuError::EndOfMenu`](crate::MenuError::EndOfMenu)).
+    /// See [`Written::prompt`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn written<T: FromStr>(&mut self, written: &Written<'a>) -> MenuResult<T> {
         written.prompt_with(&mut self.stream, &self.fmt)
     }
 
+    /// Returns the next value written by the user by prompting him the field
+    /// until the given constraint is applied.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::prompt_until`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn written_until<T: FromStr, F: Fn(&T) -> bool>(
         &mut self,
         written: &Written<'a>,
@@ -234,6 +325,18 @@ where
         written.prompt_until_with(&mut self.stream, til, &self.fmt)
     }
 
+    /// Returns the next value written by the user, or the default value of the
+    /// output type if any error occurred.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::prompt_or_default`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn written_or_default<T: FromStr + Default>(&mut self, written: &Written<'a>) -> T {
         written.prompt_or_default_with(&mut self.stream, &self.fmt)
     }

@@ -29,10 +29,9 @@ impl<T: Default> Default for Stream<'_, T> {
 
 impl<T> Stream<'_, T> {
     pub fn retrieve(self) -> T {
-        if let Self::Owned(t) = self {
-            t
-        } else {
-            unreachable!("the stream must own the type to retrieve it")
+        match self {
+            Self::Owned(t) => t,
+            Self::Borrowed(_) => panic!("the stream must be owned to retrieve it"),
         }
     }
 }

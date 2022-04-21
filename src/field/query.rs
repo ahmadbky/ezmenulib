@@ -12,11 +12,9 @@ pub(crate) enum Query<T> {
     Err(MenuError),
 }
 
-/// The inner Result represents the parsing result of the output type.
-/// The outer Result represents the other error types.
+/// The inner Result represents the parsing result of the output type ([MenuError::Input]).
+/// The outer Result represents the other error types (see [MenuError]).
 impl<T> From<MenuResult<MenuResult<T>>> for Query<T> {
-    /// The inner Result represents the parsing result of the output type.
-    /// The outer Result represents the other error types.
     fn from(res: MenuResult<MenuResult<T>>) -> Self {
         match res {
             Ok(Ok(out)) => Self::Finished(out),
