@@ -14,11 +14,15 @@
 //! ```no_run
 //! use ezmenulib::{prelude::*, customs::*};
 //!
+//! # use std::error::Error;
+//! # fn main() -> Result<(), Box<dyn Error>> {
 //! println!("Describe a project.");
-//! let mut values = Values::default();
+//! let mut project = Values::default();
 //!
-//! let authors: MenuVec<String> = project.written("Authors");
-//! let hard: MenuBool = project.written("Was it hard?");
+//! let authors: MenuVec<String> = project.written(&Written::from("Authors"))?;
+//! let hard: MenuBool = project.written(&Written::from("Was it hard?"))?;
+//! # Ok(())
+//! # }
 //! ```
 
 #[cfg(test)]
