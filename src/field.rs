@@ -1,21 +1,4 @@
-//! Module defining different types of fields.
-//!
-//! The selection fields [`SelectField`] corresponds to a [`SelectMenu`](crate::menu::SelectMenu),
-//! while the value fields [`ValueField`] corresponds to a [`ValueMenu`](crate::menu::ValueMenu).
-//!
-//! A `ValueMenu` can however contain both a `ValueField` and a `SelectMenu`,
-//! to be used as a sub-menu (check out the [`Field`] enum).
-//!
-//! ## Formatting
-//!
-//! You can edit the [formatting rules](ValueFieldFormatting) of a `ValueField` or set the global
-//! formatting rules for the `ValueMenu`.
-//!
-//! If a `SelectMenu` is used as a sub-menu to a `ValueMenu`, the global formatting rules of the `ValueMenu`
-//! will be applied on the title of the `SelectMenu` to integrate it in the structure.
-//!
-//! You can still edit the formatting rules of its title (see [`SelectTitle`](crate::menu::SelectTitle))
-//! independently from the global formatting rules.
+//! Module that defines several types about retrieving values from the user.
 
 mod query;
 
@@ -730,6 +713,10 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
             .into()
     }
 
+    fn take(self, i: usize) -> T {
+        Vec::from(self.fields).remove(i).1
+    }
+
     /// Prompts the selectable values to the user.
     ///
     /// It prompts the fields once and the suffix until the index provided, then returns the selected value.
@@ -745,7 +732,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         show(&self, stream)?;
         loop {
             match self.prompt_once(stream) {
-                Query::Finished(out) => break Ok(Vec::from(self.fields).remove(out).1),
+                Query::Finished(out) => break Ok(self.take(out)),
                 Query::Err(e) => break Err(e),
                 Query::Continue => continue,
             }
@@ -772,7 +759,7 @@ where
     {
         show(&self, stream)
             .and(self.prompt_once(stream).into())
-            .map(|i| Vec::from(self.fields).remove(i).1)
+            .map(|i| self.take(i))
             .unwrap_or_default()
     }
 }

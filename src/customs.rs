@@ -2,9 +2,9 @@
 //!
 //! When retrieving values from the user inputs, we need to accept more human values to parse.
 //! For instance, the default implementation of the `FromStr` trait for the `bool` primitive type
-//! requires the string slice to be either `true` or `false`. Therefore, in this module, there is
-//! the [`MenuBool`] type overriding this implementation, to accept more human values,
-//! like `yes` or `no`.
+//! requires the string slice to be either exactly `true` or `false`. Therefore, in this module,
+//! there exists the [`MenuBool`] type overriding this implementation, to accept more human values,
+//! such as `"yes"` or `"no"`.
 //!
 //! An other example is about multiple values providing. The [`Vec<T>`] struct does not implement
 //! the `FromStr` trait, and this is why there is the [`MenuVec<T>`] struct for this.
@@ -14,14 +14,11 @@
 //! ```no_run
 //! use ezmenulib::{prelude::*, customs::*};
 //!
-//! let mut project = ValueMenu::from([
-//!     Field::Value(ValueField::from("Authors")),
-//!     Field::Value(ValueField::from("Was it hard?")),
-//! ])
-//! .title("Describe a project.");
+//! println!("Describe a project.");
+//! let mut values = Values::default();
 //!
-//! let authors: MenuVec<String> = project.next_value().unwrap();
-//! let hard: MenuBool = project.next_value().unwrap();
+//! let authors: MenuVec<String> = project.written("Authors");
+//! let hard: MenuBool = project.written("Was it hard?");
 //! ```
 
 #[cfg(test)]
@@ -99,45 +96,18 @@ pub struct MenuVec<T>(pub Vec<T>);
 
 impl_inner!(MenuVec<T>: Vec<T>);
 
-/// The error type used for parsing user input into a [`MenuVec<T>`].
-///
-/// The `E` generic parameter means `<T as FromStr>::Err`.
-#[derive(PartialEq)]
-pub enum MenuVecParseError<E> {
-    /// The user input is empty.
-    Empty,
-    /// An incorrect input has been provided among the values.
-    ItemParsed(E),
-}
-
-impl<E> From<E> for MenuVecParseError<E> {
-    #[inline]
-    fn from(err: E) -> Self {
-        Self::ItemParsed(err)
-    }
-}
-
-impl<E: Debug> Debug for MenuVecParseError<E> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let msg = match self {
-            Self::Empty => "empty vector".to_owned(),
-            Self::ItemParsed(e) => format!("parsing error: {:?}", e),
-        };
-        f.write_str(msg.as_str())
-    }
-}
-
 /// Wrapper implementation of FromStr for Output providing.
 impl<T: FromStr> FromStr for MenuVec<T> {
-    type Err = MenuVecParseError<T::Err>;
+    type Err = MenuError;
 
     /// The implementation uses space as pattern for separation of inputs.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
-            return Err(MenuVecParseError::Empty);
+            return Err(MenuError::Input);
         }
         let result: Result<Vec<T>, T::Err> = s.split(' ').map(T::from_str).collect();
-        Ok(Self(result?))
+        let vec = result.map_err(|_| MenuError::Input)?;
+        Ok(Self(vec))
     }
 }
 
@@ -169,7 +139,7 @@ impl FromStr for MenuBool {
         match s.to_lowercase().as_str() {
             "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" => Ok(Self(true)),
             "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
-            _ => Err(MenuError::Other(Box::new("incorrect boolean value"))),
+            _ => Err(MenuError::Input),
         }
     }
 }
