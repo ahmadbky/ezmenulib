@@ -18,7 +18,7 @@ fn bool_parse() {
 #[test]
 fn empty_vec_parse() {
     let vec = "".parse::<MenuVec<i32>>();
-    assert_eq!(vec, Err(MenuVecParseError::Empty));
+    assert_eq!(vec, Err(MenuError::Input));
 }
 
 #[test]
