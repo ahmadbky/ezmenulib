@@ -61,7 +61,7 @@ where
 /// let amount: u8 = menu
 ///     .selected(
 ///         Selected::new("Select an amount", [("one", 1), ("two", 2), ("three", 3)])
-///         .format(&Format::prefix("-- "))
+///         .format(Format::prefix("-- "))
 ///     )
 ///     .unwrap();
 /// ```
@@ -91,7 +91,7 @@ where
 /// let mut my_stream = MenuStream::default();
 /// let mut menu = Values::from(&mut my_stream);
 /// // We can also give the ownership:
-/// let mut menu = Values::from(my_stream);
+/// // let mut menu = Values::from(my_stream);
 /// ```
 pub struct Values<'a, R = In, W = Out> {
     /// The global format of the container.
@@ -203,6 +203,14 @@ where
         sel.format(fmt).select(&mut self.stream)
     }
 
+    pub fn optional_selected<T, const N: usize>(
+        &mut self,
+        sel: Selected<'a, T, N>,
+    ) -> MenuResult<Option<T>> {
+        let fmt = sel.fmt.merged(&self.fmt);
+        sel.format(fmt).optional_select(&mut self.stream)
+    }
+
     /// Returns the next value selected by the user, or the default value of the output type
     /// if any error occurred.
     ///
@@ -229,7 +237,10 @@ where
     ///
     /// If the given written field has an incorrect default value,
     /// this function will panic at runtime.
-    pub fn written<T: FromStr>(&mut self, written: &Written<'a>) -> MenuResult<T> {
+    pub fn written<T>(&mut self, written: &Written<'a>) -> MenuResult<T>
+    where
+        T: FromStr,
+    {
         written.prompt_with(&mut self.stream, &self.fmt)
     }
 
@@ -245,12 +256,19 @@ where
     ///
     /// If the given written field has an incorrect default value,
     /// this function will panic at runtime.
-    pub fn written_until<T: FromStr, F: Fn(&T) -> bool>(
-        &mut self,
-        written: &Written<'a>,
-        til: F,
-    ) -> MenuResult<T> {
+    pub fn written_until<T, F>(&mut self, written: &Written<'a>, til: F) -> MenuResult<T>
+    where
+        T: FromStr,
+        F: Fn(&T) -> bool,
+    {
         written.prompt_until_with(&mut self.stream, til, &self.fmt)
+    }
+
+    pub fn optional_written<T>(&mut self, written: &Written<'a>) -> MenuResult<Option<T>>
+    where
+        T: FromStr,
+    {
+        written.optional_prompt_with(&mut self.stream, &self.fmt)
     }
 
     /// Returns the next value written by the user, or the default value of the
@@ -265,7 +283,10 @@ where
     ///
     /// If the given written field has an incorrect default value,
     /// this function will panic at runtime.
-    pub fn written_or_default<T: FromStr + Default>(&mut self, written: &Written<'a>) -> T {
+    pub fn written_or_default<T>(&mut self, written: &Written<'a>) -> T
+    where
+        T: FromStr + Default,
+    {
         written.prompt_or_default_with(&mut self.stream, &self.fmt)
     }
 }

@@ -25,8 +25,7 @@ fn one_field() -> Res {
         assert_eq!(name, "Ahmad"),
     }?;
 
-    assert_eq!(output, "--> your name please\n>> ");
-    Ok(())
+    Ok(assert_eq!(output, "--> your name please\n>> "))
 }
 
 #[test]
@@ -40,12 +39,11 @@ fn retrieve_value() -> Res {
         assert_eq!(age, 19),
     }?;
 
-    assert_eq!(
+    Ok(assert_eq!(
         output,
         "--> your name please\n>> \
 --> how old are you\n>> "
-    );
-    Ok(())
+    ))
 }
 
 #[test]
@@ -57,8 +55,7 @@ fn loop_ask() -> Res {
         assert_eq!(age, 86),
     }?;
 
-    assert_eq!(output, "--> your age please\n>> >> ");
-    Ok(())
+    Ok(assert_eq!(output, "--> your age please\n>> >> "))
 }
 
 #[test]
@@ -94,9 +91,7 @@ fn field_example_value() -> Res {
         assert_eq!(age, 19),
     }?;
 
-    assert_eq!(output, "--> your age please (default: 19)\n>> ");
-
-    Ok(())
+    Ok(assert_eq!(output, "--> your age please (default: 19)\n>> "))
 }
 
 #[cfg(feature = "date")]
@@ -109,8 +104,7 @@ fn date_value() -> Res {
         assert_eq!(date, NaiveDate::from_ymd(2015, 04, 29)),
     }?;
 
-    assert_eq!(output, "--> date (default: 2015-04-29)\n>> ");
-    Ok(())
+    Ok(assert_eq!(output, "--> date (default: 2015-04-29)\n>> "))
 }
 
 #[test]
@@ -142,9 +136,58 @@ fn ask_until() -> Res {
         assert_eq!(age, 23),
     }?;
 
-    assert_eq!(output, "--> age\n>> >> >> >> ");
+    Ok(assert_eq!(output, "--> age\n>> >> >> >> "))
+}
 
-    Ok(())
+#[test]
+fn optional_written() -> Res {
+    let written = Written::from("age");
+
+    let output = test_menu! {
+        menu,
+        "38\n",
+        let age: Option<u8> = menu.optional_written(&written)?,
+        assert_eq!(age, Some(38)),
+    }?;
+
+    assert_eq!(output, "--> age\n>> ");
+
+    let output = test_menu! {
+        menu,
+        "\n",
+        let age: Option<u8> = menu.optional_written(&written)?,
+        assert_eq!(age, None),
+    }?;
+
+    Ok(assert_eq!(output, "--> age\n>> "))
+}
+
+#[test]
+fn optional_select() -> Res {
+    let sel = Selected::new("amount", [("one", 1), ("two", 2), ("three", 3)]);
+    let res = "--> amount
+1 - one
+2 - two
+3 - three
+>> ";
+
+    let output = test_menu! {
+        menu,
+        "2",
+        let amount: Option<u8> = menu.optional_selected(sel.clone())?,
+        assert_eq!(amount, Some(2)),
+    }?;
+
+    assert_eq!(output, res);
+
+    let output = test_menu! {
+        menu,
+        "zemklfj\n",
+        let amount: Option<u8> = menu.optional_selected(sel)?,
+        assert_eq!(amount, None),
+    }?;
+
+    Ok(assert_eq!(output, res))
 }
 
 #[test]
@@ -171,8 +214,10 @@ fn select_one_field() -> Res {
         assert_eq!(name, Type1::MIT),
     }?;
 
-    assert_eq!(output, "--> select the type\n1 - mit\n>> >> >> >> ");
-    Ok(())
+    Ok(assert_eq!(
+        output,
+        "--> select the type\n1 - mit\n>> >> >> >> "
+    ))
 }
 
 #[derive(Debug, PartialEq)]
@@ -203,15 +248,14 @@ fn selectable() -> Res {
         assert_eq!(name, Type2::GPL),
     }?;
 
-    assert_eq!(
+    Ok(assert_eq!(
         output,
         "--> select the type
 1 - MIT
 2 - GPL
 3 - BSD
 >> "
-    );
-    Ok(())
+    ))
 }
 
 #[test]
@@ -223,13 +267,12 @@ fn select_default() -> Res {
         assert_eq!(name, Type2::MIT),
     }?;
 
-    assert_eq!(
+    Ok(assert_eq!(
         output,
         "--> select the type
 1 - MIT
 2 - GPL
 3 - BSD
 >> "
-    );
-    Ok(())
+    ))
 }

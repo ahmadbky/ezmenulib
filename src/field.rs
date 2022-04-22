@@ -192,7 +192,7 @@ impl Display for WrittenDetails<'_> {
 ///
 /// ```no_run
 /// use ezmenulib::{
-///     field::Written,
+///     prelude::*,
 ///     customs::MenuVec,
 /// };
 /// let author: MenuVec<String> = Written::from("Give the author of the license")
@@ -253,6 +253,7 @@ impl<'a> Written<'a> {
     /// # Example
     ///
     /// ```
+    /// # use ezmenulib::prelude::*;
     /// let w = Written::from("hello").format(Format::prefix("==> "));
     /// ```
     pub fn format(mut self, fmt: Format<'a>) -> Self {
@@ -285,11 +286,12 @@ impl<'a> Written<'a> {
     /// # Example
     ///
     /// ```no_run
+    /// # use ezmenulib::prelude::*;
     /// # use std::error::Error;
     /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// let user = Written::from("What is your name?")
+    /// let user: String = Written::from("What is your name?")
     ///     .default_env("USERNAME")?
-    ///     .prompt(&mut MenuStream::default());
+    ///     .prompt(&mut MenuStream::default())?;
     /// # Ok(())
     /// # }
     /// ```
@@ -343,6 +345,20 @@ impl<'a> Written<'a> {
             .into()
     }
 
+    fn show_field<R: BufRead, W: Write>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'_>,
+    ) -> MenuResult {
+        // Displays the field message.
+        if fmt.line_brk {
+            self.show_with_pref(stream, fmt.prefix)?;
+            stream.write_all("\n".as_bytes())?;
+        }
+
+        Ok(())
+    }
+
     /// Prompts the field until the constraint is applied, using the given format.
     ///
     /// It uses the merged version between the format of the written field and the given format.
@@ -365,12 +381,7 @@ impl<'a> Written<'a> {
         F: Fn(&T) -> bool,
     {
         let fmt = self.fmt.merged(fmt);
-
-        // Displays the field message.
-        if fmt.line_brk {
-            self.show_with_pref(stream, fmt.prefix)?;
-            stream.write_all("\n".as_bytes())?;
-        }
+        self.show_field(stream, &fmt)?;
 
         // Loops while incorrect input.
         loop {
@@ -437,6 +448,35 @@ impl<'a> Written<'a> {
         T: FromStr,
     {
         self.prompt_with(stream, &self.fmt)
+    }
+
+    pub fn optional_prompt_with<R, W, T>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'a>,
+    ) -> MenuResult<Option<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+    {
+        let fmt = self.fmt.merged(fmt);
+
+        self.show_field(stream, &fmt)?;
+        match self.prompt_once(stream, &fmt) {
+            Query::Finished(out) => Ok(Some(out)),
+            Query::Continue => Ok(None),
+            Query::Err(e) => Err(e),
+        }
+    }
+
+    pub fn optional_prompt<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+    {
+        self.optional_prompt_with(stream, &self.fmt)
     }
 
     /// Prompts the field, or return the default value if any error occurred,
@@ -592,7 +632,7 @@ pub trait Selectable<const N: usize>: Sized {
 /// For a make-license CLI program for example, you can use it like below:
 ///
 /// ```no_run
-/// use ezmenulib::field::{Selected, Selectable};
+/// use ezmenulib::prelude::*;
 ///
 /// enum Type {
 ///     MIT,
@@ -615,6 +655,8 @@ pub trait Selectable<const N: usize>: Sized {
 ///     .select(&mut MenuStream::default())
 ///     .unwrap();
 /// ```
+// Clone is implemented on it because it is moved when the user selected the value.
+#[derive(Clone)]
 pub struct Selected<'a, T, const N: usize> {
     /// The format used by the selected field value.
     pub fmt: Format<'a>,
@@ -713,8 +755,12 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
             .into()
     }
 
-    fn take(self, i: usize) -> T {
-        Vec::from(self.fields).remove(i).1
+    /// Gives the value stored at index `i`, consuming `self`.
+    ///
+    /// The index must be in bounds, or this will cause an undefined behavior.
+    unsafe fn take(self, i: usize) -> T {
+        // SAFETY: the safety contract is upheld by the caller, meaning that the index is in bounds.
+        self.fields.into_iter().nth(i).unwrap_unchecked().1
     }
 
     /// Prompts the selectable values to the user.
@@ -732,10 +778,33 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         show(&self, stream)?;
         loop {
             match self.prompt_once(stream) {
-                Query::Finished(out) => break Ok(self.take(out)),
+                Query::Finished(out) => {
+                    break Ok({
+                        // SAFETY: the `Selected::prompt_once` guarantees that if the query is finished,
+                        // then the index is in bounds.
+                        unsafe { self.take(out) }
+                    });
+                }
                 Query::Err(e) => break Err(e),
                 Query::Continue => continue,
             }
+        }
+    }
+
+    pub fn optional_select<R, W>(self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
+    where
+        R: BufRead,
+        W: Write,
+    {
+        show(&self, stream)?;
+        match self.prompt_once(stream) {
+            Query::Finished(out) => Ok(Some({
+                // SAFETY: the `Selected::prompt_once` guarantees that if the query is finished,
+                // then the index is in bounds.
+                unsafe { self.take(out) }
+            })),
+            Query::Continue => Ok(None),
+            Query::Err(e) => Err(e),
         }
     }
 }
@@ -759,7 +828,12 @@ where
     {
         show(&self, stream)
             .and(self.prompt_once(stream).into())
-            .map(|i| self.take(i))
+            .map(|i| {
+                // SAFETY: at this point, the `i` index is in bounds,
+                // because the `From<Query<T>>` implementation for `MenuResult<T>` guarantees that
+                // the input is correct.
+                unsafe { self.take(i) }
+            })
             .unwrap_or_default()
     }
 }
