@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .format(Format {
             suffix: "> ",
             line_brk: false,
+            show_default: false,
             ..Default::default()
         })
         .default(1)
