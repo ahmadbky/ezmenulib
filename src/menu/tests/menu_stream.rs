@@ -12,8 +12,7 @@ fn basic() -> Result<(), Box<dyn Error>> {
     stream.write_all(s.as_bytes())?;
     let (_, output) = stream.retrieve();
     let output = String::from_utf8(output)?;
-    assert_eq!(output, "hello\n");
-    Ok(())
+    Ok(assert_eq!(output, "hello\n"))
 }
 
 #[test]
@@ -25,6 +24,5 @@ fn borrow_params() -> Result<(), Box<dyn Error>> {
     stream.read_line(&mut s)?;
     stream.write_all(s.as_bytes())?;
     let output = String::from_utf8(output)?;
-    assert_eq!(output, "hey\n");
-    Ok(())
+    Ok(assert_eq!(output, "hey\n"))
 }

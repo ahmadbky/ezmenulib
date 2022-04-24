@@ -37,13 +37,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
     let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
 
-    println!(
+    Ok(println!(
         "{:?} License, Copyright (C) {} {}\n{}",
         ty,
         date,
         authors.join(", "),
         name
-    );
-
-    Ok(())
+    ))
 }

@@ -13,6 +13,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let age: u8 = menu.written_or_default(&Written::from("age"));
 
-    println!("ok you are {} y/o, goodbye {}!", age, name);
-    Ok(())
+    Ok(println!("ok you are {} y/o, goodbye {}!", age, name))
 }

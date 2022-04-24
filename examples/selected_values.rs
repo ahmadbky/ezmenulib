@@ -12,6 +12,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         .default(1)
         .select(&mut MenuStream::default())?;
 
-    println!("you selected {}", amount);
-    Ok(())
+    Ok(println!("you selected {}", amount))
 }
