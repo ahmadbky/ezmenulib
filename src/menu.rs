@@ -288,7 +288,15 @@ where
     where
         T: FromStr,
     {
-        written.optional_prompt_with(self.stream.deref_mut(), &self.fmt)
+        written.optional_value_with(self.stream.deref_mut(), &self.fmt)
+    }
+
+    pub fn many_written<T, S>(&mut self, written: &Written<'_>, sep: S) -> MenuResult<Vec<T>>
+    where
+        T: FromStr,
+        S: AsRef<str>,
+    {
+        written.many_values_with(self.stream.deref_mut(), sep, &self.fmt)
     }
 
     /// Returns the next value written by the user, or the default value of the

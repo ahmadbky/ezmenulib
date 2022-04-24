@@ -161,6 +161,14 @@ impl Display for WrittenDetails<'_> {
     }
 }
 
+fn default_failed<T>(default: &str) -> ! {
+    panic!(
+        "`{}` has been used as default value but is incorrect for `{}` type",
+        default,
+        type_name::<T>(),
+    )
+}
+
 /// Defines the behavior for a written value provided by the user.
 ///
 /// Like the [selected](Selected) values, it contains its own [format](Format),
@@ -233,8 +241,8 @@ impl<'a> Written<'a> {
         }
     }
 
-    /// Displays the field according to the given format.
-    fn show_field<R: BufRead, W: Write>(
+    /// Displays the field according to the given format on the first line.
+    fn show_first_line<R: BufRead, W: Write>(
         &self,
         stream: &mut MenuStream<R, W>,
         fmt: &Format<'_>,
@@ -246,6 +254,25 @@ impl<'a> Written<'a> {
             stream.write_all("\n".as_bytes())?;
         }
         Ok(())
+    }
+
+    /// Displays the second line according to the format, and returns the output
+    /// of the prompt.
+    fn prompt_line<R: BufRead, W: Write>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'_>,
+    ) -> MenuResult<String> {
+        let msg = &if fmt.line_brk {
+            fmt.suffix.to_owned()
+        } else {
+            let mut s = String::new();
+            self.show_with_pref(&mut s, fmt.prefix, false)?;
+            s.push_str(fmt.suffix);
+            s
+        };
+
+        prompt(msg, stream)
     }
 
     /// Gives a custom formatting for the written field.
@@ -325,25 +352,11 @@ impl<'a> Written<'a> {
         stream: &mut MenuStream<R, W>,
         fmt: &Format<'_>,
     ) -> MenuResult<Option<T>> {
-        let msg = &if fmt.line_brk {
-            fmt.suffix.to_owned()
-        } else {
-            let mut s = String::new();
-            self.show_with_pref(&mut s, fmt.prefix, false)?;
-            s.push_str(fmt.suffix);
-            s
-        };
-        let s = prompt(msg, stream)?;
-
-        Ok(s.parse().ok().or_else(|| {
+        Ok(self.prompt_line(stream, fmt)?.parse().ok().or_else(|| {
             self.details.default.as_deref().map(|default| {
-                default.parse().unwrap_or_else(|_| {
-                    panic!(
-                        "`{}` has been used as default value but is incorrect for `{}` type",
-                        default,
-                        type_name::<T>(),
-                    )
-                })
+                default
+                    .parse()
+                    .unwrap_or_else(|_| default_failed::<T>(default))
             })
         }))
     }
@@ -363,7 +376,7 @@ impl<'a> Written<'a> {
     /// # Panics
     ///
     /// If the default value has an incorrect type, this function will panic.
-    pub fn optional_prompt_with<R, W, T>(
+    pub fn optional_value_with<R, W, T>(
         &self,
         stream: &mut MenuStream<R, W>,
         fmt: &Format<'_>,
@@ -374,7 +387,7 @@ impl<'a> Written<'a> {
         T: FromStr,
     {
         let fmt = self.fmt.merged(fmt);
-        self.show_field(stream, &fmt, true)?;
+        self.show_first_line(stream, &fmt, true)?;
         self.prompt_once(stream, &fmt)
     }
 
@@ -390,13 +403,68 @@ impl<'a> Written<'a> {
     /// # Panics
     ///
     /// If the default value has an incorrect type, this function will panic.
-    pub fn optional_prompt<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
+    pub fn optional_value<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
     where
         R: BufRead,
         W: Write,
         T: FromStr,
     {
-        self.optional_prompt_with(stream, &self.fmt)
+        self.optional_value_with(stream, &self.fmt)
+    }
+
+    pub fn many_values_with<R, W, T, S>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        sep: S,
+        fmt: &Format<'_>,
+    ) -> MenuResult<Vec<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+        S: AsRef<str>,
+    {
+        fn inner_prompt_once<R: BufRead, W: Write, T: FromStr>(
+            w: &Written<'_>,
+            stream: &mut MenuStream<R, W>,
+            sep: &str,
+            fmt: &Format<'_>,
+        ) -> MenuResult<Option<Vec<T>>> {
+            let s = w.prompt_line(stream, fmt)?;
+            let res: Result<Vec<T>, T::Err> = s.split(sep).map(T::from_str).collect();
+            Ok(res.ok().or_else(|| {
+                let default = w.details.default.as_ref()?;
+                let res: Result<Vec<T>, T::Err> = default.split(sep).map(T::from_str).collect();
+                Some(res.unwrap_or_else(|_| default_failed::<T>(default.as_ref())))
+            }))
+        }
+
+        let fmt = self.fmt.merged(fmt);
+        self.show_first_line(stream, &fmt, false)?;
+        let s = sep.as_ref();
+
+        // Loops while incorrect input.
+        loop {
+            match inner_prompt_once(self, stream, s, &fmt) {
+                Ok(Some(v)) => break Ok(v),
+                Err(e) => break Err(e),
+                Ok(None) => continue,
+            }
+        }
+    }
+
+    pub fn many_values<R, W, T, S>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        sep: S,
+    ) -> MenuResult<Vec<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+        S: AsRef<str>,
+    {
+        self.many_values_with(stream, sep, &self.fmt)
     }
 
     /// Prompts the field until the constraint is applied, using the given format.
@@ -421,7 +489,7 @@ impl<'a> Written<'a> {
         F: Fn(&T) -> bool,
     {
         let fmt = self.fmt.merged(fmt);
-        self.show_field(stream, &fmt, false)?;
+        self.show_first_line(stream, &fmt, false)?;
 
         // Loops while incorrect input.
         loop {
@@ -513,7 +581,7 @@ impl<'a> Written<'a> {
         W: Write,
         T: FromStr + Default,
     {
-        self.optional_prompt_with(stream, fmt)
+        self.optional_value_with(stream, fmt)
             .map(Option::unwrap_or_default)
             .unwrap_or_default()
     }

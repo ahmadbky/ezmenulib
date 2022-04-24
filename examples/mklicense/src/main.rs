@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     });
 
-    let authors: MenuVec<String> = lic.written(&Written::from("Authors"))?;
+    let authors: Vec<String> = lic.many_written(&Written::from("Authors"), ", ")?;
     let name: MenuOption<String> = lic.written(&Written::from("Project name"))?;
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
     let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
