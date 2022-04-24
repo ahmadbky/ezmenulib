@@ -64,7 +64,8 @@ fn field_example_value() -> Res {
     let output = test_menu! {
         menu,
         "mlzigujz\n",
-        let age: u8 = menu.written_or_default(&Written::from("your age please").example("19").default_value("18")),
+        let age: u8 = menu
+            .written_or_default(&Written::from("your age please").example("19").default_value("18")),
         assert_eq!(age, 18),
     }?;
 
@@ -77,7 +78,8 @@ fn field_example_value() -> Res {
     let output = test_menu! {
         menu,
         "mlzigujz\n",
-        let age: u8 = menu.written_or_default(&Written::from("your age please").example("19")),
+        let age: u8 = menu
+            .written_or_default(&Written::from("your age please").example("19")),
         assert_eq!(age, 0),
     }?;
 
@@ -87,7 +89,8 @@ fn field_example_value() -> Res {
     let output = test_menu! {
         menu,
         "mlzigujz\n",
-        let age: u8 = menu.written_or_default(&Written::from("your age please").default_value("19")),
+        let age: u8 = menu
+            .written_or_default(&Written::from("your age please").default_value("19")),
         assert_eq!(age, 19),
     }?;
 

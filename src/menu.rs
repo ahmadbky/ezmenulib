@@ -10,6 +10,7 @@ use crate::menu::stream::Stream;
 use crate::prelude::*;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
+use std::ops::DerefMut;
 use std::str::FromStr;
 
 /// The default input stream used by a menu, using the standard input stream.
@@ -187,7 +188,7 @@ impl<'a, R, W> Values<'a, R, W> {
 
 /// Associated functions that concerns retrieving values from the user,
 /// thus using the reader and writer stream.
-impl<'a, R, W> Values<'a, R, W>
+impl<R, W> Values<'_, R, W>
 where
     R: BufRead,
     W: Write,
@@ -198,32 +199,25 @@ where
     /// The merge saves the custom formatting specification of the selectable fields.
     ///
     /// See [`Selected::select`] function fore more information.
-    pub fn selected<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> MenuResult<T> {
+    pub fn selected<T, const N: usize>(&mut self, sel: Selected<'_, T, N>) -> MenuResult<T> {
         let fmt = sel.fmt.merged(&self.fmt);
-        sel.format(fmt).select(&mut self.stream)
+        sel.format(fmt).select(self.stream.deref_mut())
     }
 
     pub fn optional_selected<T, const N: usize>(
         &mut self,
-        sel: Selected<'a, T, N>,
+        sel: Selected<'_, T, N>,
     ) -> MenuResult<Option<T>> {
         let fmt = sel.fmt.merged(&self.fmt);
-        sel.format(fmt).optional_select(&mut self.stream)
+        sel.format(fmt).optional_select(self.stream.deref_mut())
     }
 
-    /// Returns the next value selected by the user, or the default value of the output type
-    /// if any error occurred.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the selectable fields.
-    ///
-    /// See [`Selected::select_or_default`] function for more information.
-    pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'a, T, N>) -> T
+    pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'_, T, N>) -> T
     where
         T: Default,
     {
-        let fmt = sel.fmt.merged(&self.fmt);
-        sel.format(fmt).select_or_default(&mut self.stream)
+        let fmt = self.fmt.merged(&self.fmt);
+        sel.format(fmt).select_or_default(self.stream.deref_mut())
     }
 
     /// Returns the next value written by the user.
@@ -237,11 +231,11 @@ where
     ///
     /// If the given written field has an incorrect default value,
     /// this function will panic at runtime.
-    pub fn written<T>(&mut self, written: &Written<'a>) -> MenuResult<T>
+    pub fn written<T>(&mut self, written: &Written<'_>) -> MenuResult<T>
     where
         T: FromStr,
     {
-        written.prompt_with(&mut self.stream, &self.fmt)
+        written.prompt_with(self.stream.deref_mut(), &self.fmt)
     }
 
     /// Returns the next value written by the user by prompting him the field
@@ -256,37 +250,25 @@ where
     ///
     /// If the given written field has an incorrect default value,
     /// this function will panic at runtime.
-    pub fn written_until<T, F>(&mut self, written: &Written<'a>, til: F) -> MenuResult<T>
+    pub fn written_until<T, F>(&mut self, written: &Written<'_>, til: F) -> MenuResult<T>
     where
         T: FromStr,
         F: Fn(&T) -> bool,
     {
-        written.prompt_until_with(&mut self.stream, til, &self.fmt)
+        written.prompt_until_with(self.stream.deref_mut(), til, &self.fmt)
     }
 
-    pub fn optional_written<T>(&mut self, written: &Written<'a>) -> MenuResult<Option<T>>
+    pub fn optional_written<T>(&mut self, written: &Written<'_>) -> MenuResult<Option<T>>
     where
         T: FromStr,
     {
-        written.optional_prompt_with(&mut self.stream, &self.fmt)
+        written.optional_prompt_with(self.stream.deref_mut(), &self.fmt)
     }
 
-    /// Returns the next value written by the user, or the default value of the
-    /// output type if any error occurred.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::prompt_or_default`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn written_or_default<T>(&mut self, written: &Written<'a>) -> T
+    pub fn written_or_default<T>(&mut self, written: &Written<'_>) -> T
     where
         T: FromStr + Default,
     {
-        written.prompt_or_default_with(&mut self.stream, &self.fmt)
+        written.prompt_or_default_with(self.stream.deref_mut(), &self.fmt)
     }
 }
