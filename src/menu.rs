@@ -204,6 +204,13 @@ where
         sel.format(fmt).select(self.stream.deref_mut())
     }
 
+    /// Returns the next value selected by the user wrapped as `Some(value)`,
+    /// else `None`.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the selectable fields.
+    ///
+    /// See [`Selected::optional_select`] function fore more information.
     pub fn optional_selected<T, const N: usize>(
         &mut self,
         sel: Selected<'_, T, N>,
@@ -212,6 +219,13 @@ where
         sel.format(fmt).optional_select(self.stream.deref_mut())
     }
 
+    /// Returns the next value selected by the user, or the default value of the output type
+    /// if any error occurred.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the selectable fields.
+    ///
+    /// See [`Selected::select_or_default`] function for more information.
     pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'_, T, N>) -> T
     where
         T: Default,
@@ -258,6 +272,18 @@ where
         written.prompt_until_with(self.stream.deref_mut(), til, &self.fmt)
     }
 
+    /// Returns the next value written by the user wrapped as `Some(value)`
+    /// if the input is correct, else `None`.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::optional_prompt`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn optional_written<T>(&mut self, written: &Written<'_>) -> MenuResult<Option<T>>
     where
         T: FromStr,
@@ -265,6 +291,18 @@ where
         written.optional_prompt_with(self.stream.deref_mut(), &self.fmt)
     }
 
+    /// Returns the next value written by the user, or the default value of the
+    /// output type if any error occurred.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::prompt_or_default`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn written_or_default<T>(&mut self, written: &Written<'_>) -> T
     where
         T: FromStr + Default,

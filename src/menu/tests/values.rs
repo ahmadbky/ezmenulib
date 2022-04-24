@@ -168,7 +168,7 @@ fn optional_written() -> Res {
 #[test]
 fn optional_select() -> Res {
     let sel = Selected::new("amount", [("one", 1), ("two", 2), ("three", 3)]);
-    let res = "--> amount
+    let res = "--> amount (optional)
 1 - one
 2 - two
 3 - three
@@ -272,7 +272,7 @@ fn select_default() -> Res {
 
     Ok(assert_eq!(
         output,
-        "--> select the type
+        "--> select the type (optional)
 1 - MIT
 2 - GPL
 3 - BSD
