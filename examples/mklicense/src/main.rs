@@ -1,4 +1,3 @@
-use ezmenulib::customs::{MenuOption, MenuVec};
 use ezmenulib::prelude::*;
 use std::error::Error;
 use std::io::Write;
@@ -32,8 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     });
 
-    let authors: Vec<String> = lic.many_written(&Written::from("Authors"), ", ")?;
-    let name: MenuOption<String> = lic.written(&Written::from("Project name"))?;
+    let authors: Vec<String> = lic.many_written(&Written::from("Authors"), " ")?;
+    let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
     let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
 
@@ -42,6 +41,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         ty,
         date,
         authors.join(", "),
-        name
+        if let Some(n) = name { n } else { "".to_owned() }
     ))
 }

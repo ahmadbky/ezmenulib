@@ -79,42 +79,6 @@ macro_rules! impl_inner {
     }
 }
 
-/// Wrapper type used to handle multiple user input.
-///
-/// Its main feature is to implement FromStr trait,
-/// by splitting input by spaces.
-///
-/// You can access the inner value by `&x.0`, `*x`, which is same as `x.as_ref()`.
-///
-/// ## Example
-///
-/// ```
-/// use ezmenulib::customs::MenuVec;
-///
-/// let a = "23 -54 456";
-/// let a: MenuVec<i32> = a.parse().unwrap();
-/// assert_eq!(*a, vec![23, -54, 456]);
-/// ```
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct MenuVec<T>(pub Vec<T>);
-
-impl_inner!(MenuVec<T>: Vec<T>);
-
-/// Wrapper implementation of FromStr for Output providing.
-impl<T: FromStr> FromStr for MenuVec<T> {
-    type Err = MenuError;
-
-    /// The implementation uses space as pattern for separation of inputs.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            return Err(MenuError::Input);
-        }
-        let result: Result<Vec<T>, T::Err> = s.split(' ').map(T::from_str).collect();
-        let vec = result.map_err(|_| MenuError::Input)?;
-        Ok(Self(vec))
-    }
-}
-
 /// Wrapper type used to handle a boolean user input value.
 ///
 /// Its main feature is to implemented `FromStr` trait,
@@ -144,41 +108,6 @@ impl FromStr for MenuBool {
             "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" => Ok(Self(true)),
             "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
             _ => Err(MenuError::Input),
-        }
-    }
-}
-
-/// Wrapper type used to handle an optional user input value.
-///
-/// It implements `FromStr` trait, returning `Some(value)` if a value is
-/// indeed present in the string slice, else it returns `None`.
-///
-/// You can still access the `Option<T>` inner value with
-/// `&x.0`, or `*x`, which is same as `x.as_ref()`.
-#[derive(Debug, PartialEq, Clone, Default)]
-pub struct MenuOption<T>(pub Option<T>);
-
-impl<T: Display> Display for MenuOption<T> {
-    /// Displays T if present, else nothing (`""`).
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match &self.0 {
-            Some(e) => Display::fmt(e, f),
-            None => f.write_str(""),
-        }
-    }
-}
-
-impl_inner!(MenuOption<T>: Option<T>);
-
-impl<T: FromStr> FromStr for MenuOption<T> {
-    type Err = T::Err;
-
-    /// Returns `Some(value)` if the string contains a value, else `None`.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.trim().is_empty() {
-            Ok(Self(None))
-        } else {
-            Ok(Self(Some(s.parse()?)))
         }
     }
 }
