@@ -83,7 +83,7 @@ fn field_example_value() -> Res {
         assert_eq!(age, 0),
     }?;
 
-    assert_eq!(output, "--> your age please (example: 19)\n>> ");
+    assert_eq!(output, "--> your age please (example: 19, optional)\n>> ");
 
     // with only default value
     let output = test_menu! {
@@ -153,7 +153,7 @@ fn optional_written() -> Res {
         assert_eq!(age, Some(38)),
     }?;
 
-    assert_eq!(output, "--> age\n>> ");
+    assert_eq!(output, "--> age (optional)\n>> ");
 
     let output = test_menu! {
         menu,
@@ -162,7 +162,7 @@ fn optional_written() -> Res {
         assert_eq!(age, None),
     }?;
 
-    Ok(assert_eq!(output, "--> age\n>> "))
+    Ok(assert_eq!(output, "--> age (optional)\n>> "))
 }
 
 #[test]

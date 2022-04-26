@@ -121,39 +121,43 @@ impl<'a> Default for Format<'a> {
 struct WrittenDetails<'a> {
     example: Option<&'a str>,
     default: Option<String>,
-    show_d: bool,
 }
 
 impl Display for WrittenDetails<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if !f.alternate() && self.example.is_none() && (self.default.is_none() || !self.show_d) {
+        // Either `opt` is true or `show_d` is true, but never both,
+        // because it is checked by the `Written::fmt_with` method.
+        // Asked to print the "optional" string slice.
+        let opt = f.alternate();
+        // Asked to print the "default" string slice.
+        let show_d = f.sign_plus() && self.default.is_some();
+
+        if !opt && !show_d && self.example.is_none() {
             return Ok(());
         }
-
-        let comma = ", ";
 
         // The previous condition guarantees that there is at least
         // something to write inside the parenthesis.
         f.write_str(" (")?;
 
-        // Example
+        // - Example
         if let Some(e) = self.example {
             write!(f, "example: {}", e)?;
-            if self.default.is_some() || f.alternate() {
-                f.write_str(comma)?;
+            if show_d || opt {
+                f.write_str(", ")?;
             }
         }
 
-        // Default
-        if let Some(d) = &self.default {
-            write!(f, "default: {}", d)?;
-            if f.alternate() {
-                f.write_str(comma)?;
-            }
+        // - Default
+        match self.default {
+            Some(ref d) if show_d => write!(f, "default: {}", d)?,
+            _ => (),
         }
 
-        // Optional
-        if f.alternate() {
+        // - Optional
+        // We don't check if `show_d` is false
+        // because this is done by the `Written::fmt_with` method.
+        if opt {
             f.write_str("optional")?;
         }
 
@@ -202,15 +206,12 @@ pub struct Written<'a> {
 
 impl<'a> From<&'a str> for Written<'a> {
     fn from(msg: &'a str) -> Self {
-        let fmt = Format::default();
-        let show_d = fmt.show_default;
         Self {
             msg,
-            fmt,
+            fmt: Format::default(),
             details: WrittenDetails {
                 example: None,
                 default: None,
-                show_d,
             },
         }
     }
@@ -218,7 +219,7 @@ impl<'a> From<&'a str> for Written<'a> {
 
 impl Display for Written<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.show_with_pref(f, self.fmt.prefix, false)?;
+        self.fmt_with(f, &self.fmt, false)?;
         f.write_str(match self.fmt.line_brk {
             true => "\n",
             false => self.fmt.suffix,
@@ -232,28 +233,20 @@ impl<'a> Written<'a> {
     ///
     /// This is used to prompt the written field with a given [`Format`]
     /// (see [`Written::prompt_with`] function for example).
-    fn show_with_pref<S: fmt::Write>(&self, s: &mut S, pref: &'a str, opt: bool) -> fmt::Result {
-        write!(s, "{pref}{msg}", pref = pref, msg = self.msg)?;
-        if opt && !self.fmt.show_default {
-            write!(s, "{:#}", self.details)
-        } else {
-            write!(s, "{}", self.details)
-        }
-    }
+    fn fmt_with<S: fmt::Write>(&self, s: &mut S, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        s.write_str(fmt.prefix)?;
+        s.write_str(self.msg)?;
 
-    /// Displays the field according to the given format on the first line.
-    fn show_first_line<R: BufRead, W: Write>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-        opt: bool,
-    ) -> MenuResult {
-        // Displays the field message.
-        if fmt.line_brk {
-            self.show_with_pref(stream, fmt.prefix, opt)?;
-            stream.write_all("\n".as_bytes())?;
+        match (opt, fmt.show_default, self.details.default.as_ref()) {
+            (_, true, Some(_)) => write!(s, "{:+}", self.details)?,
+            (true, _, _) | (false, false, Some(_)) => write!(s, "{:#}", self.details)?,
+            (false, _, None) => write!(s, "{}", self.details)?,
+        };
+
+        match fmt.line_brk {
+            true => s.write_char('\n'),
+            false => Ok(()),
         }
-        Ok(())
     }
 
     /// Displays the second line according to the format, and returns the output
@@ -262,17 +255,13 @@ impl<'a> Written<'a> {
         &self,
         stream: &mut MenuStream<R, W>,
         fmt: &Format<'_>,
+        opt: bool,
     ) -> MenuResult<String> {
-        let msg = &if fmt.line_brk {
-            fmt.suffix.to_owned()
-        } else {
-            let mut s = String::new();
-            self.show_with_pref(&mut s, fmt.prefix, false)?;
-            s.push_str(fmt.suffix);
-            s
-        };
+        if !fmt.line_brk {
+            self.fmt_with(stream, fmt, opt)?;
+        }
 
-        prompt(msg, stream)
+        prompt(fmt.suffix, stream)
     }
 
     /// Gives a custom formatting for the written field.
@@ -284,7 +273,6 @@ impl<'a> Written<'a> {
     /// let w = Written::from("hello").format(Format::prefix("==> "));
     /// ```
     pub fn format(mut self, fmt: Format<'a>) -> Self {
-        self.details.show_d = fmt.show_default;
         self.fmt = fmt;
         self
     }
@@ -351,14 +339,19 @@ impl<'a> Written<'a> {
         &self,
         stream: &mut MenuStream<R, W>,
         fmt: &Format<'_>,
+        opt: bool,
     ) -> MenuResult<Option<T>> {
-        Ok(self.prompt_line(stream, fmt)?.parse().ok().or_else(|| {
-            self.details.default.as_deref().map(|default| {
-                default
-                    .parse()
-                    .unwrap_or_else(|_| default_failed::<T>(default))
-            })
-        }))
+        Ok(self
+            .prompt_line(stream, fmt, opt)?
+            .parse()
+            .ok()
+            .or_else(|| {
+                self.details.default.as_deref().map(|default| {
+                    default
+                        .parse()
+                        .unwrap_or_else(|_| default_failed::<T>(default))
+                })
+            }))
     }
 
     /// Prompts the field and returns the input, or `None` if the input is incorrect,
@@ -387,8 +380,8 @@ impl<'a> Written<'a> {
         T: FromStr,
     {
         let fmt = self.fmt.merged(fmt);
-        self.show_first_line(stream, &fmt, true)?;
-        self.prompt_once(stream, &fmt)
+        self.fmt_with(stream, &fmt, true)?;
+        self.prompt_once(stream, &fmt, true)
     }
 
     /// Prompts the field and returns the input, or `None` if the input is incorrect.
@@ -430,8 +423,9 @@ impl<'a> Written<'a> {
             sep: &str,
             fmt: &Format<'_>,
         ) -> MenuResult<Option<Vec<T>>> {
-            let s = w.prompt_line(stream, fmt)?;
+            let s = w.prompt_line(stream, fmt, false)?;
             let res: Result<Vec<T>, T::Err> = s.split(sep).map(T::from_str).collect();
+
             Ok(res.ok().or_else(|| {
                 let default = w.details.default.as_ref()?;
                 let res: Result<Vec<T>, T::Err> = default.split(sep).map(T::from_str).collect();
@@ -440,7 +434,7 @@ impl<'a> Written<'a> {
         }
 
         let fmt = self.fmt.merged(fmt);
-        self.show_first_line(stream, &fmt, false)?;
+        self.fmt_with(stream, &fmt, false)?;
         let s = sep.as_ref();
 
         // Loops while incorrect input.
@@ -489,11 +483,11 @@ impl<'a> Written<'a> {
         F: Fn(&T) -> bool,
     {
         let fmt = self.fmt.merged(fmt);
-        self.show_first_line(stream, &fmt, false)?;
+        self.fmt_with(stream, &fmt, false)?;
 
         // Loops while incorrect input.
         loop {
-            match self.prompt_once(stream, &fmt) {
+            match self.prompt_once(stream, &fmt, false) {
                 Ok(Some(out)) if til(&out) => break Ok(out),
                 Err(e) => break Err(e),
                 Ok(_) => continue,
