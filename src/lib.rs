@@ -30,20 +30,6 @@ pub mod prelude {
     pub use crate::MenuResult;
 }
 
-/// The re-exportation of the `chrono` crate module.
-///
-/// To get this module, you need to provide the `"date"` feature in the
-/// `Cargo.toml` file, with:
-/// ```toml
-/// [dependencies.ezmenulib]
-/// version = "0.2"
-/// features = ["date"]
-/// ```
-#[cfg(feature = "date")]
-pub mod chrono {
-    pub use chrono::*;
-}
-
 use crate::field::Format;
 use std::env::VarError;
 use std::error::Error;
