@@ -31,7 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     });
 
-    let authors: Vec<String> = lic.many_written(&Written::from("Authors"), " ")?;
+    let authors: Vec<String> =
+        lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
     let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
     let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
