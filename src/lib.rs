@@ -21,6 +21,8 @@ pub mod customs;
 pub mod field;
 pub mod menu;
 
+mod utils;
+
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
     pub use crate::field::*;

@@ -7,7 +7,10 @@ fn bool_parse() {
     assert!(input.is_err());
 
     let input: MenuResult<Vec<MenuBool>> = Written::from("").many_values(
-        &mut MenuStream::new("yes yep y no ye nop nan nah\n".as_bytes(), std::io::stdout()),
+        &mut MenuStream::new(
+            "yes yep y no ye nop nan nah\n".as_bytes(),
+            std::io::stdout(),
+        ),
         " ",
     );
 
