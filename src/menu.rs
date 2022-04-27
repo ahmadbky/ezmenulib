@@ -268,6 +268,18 @@ where
         written.optional_value_with(self.stream.deref_mut(), &self.fmt)
     }
 
+    /// Returns the next many values written by the user wrapped as a `Vec<T>`, separated by
+    /// `sep`, until the given constraint is applied to all the values.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::many_values_until`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn many_written_until<T, S, F>(
         &mut self,
         written: &Written<'_>,
@@ -282,6 +294,18 @@ where
         written.many_values_until_with(self.stream.deref_mut(), sep, til, &self.fmt)
     }
 
+    /// Returns the next many values written by the user wrapped as a `Vec<T>`,
+    /// separated by `sep`.
+    ///
+    /// It merges the [format](Format) of the field with the global format of the container.
+    /// The merge saves the custom formatting specification of the written field.
+    ///
+    /// See [`Written::many_values`] for more information.
+    ///
+    /// # Panic
+    ///
+    /// If the given written field has an incorrect default value,
+    /// this function will panic at runtime.
     pub fn many_written<T, S>(&mut self, written: &Written<'_>, sep: S) -> MenuResult<Vec<T>>
     where
         T: FromStr,

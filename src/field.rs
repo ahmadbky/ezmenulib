@@ -399,6 +399,18 @@ impl<'a> Written<'a> {
         self.optional_value_with(stream, &self.fmt)
     }
 
+    /// Prompts the field and returns the inputs as a `Vec<T>` until the given
+    /// constraint is applied to all the values, using `sep` to split the input
+    /// into the output values, and using the given format.
+    ///
+    /// It uses the merged version between the format of the written field and the given format.
+    ///
+    /// After checking and parsing the values provided by the user, it calls the `til` function.
+    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
+    ///
+    /// # Panics
+    ///
+    /// If the default value has an incorrect type, this function will panic.
     pub fn many_values_until_with<R, W, T, S, F>(
         &self,
         stream: &mut MenuStream<R, W>,
@@ -443,6 +455,16 @@ impl<'a> Written<'a> {
         }
     }
 
+    /// Prompts the field and returns the inputs as a `Vec<T>` until the given
+    /// constraint is applied to all the values, using `sep` to split the input
+    /// into the output values.
+    ///
+    /// After checking and parsing the values provided by the user, it calls the `til` function.
+    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
+    ///
+    /// # Panics
+    ///
+    /// If the default value has an incorrect type, this function will panic.
     pub fn many_values_until<R, W, T, S, F>(
         &self,
         stream: &mut MenuStream<R, W>,
@@ -459,6 +481,17 @@ impl<'a> Written<'a> {
         self.many_values_until_with(stream, sep, til, &self.fmt)
     }
 
+    /// Prompts the field and returns the inputs as a `Vec<T>` using `sep` to split the input
+    /// into the output values, and using the given format.
+    ///
+    /// It uses the merged version between the format of the written field and the given format.
+    ///
+    /// After checking and parsing the values provided by the user, it calls the `til` function.
+    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
+    ///
+    /// # Panics
+    ///
+    /// If the default value has an incorrect type, this function will panic.
     pub fn many_values_with<R, W, T, S>(
         &self,
         stream: &mut MenuStream<R, W>,
@@ -474,6 +507,15 @@ impl<'a> Written<'a> {
         self.many_values_until_with(stream, sep, keep, fmt)
     }
 
+    /// Prompts the field and returns the inputs as a `Vec<T>` using `sep` to split the input
+    /// into the output values.
+    ///
+    /// After checking and parsing the values provided by the user, it calls the `til` function.
+    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
+    ///
+    /// # Panics
+    ///
+    /// If the default value has an incorrect type, this function will panic.
     pub fn many_values<R, W, T, S>(
         &self,
         stream: &mut MenuStream<R, W>,
