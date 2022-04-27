@@ -8,7 +8,6 @@ mod stream;
 pub use crate::menu::stream::MenuStream;
 use crate::menu::stream::Stream;
 use crate::prelude::*;
-use std::fmt::Display;
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -18,28 +17,6 @@ pub type In = BufReader<Stdin>;
 
 /// The default output stream used by a menu, using the standard output stream.
 pub type Out = Stdout;
-
-/// Shows the text using the given stream and maps the `io::Error` into a `MenuError`.
-pub(crate) fn show<T, S>(text: &T, stream: &mut S) -> MenuResult
-where
-    T: ?Sized + Display,
-    S: Write,
-{
-    write!(stream, "{}", text)?;
-    stream.flush().map_err(MenuError::from)
-}
-
-/// Shows the text using the given stream, then prompts a value to the user and
-/// returns the corresponding String.
-pub(crate) fn prompt<S, R, W>(text: &S, stream: &mut MenuStream<R, W>) -> MenuResult<String>
-where
-    R: BufRead,
-    W: Write,
-    S: ?Sized + Display,
-{
-    show(text, stream)?;
-    raw_read_input(stream)
-}
 
 /// Container used to handle the [stream](MenuStream) and the global [format](Format).
 ///
@@ -278,7 +255,7 @@ where
     /// It merges the [format](Format) of the field with the global format of the container.
     /// The merge saves the custom formatting specification of the written field.
     ///
-    /// See [`Written::optional_prompt`] for more information.
+    /// See [`Written::optional_value`] for more information.
     ///
     /// # Panic
     ///
@@ -289,6 +266,20 @@ where
         T: FromStr,
     {
         written.optional_value_with(self.stream.deref_mut(), &self.fmt)
+    }
+
+    pub fn many_written_until<T, S, F>(
+        &mut self,
+        written: &Written<'_>,
+        sep: S,
+        til: F,
+    ) -> MenuResult<Vec<T>>
+    where
+        T: FromStr,
+        S: AsRef<str>,
+        F: Fn(&T) -> bool,
+    {
+        written.many_values_until_with(self.stream.deref_mut(), sep, til, &self.fmt)
     }
 
     pub fn many_written<T, S>(&mut self, written: &Written<'_>, sep: S) -> MenuResult<Vec<T>>

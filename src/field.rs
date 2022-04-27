@@ -4,8 +4,8 @@
 mod tests;
 
 use crate::prelude::*;
+use crate::utils::*;
 use crate::DEFAULT_FMT;
-use std::any::type_name;
 use std::env;
 use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, Write};
@@ -127,9 +127,11 @@ impl Display for WrittenDetails<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Either `opt` is true or `show_d` is true, but never both,
         // because it is checked by the `Written::fmt_with` method.
-        // Asked to print the "optional" string slice.
+
+        // `true` if asked to print the "optional" string slice.
         let opt = f.alternate();
-        // Asked to print the "default" string slice.
+
+        // `true` if asked to print the "default" string slice.
         let show_d = f.sign_plus() && self.default.is_some();
 
         if !opt && !show_d && self.example.is_none() {
@@ -163,14 +165,6 @@ impl Display for WrittenDetails<'_> {
 
         f.write_str(")")
     }
-}
-
-fn default_failed<T>(default: &str) -> ! {
-    panic!(
-        "`{}` has been used as default value but is incorrect for `{}` type",
-        default,
-        type_name::<T>(),
-    )
 }
 
 /// Defines the behavior for a written value provided by the user.
@@ -405,10 +399,11 @@ impl<'a> Written<'a> {
         self.optional_value_with(stream, &self.fmt)
     }
 
-    pub fn many_values_with<R, W, T, S>(
+    pub fn many_values_until_with<R, W, T, S, F>(
         &self,
         stream: &mut MenuStream<R, W>,
         sep: S,
+        til: F,
         fmt: &Format<'_>,
     ) -> MenuResult<Vec<T>>
     where
@@ -416,6 +411,7 @@ impl<'a> Written<'a> {
         W: Write,
         T: FromStr,
         S: AsRef<str>,
+        F: Fn(&T) -> bool,
     {
         fn inner_prompt_once<R: BufRead, W: Write, T: FromStr>(
             w: &Written<'_>,
@@ -429,7 +425,7 @@ impl<'a> Written<'a> {
             Ok(res.ok().or_else(|| {
                 let default = w.details.default.as_ref()?;
                 let res: Result<Vec<T>, T::Err> = default.split(sep).map(T::from_str).collect();
-                Some(res.unwrap_or_else(|_| default_failed::<T>(default.as_ref())))
+                Some(res.unwrap_or_else(|_| default_failed::<T>(default)))
             }))
         }
 
@@ -440,11 +436,42 @@ impl<'a> Written<'a> {
         // Loops while incorrect input.
         loop {
             match inner_prompt_once(self, stream, s, &fmt) {
-                Ok(Some(v)) => break Ok(v),
+                Ok(Some(v)) if v.iter().all(&til) => break Ok(v),
                 Err(e) => break Err(e),
-                Ok(None) => continue,
+                _ => continue,
             }
         }
+    }
+
+    pub fn many_values_until<R, W, T, S, F>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        sep: S,
+        til: F,
+    ) -> MenuResult<Vec<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+        S: AsRef<str>,
+        F: Fn(&T) -> bool,
+    {
+        self.many_values_until_with(stream, sep, til, &self.fmt)
+    }
+
+    pub fn many_values_with<R, W, T, S>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        sep: S,
+        fmt: &Format<'_>,
+    ) -> MenuResult<Vec<T>>
+    where
+        R: BufRead,
+        W: Write,
+        T: FromStr,
+        S: AsRef<str>,
+    {
+        self.many_values_until_with(stream, sep, keep, fmt)
     }
 
     pub fn many_values<R, W, T, S>(
@@ -532,7 +559,7 @@ impl<'a> Written<'a> {
         W: Write,
         T: FromStr,
     {
-        self.prompt_until_with(stream, |_| true, fmt)
+        self.prompt_until_with(stream, keep, fmt)
     }
 
     /// Prompts the field.
@@ -599,17 +626,6 @@ impl<'a> Written<'a> {
     {
         self.prompt_or_default_with(stream, &self.fmt)
     }
-}
-
-/// Returns the input value as a String from the standard input stream.
-pub(crate) fn raw_read_input<R, W>(stream: &mut MenuStream<R, W>) -> MenuResult<String>
-where
-    R: BufRead,
-    W: Write,
-{
-    let mut out = String::new();
-    stream.read_line(&mut out)?;
-    Ok(out.trim().to_owned())
 }
 
 /// Used to define a selectable type.
