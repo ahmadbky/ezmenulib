@@ -17,7 +17,8 @@ impl Default for Type {
 
 impl Selectable<3> for Type {
     fn values() -> [(&'static str, Self); 3] {
-        [("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
+        use Type::*;
+        [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)]
     }
 }
 

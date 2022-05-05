@@ -22,7 +22,3 @@ meval = { version = "0.2.0", optional = true }
 [features]
 default = []
 expr = ["meval"]
-
-[[example]]
-name = "mklicense"
-path = "./examples/mklicense/src/main.rs"
