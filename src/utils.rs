@@ -47,3 +47,16 @@ pub fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<St
     stream.read_line(&mut out)?;
     Ok(out.trim().to_owned())
 }
+
+pub fn select<R: BufRead, W: Write>(
+    stream: &mut MenuStream<R, W>,
+    suffix: &str,
+    default: Option<usize>,
+    max: usize,
+) -> MenuResult<Option<usize>> {
+    let s = prompt(suffix, stream)?;
+    Ok(match s.parse().ok().or(default) {
+        Some(i) if i >= 1 && i <= max => Some(i - 1),
+        _ => None,
+    })
+}

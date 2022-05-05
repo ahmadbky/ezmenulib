@@ -44,6 +44,10 @@ macro_rules! impl_fmt {
                 )*}
             }
 
+            pub(crate) fn merge(&mut self, r: &Format<'a>) {
+                *self = self.merged(r);
+            }
+
             // Constructors
             $(
             $(#[doc = $doc])*
@@ -447,9 +451,8 @@ impl<'a> Written<'a> {
 
         // Loops while incorrect input.
         loop {
-            match inner_prompt_once(self, stream, s, &fmt) {
-                Ok(Some(v)) if v.iter().all(&til) => break Ok(v),
-                Err(e) => break Err(e),
+            match inner_prompt_once(self, stream, s, &fmt)? {
+                Some(v) if v.iter().all(&til) => return Ok(v),
                 _ => continue,
             }
         }
@@ -556,10 +559,9 @@ impl<'a> Written<'a> {
 
         // Loops while incorrect input.
         loop {
-            match self.prompt_once(stream, &fmt, false) {
-                Ok(Some(out)) if til(&out) => break Ok(out),
-                Err(e) => break Err(e),
-                Ok(_) => continue,
+            match self.prompt_once(stream, &fmt, false)? {
+                Some(out) if til(&out) => return Ok(out),
+                _ => continue,
             }
         }
     }
@@ -838,11 +840,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         &self,
         stream: &mut MenuStream<R, W>,
     ) -> MenuResult<Option<usize>> {
-        let s = prompt(self.fmt.suffix, stream)?;
-        Ok(match s.parse().ok().or(self.default) {
-            Some(i) if i >= 1 && i <= N => Some(i - 1),
-            _ => None,
-        })
+        select(stream, self.fmt.suffix, self.default, N)
     }
 
     /// Prompts the selectable fields and returns the value at the input index,
@@ -863,12 +861,10 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         // to display the "(optional)" string slice message.
         show(&format!("{:#}", self), stream)?;
 
-        match self.prompt_once(stream) {
+        Ok(self.prompt_once(stream)?.map(|i| {
             // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
-            Ok(Some(i)) => Ok(Some(unsafe { self.take(i) })),
-            Ok(None) => Ok(None),
-            Err(e) => Err(e),
-        }
+            unsafe { self.take(i) }
+        }))
     }
 
     /// Gives the value stored at index `i`, consuming `self`.
@@ -898,11 +894,10 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     {
         show(&self, stream)?;
         loop {
-            match self.prompt_once(stream) {
+            match self.prompt_once(stream)? {
                 // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
-                Ok(Some(out)) => break Ok(unsafe { self.take(out) }),
-                Err(e) => break Err(e),
-                Ok(None) => continue,
+                Some(out) => return Ok(unsafe { self.take(out) }),
+                None => continue,
             }
         }
     }
@@ -928,33 +923,39 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
 
 impl<T, const N: usize> Display for Selected<'_, T, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "{pref}{msg}{opt}",
-            pref = self.fmt.prefix,
-            msg = self.msg,
-            opt = match f.alternate() && self.default.is_none()
-                || self.default.is_some() && !self.fmt.show_default
-            {
-                true => " (optional)",
-                false => "",
-            },
-        )?;
+        f.write_str(self.fmt.prefix)?;
+        f.write_str(self.msg)?;
+        if f.alternate() && self.default.is_none()
+            || self.default.is_some() && !self.fmt.show_default
+        {
+            f.write_str(" (optional)")?;
+        }
 
         for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
-            writeln!(
-                f,
-                "{i}{chip}{msg}{default}",
-                i = i,
-                chip = self.fmt.chip,
-                msg = msg,
-                default = match self.default {
-                    Some(x) if x == i && self.fmt.show_default => " (default)",
-                    _ => "",
-                }
-            )?;
+            write!(f, "{}", i)?;
+            f.write_str(self.fmt.chip)?;
+            f.write_str(msg)?;
+            match self.default {
+                Some(x) if x == i && self.fmt.show_default => f.write_str(" (default)")?,
+                _ => (),
+            }
         }
 
         Ok(())
     }
+}
+
+pub type Field<'a, R = In, W = Out> = (&'a str, Kind<'a, R, W>);
+
+pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
+
+pub type SizedFields<'a, const LEN: usize, R = In, W = Out> = &'a [Field<'a, R, W>; LEN];
+
+pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
+
+pub enum Kind<'a, R = In, W = Out> {
+    Unit(Binding<R, W>),
+    Parent(Fields<'a, R, W>),
+    Back,
+    Quit,
 }

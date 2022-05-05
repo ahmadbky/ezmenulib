@@ -8,6 +8,9 @@ mod stream;
 pub use crate::menu::stream::MenuStream;
 use crate::menu::stream::Stream;
 use crate::prelude::*;
+use crate::utils::select;
+
+use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -331,5 +334,130 @@ where
         T: FromStr + Default,
     {
         written.prompt_or_default_with(self.stream.deref_mut(), &self.fmt)
+    }
+}
+
+pub struct Menu<'a, R = In, W = Out> {
+    title: Option<&'a str>,
+    fields: Fields<'a, R, W>,
+    stream: Stream<'a, MenuStream<'a, R, W>>,
+    pub fmt: Format<'a>,
+}
+
+impl<R, W> Display for Menu<'_, R, W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // Title
+        if let Some(title) = self.title {
+            f.write_str(title)?;
+        }
+
+        // Fields
+        // The chip representation is managed by the field itself.
+        for (i, field) in self.fields.iter().enumerate() {
+            write!(f, "{}", i + 1)?;
+            f.write_str(self.fmt.chip)?;
+            f.write_str(field.0)?;
+            f.write_str("\n")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a> From<Fields<'a>> for Menu<'a> {
+    fn from(fields: Fields<'a>) -> Self {
+        Self::new_owned(MenuStream::default(), fields)
+    }
+}
+
+impl<'a, const N: usize> From<SizedFields<'a, N>> for Menu<'a> {
+    fn from(fields: SizedFields<'a, N>) -> Self {
+        Self::from(fields.as_ref())
+    }
+}
+
+impl<'a, R, W> Menu<'a, R, W> {
+    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+        Self {
+            title: None,
+            fields,
+            stream,
+            fmt: Format::default(),
+        }
+    }
+
+    pub fn new_owned(stream: MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
+        Self::inner_new(Stream::Owned(stream), fields)
+    }
+
+    pub fn new_borrowed(stream: &'a mut MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
+        Self::inner_new(Stream::Borrowed(stream), fields)
+    }
+
+    pub fn format(mut self, fmt: Format<'a>) -> Self {
+        self.fmt = fmt;
+        self
+    }
+
+    pub fn title(mut self, title: &'a str) -> Self {
+        self.title = Some(title);
+        self
+    }
+}
+
+impl<'a, R, W> Menu<'a, R, W>
+where
+    R: BufRead,
+    W: Write,
+{
+    pub fn run(&'a mut self) -> MenuResult {
+        run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
+    }
+}
+
+enum Res {
+    Finished,
+    Back,
+}
+
+fn run_with<'a, R: BufRead, W: Write>(
+    title: Option<&str>,
+    stream: &mut MenuStream<R, W>,
+    fields: Fields<'a, R, W>,
+    fmt: &Format<'_>,
+) -> MenuResult<Res> {
+    'back: loop {
+        // Title of current selective menu.
+        if let Some(msg) = title {
+            stream.write_all(msg.as_bytes())?;
+            stream.write_all(b"\n")?;
+        }
+
+        // Fields of current selective menu.
+        for (i, field) in fields.iter().enumerate() {
+            write!(stream, "{}", i + 1)?;
+            stream.write_all(fmt.chip.as_bytes())?;
+            stream.write_all(field.0.as_bytes())?;
+            stream.write_all(b"\n")?;
+        }
+
+        // Loops while incorrect input.
+        'prompt: loop {
+            match select(stream, fmt.suffix, None, fields.len())?.map(|i| {
+                // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
+                unsafe { fields.get_unchecked(i) }
+            }) {
+                Some((msg, kind)) => match kind {
+                    Kind::Unit(f) => return f(stream).map(|_| Res::Finished),
+                    Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
+                        Res::Finished => return Ok(Res::Finished),
+                        Res::Back => continue 'back,
+                    },
+                    Kind::Back => return Ok(Res::Back),
+                    Kind::Quit => return Ok(Res::Finished),
+                },
+                None => continue 'prompt,
+            }
+        }
     }
 }
