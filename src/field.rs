@@ -44,10 +44,6 @@ macro_rules! impl_fmt {
                 )*}
             }
 
-            pub(crate) fn merge(&mut self, r: &Format<'a>) {
-                *self = self.merged(r);
-            }
-
             // Constructors
             $(
             $(#[doc = $doc])*
@@ -923,8 +919,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
 
 impl<T, const N: usize> Display for Selected<'_, T, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.fmt.prefix)?;
-        f.write_str(self.msg)?;
+        write!(f, "{}{}", self.fmt.prefix, self.msg)?;
         if f.alternate() && self.default.is_none()
             || self.default.is_some() && !self.fmt.show_default
         {
@@ -932,9 +927,7 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
         }
 
         for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
-            write!(f, "{}", i)?;
-            f.write_str(self.fmt.chip)?;
-            f.write_str(msg)?;
+            write!(f, "{}{}{}", i, self.fmt.chip, msg)?;
             match self.default {
                 Some(x) if x == i && self.fmt.show_default => f.write_str(" (default)")?,
                 _ => (),
@@ -956,6 +949,6 @@ pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
 pub enum Kind<'a, R = In, W = Out> {
     Unit(Binding<R, W>),
     Parent(Fields<'a, R, W>),
-    Back,
+    Back(usize),
     Quit,
 }

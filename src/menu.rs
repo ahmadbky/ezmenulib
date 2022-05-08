@@ -410,54 +410,50 @@ where
     R: BufRead,
     W: Write,
 {
-    pub fn run(&'a mut self) -> MenuResult {
+    pub fn run(&mut self) -> MenuResult {
         run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
     }
 }
 
 enum Res {
     Finished,
-    Back,
+    Back(usize),
 }
 
-fn run_with<'a, R: BufRead, W: Write>(
-    title: Option<&str>,
+fn run_with<R: BufRead, W: Write>(
+    msg: Option<&str>,
     stream: &mut MenuStream<R, W>,
-    fields: Fields<'a, R, W>,
+    fields: Fields<R, W>,
     fmt: &Format<'_>,
 ) -> MenuResult<Res> {
-    'back: loop {
+    loop {
         // Title of current selective menu.
-        if let Some(msg) = title {
-            stream.write_all(msg.as_bytes())?;
-            stream.write_all(b"\n")?;
+        if let Some(s) = msg {
+            writeln!(stream, "{}", s)?;
         }
 
         // Fields of current selective menu.
-        for (i, field) in fields.iter().enumerate() {
-            write!(stream, "{}", i + 1)?;
-            stream.write_all(fmt.chip.as_bytes())?;
-            stream.write_all(field.0.as_bytes())?;
-            stream.write_all(b"\n")?;
+        for (i, (field_msg, _)) in fields.iter().enumerate() {
+            writeln!(stream, "{}{}{}", i + 1, fmt.chip, field_msg)?;
         }
 
-        // Loops while incorrect input.
-        'prompt: loop {
-            match select(stream, fmt.suffix, None, fields.len())?.map(|i| {
-                // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
-                unsafe { fields.get_unchecked(i) }
-            }) {
-                Some((msg, kind)) => match kind {
-                    Kind::Unit(f) => return f(stream).map(|_| Res::Finished),
-                    Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
-                        Res::Finished => return Ok(Res::Finished),
-                        Res::Back => continue 'back,
-                    },
-                    Kind::Back => return Ok(Res::Back),
-                    Kind::Quit => return Ok(Res::Finished),
-                },
-                None => continue 'prompt,
+        let (msg, kind) = loop {
+            match select(stream, fmt.suffix, None, fields.len())?.and_then(|i| fields.get(i)) {
+                Some(field) => break field,
+                None => continue,
             }
+        };
+
+        match kind {
+            Kind::Unit(f) => return f(stream).map(|_| Res::Finished),
+            Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
+                Res::Finished => return Ok(Res::Finished),
+                Res::Back(0) => continue,
+                Res::Back(i) => return Ok(Res::Back(i - 1)),
+            },
+            Kind::Back(0) => continue,
+            Kind::Back(i) => return Ok(Res::Back(i - 1)),
+            Kind::Quit => return Ok(Res::Finished),
         }
     }
 }
