@@ -118,55 +118,6 @@ impl<'a> Default for Format<'a> {
     }
 }
 
-struct WrittenDetails<'a> {
-    example: Option<&'a str>,
-    default: Option<String>,
-}
-
-impl Display for WrittenDetails<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Either `opt` is true or `show_d` is true, but never both,
-        // because it is checked by the `Written::fmt_with` method.
-
-        // `true` if asked to print the "optional" string slice.
-        let opt = f.alternate();
-
-        // `true` if asked to print the "default" string slice.
-        let show_d = f.sign_plus() && self.default.is_some();
-
-        if !opt && !show_d && self.example.is_none() {
-            return Ok(());
-        }
-
-        // The previous condition guarantees that there is at least
-        // something to write inside the parenthesis.
-        f.write_str(" (")?;
-
-        // - Example
-        if let Some(e) = self.example {
-            write!(f, "example: {}", e)?;
-            if show_d || opt {
-                f.write_str(", ")?;
-            }
-        }
-
-        // - Default
-        match self.default {
-            Some(ref d) if show_d => write!(f, "default: {}", d)?,
-            _ => (),
-        }
-
-        // - Optional
-        // We don't check if `show_d` is false
-        // because this is done by the `Written::fmt_with` method.
-        if opt {
-            f.write_str("optional")?;
-        }
-
-        f.write_str(")")
-    }
-}
-
 /// Defines the behavior for a written value provided by the user.
 ///
 /// Like the [selected](Selected) values, it contains its own [format](Format),
@@ -195,7 +146,8 @@ pub struct Written<'a> {
     msg: &'a str,
     /// The format of the written field value.
     pub fmt: Format<'a>,
-    details: WrittenDetails<'a>,
+    example: Option<&'a str>,
+    default: Option<String>,
 }
 
 impl<'a> From<&'a str> for Written<'a> {
@@ -203,10 +155,8 @@ impl<'a> From<&'a str> for Written<'a> {
         Self {
             msg,
             fmt: Format::default(),
-            details: WrittenDetails {
-                example: None,
-                default: None,
-            },
+            example: None,
+            default: None,
         }
     }
 }
@@ -231,16 +181,48 @@ impl<'a> Written<'a> {
         s.write_str(fmt.prefix)?;
         s.write_str(self.msg)?;
 
-        match (opt, fmt.show_default, self.details.default.as_ref()) {
-            (_, true, Some(_)) => write!(s, "{:+}", self.details)?,
-            (true, _, _) | (false, false, Some(_)) => write!(s, "{:#}", self.details)?,
-            (false, _, None) => write!(s, "{}", self.details)?,
-        };
+        // Field details
+        if opt || self.example.is_some() || self.default.is_some() {
+            s.write_str(" (")?;
+
+            // - Example
+            if let Some(e) = self.example {
+                write!(s, "example: {}", e)?;
+                if opt || self.fmt.show_default && self.default.is_some() {
+                    s.write_str(", ")?;
+                }
+            }
+
+            // - Default
+            match self.default {
+                Some(ref d) if self.fmt.show_default => write!(s, "default: {}", d)?,
+                _ => (),
+            }
+
+            // - Optional
+            if opt && self.default.is_none() {
+                s.write_str("optional")?;
+            }
+
+            s.write_str(")")?;
+        }
 
         match fmt.line_brk {
             true => s.write_char('\n'),
             false => Ok(()),
         }
+    }
+
+    fn first_line<R, W: Write>(
+        &self,
+        stream: &mut MenuStream<R, W>,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult {
+        if fmt.line_brk {
+            self.fmt_with(stream, fmt, opt)?;
+        }
+        Ok(())
     }
 
     /// Displays the second line according to the format, and returns the output
@@ -280,7 +262,7 @@ impl<'a> Written<'a> {
     /// will be displayed inside parenthesis according to its formatting (see [`Format`]
     /// for more information).
     pub fn default_value(mut self, default: &'a str) -> Self {
-        self.details.default = Some(default.to_owned());
+        self.default = Some(default.to_owned());
         self
     }
 
@@ -305,8 +287,7 @@ impl<'a> Written<'a> {
     /// # }
     /// ```
     pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
-        self.details.default =
-            Some(env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?);
+        self.default = Some(env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?);
         Ok(self)
     }
 
@@ -320,7 +301,7 @@ impl<'a> Written<'a> {
     /// The example will be shown inside parenthesis according to its formatting
     /// (see [`Format`] for more information).
     pub fn example(mut self, example: &'a str) -> Self {
-        self.details.example = Some(example);
+        self.example = Some(example);
         self
     }
 
@@ -335,17 +316,21 @@ impl<'a> Written<'a> {
         fmt: &Format<'_>,
         opt: bool,
     ) -> MenuResult<Option<T>> {
-        Ok(self
-            .prompt_line(stream, fmt, opt)?
-            .parse()
-            .ok()
-            .or_else(|| {
-                self.details.default.as_deref().map(|default| {
-                    default
-                        .parse()
-                        .unwrap_or_else(|_| default_failed::<T>(default))
-                })
-            }))
+        let s = self.prompt_line(stream, fmt, opt)?;
+
+        if s.is_empty() {
+            return Ok(None);
+        }
+
+        let out = s.parse().ok().or_else(|| {
+            self.default.as_deref().map(|default| {
+                default
+                    .parse()
+                    .unwrap_or_else(|_| default_failed::<T>(default))
+            })
+        });
+
+        Ok(out)
     }
 
     /// Prompts the field and returns the input, or `None` if the input is incorrect,
@@ -374,7 +359,7 @@ impl<'a> Written<'a> {
         T: FromStr,
     {
         let fmt = self.fmt.merged(fmt);
-        self.fmt_with(stream, &fmt, true)?;
+        self.first_line(stream, &fmt, true)?;
         self.prompt_once(stream, &fmt, true)
     }
 
@@ -435,14 +420,14 @@ impl<'a> Written<'a> {
             let res: Result<Vec<T>, T::Err> = s.split(sep).map(T::from_str).collect();
 
             Ok(res.ok().or_else(|| {
-                let default = w.details.default.as_ref()?;
+                let default = w.default.as_ref()?;
                 let res: Result<Vec<T>, T::Err> = default.split(sep).map(T::from_str).collect();
                 Some(res.unwrap_or_else(|_| default_failed::<T>(default)))
             }))
         }
 
         let fmt = self.fmt.merged(fmt);
-        self.fmt_with(stream, &fmt, false)?;
+        self.first_line(stream, &fmt, false)?;
         let s = sep.as_ref();
 
         // Loops while incorrect input.
@@ -551,7 +536,7 @@ impl<'a> Written<'a> {
         F: Fn(&T) -> bool,
     {
         let fmt = self.fmt.merged(fmt);
-        self.fmt_with(stream, &fmt, false)?;
+        self.first_line(stream, &fmt, false)?;
 
         // Loops while incorrect input.
         loop {
@@ -925,6 +910,7 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
         {
             f.write_str(" (optional)")?;
         }
+        f.write_str("\n")?;
 
         for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
             write!(f, "{}{}{}", i, self.fmt.chip, msg)?;
@@ -932,6 +918,7 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
                 Some(x) if x == i && self.fmt.show_default => f.write_str(" (default)")?,
                 _ => (),
             }
+            f.write_str("\n")?;
         }
 
         Ok(())
