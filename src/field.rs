@@ -736,7 +736,7 @@ pub trait Selectable<const N: usize>: Sized {
 ///     .select(&mut MenuStream::default())
 ///     .unwrap();
 /// ```
-// Clone is implemented on it because it is moved when the user selected the value.
+// Clone is implemented on it because it is moved once the user selected the value.
 #[derive(Clone)]
 pub struct Selected<'a, T, const N: usize> {
     /// The format used by the selected field value.
@@ -751,7 +751,7 @@ where
     T: Selectable<N>,
 {
     fn from(msg: &'a str) -> Self {
-        Self::inner_new(msg, T::values(), T::default())
+        Self::inner_new(msg, T::values(), T::default().map(|i| i + 1))
     }
 }
 
@@ -835,7 +835,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         &self,
         stream: &mut MenuStream<R, W>,
     ) -> MenuResult<Option<usize>> {
-        select(stream, self.fmt.suffix, self.default, N)
+        select(stream, self.fmt.suffix, N).map(|o| o.or(self.default))
     }
 
     /// Prompts the selectable fields and returns the value at the input index,

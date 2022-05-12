@@ -20,6 +20,10 @@ impl Selectable<3> for Type {
         use Type::*;
         [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)]
     }
+
+    fn default() -> Option<usize> {
+        Some(0)
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -36,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
     let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
-    let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
+    let ty: Type = lic.selected(Selected::from("Select a license type"))?;
 
     Ok(println!(
         "{:?} License, Copyright (C) {} {}\n{}",

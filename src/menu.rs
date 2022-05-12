@@ -471,7 +471,7 @@ fn run_with<R: BufRead, W: Write>(
         }
 
         let (msg, kind) = loop {
-            match select(stream, fmt.suffix, None, fields.len())?.and_then(|i| fields.get(i)) {
+            match select(stream, fmt.suffix, fields.len())?.and_then(|i| fields.get(i)) {
                 Some(field) => break field,
                 None => continue,
             }
