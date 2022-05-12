@@ -316,19 +316,24 @@ impl<'a> Written<'a> {
         fmt: &Format<'_>,
         opt: bool,
     ) -> MenuResult<Option<T>> {
+        fn default_output<T: FromStr>(d: &str) -> T {
+            d.parse().unwrap_or_else(|_| default_failed::<T>(d))
+        }
+
         let s = self.prompt_line(stream, fmt, opt)?;
 
         if s.is_empty() {
-            return Ok(None);
+            let ret = match self.default {
+                Some(ref d) => Some(default_output(d)),
+                None => None,
+            };
+            return Ok(ret);
         }
 
-        let out = s.parse().ok().or_else(|| {
-            self.default.as_deref().map(|default| {
-                default
-                    .parse()
-                    .unwrap_or_else(|_| default_failed::<T>(default))
-            })
-        });
+        let out = s
+            .parse()
+            .ok()
+            .or_else(|| self.default.as_deref().map(default_output));
 
         Ok(out)
     }
