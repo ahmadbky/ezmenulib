@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0
+## 0.3.0 (WIP)
 
 * Removed `T: FromStr` and `<T as FromStr>::Err: 'static + Debug` restrictions for `SelectMenu`.
   * Now the output type `T` has to be `'static`.
@@ -13,9 +13,6 @@ implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function,
 * Removed common `MenuBuilder` trait.
 * Removed `new_line` field on `ValueFieldFormatting`.
   * Now always on `true`, meaning there will always be a line break between prompt and prefix.
-* Added `Promptable` trait.
-  * Implemented on `SelectMenu` and `ValueField`.
-  * Value-field is not re-asking anymore the message if an incorrect input has been 
 provided, but only reprints the prefix.
 * Renamed `GetStream` trait to `Streamable`.
 * Fixing IO error never returned in loop.
