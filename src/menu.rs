@@ -12,7 +12,7 @@ use crate::utils::select;
 
 use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Deref};
 use std::str::FromStr;
 
 /// The default input stream used by a menu, using the standard input stream.
@@ -20,6 +20,28 @@ pub type In = BufReader<Stdin>;
 
 /// The default output stream used by a menu, using the standard output stream.
 pub type Out = Stdout;
+
+/// Used to retrieve the stream from a container.
+pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
+    /// Returns the ownership of the stream it contains, consuming `self`.
+    fn take_stream(self) -> MenuStream<'a, R, W>;
+
+    /// Returns the ownership of the reader and writer, consuming `self`.
+    /// 
+    /// # Panics
+    /// 
+    /// If the `Streamable::take_stream` method panics at runtime,
+    /// then this method will also panic at runtime.
+    fn take_io(self) -> (R, W) {
+        self.take_stream().retrieve()
+    }
+
+    /// Returns a reference to the stream the container uses.
+    fn get_stream(&self) -> &MenuStream<'a, R, W>;
+
+    /// Returns a mutable reference to the stream the container uses.
+    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W>;
+}
 
 /// Container used to handle the [stream](MenuStream) and the global [format](Format).
 ///
@@ -134,35 +156,25 @@ impl<'a, R, W> Values<'a, R, W> {
         self.fmt = fmt;
         self
     }
+}
 
+impl<'a, R, W> Streamable<'a, R, W> for Values<'a, R, W> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
     ///
     /// If the container does not own the stream (meaning it has been constructed
     /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
-    pub fn take_stream(self) -> MenuStream<'a, R, W> {
+    fn take_stream(self) -> MenuStream<'a, R, W> {
         self.stream.retrieve()
     }
 
-    /// Returns the ownership of the reader and writer, consuming `self`.
-    ///
-    /// # Panics
-    ///
-    /// If the container does not own the stream (meaning it has been constructed
-    /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
-    pub fn take_io(self) -> (R, W) {
-        self.take_stream().retrieve()
+    fn get_stream(&self) -> &MenuStream<'a, R, W> {
+        self.stream.deref()
     }
 
-    /// Returns a reference to the stream the container uses.
-    pub fn get_stream(&self) -> &MenuStream<'a, R, W> {
-        &self.stream
-    }
-
-    /// Returns a mutable reference to the stream the container uses.
-    pub fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
-        &mut self.stream
+    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
+        self.stream.deref_mut()
     }
 }
 
@@ -338,10 +350,31 @@ where
 }
 
 pub struct Menu<'a, R = In, W = Out> {
+    /// The global format of the menu.
+    pub fmt: Format<'a>,
     title: Option<&'a str>,
     fields: Fields<'a, R, W>,
     stream: Stream<'a, MenuStream<'a, R, W>>,
-    pub fmt: Format<'a>,
+}
+
+impl<'a, R, W> Streamable<'a, R, W> for Menu<'a, R, W> {
+    /// Returns the ownership of the stream the menu contains, consuming `self`.
+    ///
+    /// # Panics
+    ///
+    /// If the menu does not own the stream (meaning it has been constructed
+    /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
+    fn take_stream(self) -> MenuStream<'a, R, W> {
+        self.stream.retrieve()
+    }
+
+    fn get_stream(&self) -> &MenuStream<'a, R, W> {
+        self.stream.deref()
+    }
+
+    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
+        self.stream.deref_mut()
+    }
 }
 
 impl<R, W> Display for Menu<'_, R, W> {
