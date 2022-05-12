@@ -323,11 +323,7 @@ impl<'a> Written<'a> {
         let s = self.prompt_line(stream, fmt, opt)?;
 
         if s.is_empty() {
-            let ret = match self.default {
-                Some(ref d) => Some(default_output(d)),
-                None => None,
-            };
-            return Ok(ret);
+            return Ok(self.default.as_deref().map(default_output));
         }
 
         let out = s
