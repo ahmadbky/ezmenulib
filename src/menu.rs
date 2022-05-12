@@ -12,7 +12,7 @@ use crate::utils::select;
 
 use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
-use std::ops::{DerefMut, Deref};
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 /// The default input stream used by a menu, using the standard input stream.
@@ -27,9 +27,9 @@ pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
     fn take_stream(self) -> MenuStream<'a, R, W>;
 
     /// Returns the ownership of the reader and writer, consuming `self`.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// If the `Streamable::take_stream` method panics at runtime,
     /// then this method will also panic at runtime.
     fn take_io(self) -> (R, W) {
@@ -448,17 +448,12 @@ where
     }
 }
 
-enum Res {
-    Finished,
-    Back(usize),
-}
-
 fn run_with<R: BufRead, W: Write>(
     msg: Option<&str>,
     stream: &mut MenuStream<R, W>,
     fields: Fields<R, W>,
     fmt: &Format<'_>,
-) -> MenuResult<Res> {
+) -> MenuResult<Option<usize>> {
     loop {
         // Title of current selective menu.
         if let Some(s) = msg {
@@ -478,15 +473,15 @@ fn run_with<R: BufRead, W: Write>(
         };
 
         match kind {
-            Kind::Unit(f) => return f(stream).map(|_| Res::Finished),
+            Kind::Unit(f) => return f(stream).map(|_| None),
             Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
-                Res::Finished => return Ok(Res::Finished),
-                Res::Back(0) => continue,
-                Res::Back(i) => return Ok(Res::Back(i - 1)),
+                None => return Ok(None),
+                Some(0) => continue,
+                Some(i) => return Ok(Some(i - 1)),
             },
             Kind::Back(0) => continue,
-            Kind::Back(i) => return Ok(Res::Back(i - 1)),
-            Kind::Quit => return Ok(Res::Finished),
+            Kind::Back(i) => return Ok(Some(i - 1)),
+            Kind::Quit => return Ok(None),
         }
     }
 }

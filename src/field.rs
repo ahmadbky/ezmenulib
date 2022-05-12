@@ -871,7 +871,6 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     /// The `i` index must be in bounds, meaning `i < N`.
     /// Otherwise, this function results in an undefined behavior.
     unsafe fn take(self, i: usize) -> T {
-        assert!(i < N);
         self.fields.into_iter().nth(i).unwrap_unchecked().1
     }
 
