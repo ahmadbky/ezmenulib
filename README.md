@@ -78,9 +78,13 @@ Basic menu
 3 - Quit
 >> 2
 Settings
+1 - Name
+2 - Go back
+>> 1
+Name
 1 - Firstname
 2 - Lastname
-3 - Main menu
+3 - Main Menu
 >> 3
 Basic menu
 1 - Play
@@ -90,9 +94,9 @@ Basic menu
 PLAYING
 ```
 
-### Get values
+### Retrieve values
 
-You can retrieve values from the user, by asking him to write the value, or to select among valid values. Follow the `gen_license` example, a sample code to retrieve information about the project to generate the license from.
+You can get values from the user, by asking him to write the value, or to select among valid values. Follow the `gen_license` example, a sample code to get information about a project to generate a license.
 
 ```rust
 #[derive(Debug)]
@@ -107,44 +111,65 @@ impl Selectable<3> for Type {
         use Type::*;
         [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)]
     }
+
+    fn default() -> Option<usize> {
+        Some(0)
+    }
 }
 
 let mut lic = Values::default();
 
-let authors: Vec<String> = lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
+let authors: Vec<String> =
+    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
 let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
 let date: u16 = lic.written(&Written::from("License date").default("2022"))?;
-let ty: Type = lic.selected(Selected::from("Select a license type").default(0))?;
+let ty: Type = lic.selected(Selected::from("Select a license type"))?;
 
 println!(
     "{:?} License, Copyright (C) {} {}\n{}",
     ty,
     date,
     authors.join(", "),
-    if let Some(n) = name { n },
+    if let Some(n) = name { n } else { "".to_owned() },
 );
 ```
 
 This sample code prints the standard menu like above:
 
 ```
-Basic menu
-1 - Play
-2 - Settings
-3 - Quit
+--> Authors (example: Ahmad, ...)
+>> Ahmad Baalbaky, Hello
+--> Project name (optional)
+>> 
+--> License date (default: 2022)
+>> 
+--> Select a license type
+1 - MIT (default)
+2 - GPL
+3 - BSD
 >> 2
-Settings
-1 - Firstname
-2 - Lastname
-3 - Main menu
->> 3
-Basic menu
-1 - Play
-2 - Settings
-3 - Quit
->> 1
-PLAYING
+GPL License, Copyright (C) 2022 Ahmad Baalbaky, Hello
 ```
+
+The user can skip the prompt if it is optional, otherwise the prompt will be reprinted until the entered value is correct.
+
+## Formatting customization
+
+The library allows you to customize the text format behavior in many ways. The rules are defined in the [`Format` ](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Format.html) struct.
+
+You may remove the line break between the prompt and the suffix before the user input for example:
+
+```rust
+let name: String = Written::from("Name")
+    .format(Format {
+        line_brk: false,
+        suffix: ": ",
+        ..Default::default()
+    })
+    .prompt(&mut MenuStream::default())?;
+```
+
+The format can be global and inherited by the [`Values`](https://docs.rs/ezmenulib/latest/ezmenulib/menu/struct.Values.html) container on the following prompts ([`Written`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Written.html) and [`Selected`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Selected.html)).
 
 ## Documentation
 
