@@ -683,6 +683,11 @@ impl<'a> Written<'a> {
 pub trait Selectable<const N: usize>: Sized {
     /// Provides the fields, corresponding to a message and the return value.
     fn values() -> [(&'static str, Self); N];
+
+    /// Provides the default fields, by its index, if it is available.
+    fn default() -> Option<usize> {
+        None
+    }
 }
 
 /// Defines the behavior for a selected value provided by the user.
@@ -741,11 +746,24 @@ where
     T: Selectable<N>,
 {
     fn from(msg: &'a str) -> Self {
-        Self::new(msg, T::values())
+        Self::inner_new(msg, T::values(), T::default())
     }
 }
 
 impl<'a, T, const N: usize> Selected<'a, T, N> {
+    fn inner_new(msg: &'a str, fields: [(&'a str, T); N], default: Option<usize>) -> Self {
+        if fields.is_empty() {
+            panic!("empty fields for the selectable values");
+        }
+
+        Self {
+            fmt: Default::default(),
+            msg,
+            fields,
+            default,
+        }
+    }
+
     /// Returns the Selected wrapper using the given message and
     /// selectable fields.
     ///
@@ -760,16 +778,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     /// when prompting the index to the user to select with an empty list, it will generate an
     /// infinite loop.
     pub fn new(msg: &'a str, fields: [(&'a str, T); N]) -> Self {
-        if fields.is_empty() {
-            panic!("empty fields for the selectable value");
-        }
-
-        Self {
-            fmt: Default::default(),
-            msg,
-            fields,
-            default: None,
-        }
+        Self::inner_new(msg, fields, None)
     }
 
     /// Gives a custom formatting for the selected value.
