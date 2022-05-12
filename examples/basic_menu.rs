@@ -19,15 +19,18 @@ fn lastname(s: &mut MenuStream) -> MenuResult {
 
 fn main() {
     Menu::from(&[
-        ("Play", Kind::Unit(playing)),
+        ("Play", Kind::Map(playing)),
         (
             "Settings",
             Kind::Parent(&[
-                ("Name", Kind::Parent(&[
-                    ("Firstname", Kind::Unit(firstname)),
-                    ("Lastname", Kind::Unit(lastname)),
-                    ("Main menu", Kind::Back(2)),
-                ])),
+                (
+                    "Name",
+                    Kind::Parent(&[
+                        ("Firstname", Kind::Map(firstname)),
+                        ("Lastname", Kind::Map(lastname)),
+                        ("Main menu", Kind::Back(2)),
+                    ]),
+                ),
                 ("Main menu", Kind::Back(1)),
                 ("Quit", Kind::Quit),
             ]),

@@ -934,17 +934,38 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
     }
 }
 
+/// A menu field.
+///
+/// The string slice corresponds to the message displayed in the list,
+/// and the kind corresponds to its behavior.
+///
+/// See [`Kind]` for more information.
 pub type Field<'a, R = In, W = Out> = (&'a str, Kind<'a, R, W>);
 
+/// The menu fields.
+///
+/// It simply corresponds to a slice of fields.
+/// It is used for more convenience in the library.
 pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 
-pub type SizedFields<'a, const LEN: usize, R = In, W = Out> = &'a [Field<'a, R, W>; LEN];
-
+/// Corresponds to the function mapped to a field.
+///
+/// This function is called right after the user selected the corresponding field.
+///
+/// See [`Kind::Map`] for more information.
 pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
 
+/// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
-    Unit(Binding<R, W>),
+    /// Maps a function to call right after the user select the field.
+    Map(Binding<R, W>),
+    /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
     Parent(Fields<'a, R, W>),
+    /// Allows the user to go back to the given depth level from the current running prompt.
+    ///
+    /// The depth level of the current running prompt is at `0`, meaning it will stay at
+    /// the current level if the index is at `0` when the user will select the field.
     Back(usize),
+    /// Closes all the nested menus to the top when the user selected the field.
     Quit,
 }

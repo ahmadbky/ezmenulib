@@ -50,13 +50,13 @@ fn lastnaming(s: &mut MenuStream) -> MenuResult {
 }
 
 Menu::from(&[
-    ("Play", Kind::Unit(playing)),
+    ("Play", Kind::Map(playing)),
     (
         "Settings",
         Kind::Parent(&[
             ("Name", Kind::Parent(&[
-                ("Firstname", Kind::Unit(firstnaming)),
-                ("Lastname", Kind::Unit(lastnaming)),
+                ("Firstname", Kind::Map(firstnaming)),
+                ("Lastname", Kind::Map(lastnaming)),
                 ("Main menu", Kind::Back(2)),
             ]))
             ("Go back", Kind::Back(1)),

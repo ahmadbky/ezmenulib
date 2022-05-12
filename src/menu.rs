@@ -43,6 +43,18 @@ pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
     fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W>;
 }
 
+trait RefStream<'a, T, R, W>: Sized {
+    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, arg: T) -> Self;
+
+    fn borrowed(stream: &'a mut MenuStream<'a, R, W>, arg: T) -> Self {
+        Self::new(Stream::Borrowed(stream), arg)
+    }
+
+    fn owned(stream: MenuStream<'a, R, W>, arg: T) -> Self {
+        Self::new(Stream::Owned(stream), arg)
+    }
+}
+
 /// Container used to handle the [stream](MenuStream) and the global [format](Format).
 ///
 /// The `R` type parameter represents its reader type,
@@ -57,6 +69,7 @@ pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
 ///
 /// ```no_run
 /// use ezmenulib::prelude::*;
+///
 /// let mut menu = Values::from(Format::prefix("->> "));
 /// // Inherits the prefix specification on the written field
 /// let name: String = menu.written(&Written::from("What is your name")).unwrap();
@@ -74,6 +87,9 @@ pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
 /// By default, the container uses the standard input and output stream.
 /// You can provide your own stream types, wrapped in a [`MenuStream`], and
 /// borrow them to the container, or take the stream by ownership at the end.
+///
+/// The mutability of the struct when calling its methods is due to the mutability
+/// of the stream when doing operations with it.
 ///
 /// ## Example
 ///
@@ -123,7 +139,7 @@ impl Default for Values<'_> {
 /// You can still take the stream at the end of the usage, with [`Values::take_stream`].
 impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
     fn from(stream: MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Owned(stream), Format::default())
+        Self::owned(stream, Format::default())
     }
 }
 
@@ -133,22 +149,25 @@ impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
 /// container to retrieve values.
 impl<'a, R, W> From<&'a mut MenuStream<'a, R, W>> for Values<'a, R, W> {
     fn from(stream: &'a mut MenuStream<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Borrowed(stream), Format::default())
+        Self::borrowed(stream, Format::default())
     }
 }
 
 impl<'a> From<Format<'a>> for Values<'a> {
     fn from(fmt: Format<'a>) -> Self {
-        Self::inner_new(Stream::default(), fmt)
+        Self::owned(MenuStream::default(), fmt)
+    }
+}
+
+impl<'a, R, W> RefStream<'a, Format<'a>, R, W> for Values<'a, R, W> {
+    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
+        Self { fmt, stream }
     }
 }
 
 impl<'a, R, W> Values<'a, R, W> {
-    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
-        Self { fmt, stream }
-    }
-
-    /// Defines the global formatting applied to all the fields the menu retrieves the values from.
+    /// Defines the global formatting applied to all the fields
+    /// the container retrieves the values from.
     ///
     /// If the field contains custom formatting specifications, it will save them
     /// when printing to the writer.
@@ -349,6 +368,35 @@ where
     }
 }
 
+/// Defines a menu, with a title, the fields, and the reader and writer types.
+///
+/// It handles the [stream](MenuStream) and a [format](Format).
+///
+/// The `R` type parameter represents its reader type,
+/// and the `W` type parameter represents its writer type.
+/// By default, it uses the standard input and output streams to get values from the user.
+/// It wraps the streams into a [`MenuStream`].
+///
+/// ## Example
+///
+/// ```no_run
+/// use ezmenulib::prelude::*;
+/// use std::io::Write;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error> {
+/// Menu::from(&[
+///     ("Alice", Kind::Quit),
+///     ("Bob", Kind::Quit),
+///     ("Charlie", Kind::Quit),
+///     ("SubMenu", Kind::Parent(&[
+///         ("Foo", Kind::Map(|s| Ok(s.write_str("foo")?))),
+///         ("Bar", Kind::Map(|s| Ok(s.write_str("bar")?))),
+///         ("Go back!", Kind::Back(1)),
+///     ])),
+/// ])
+/// .run()?;
+/// # Ok(()) }
+/// ```
 pub struct Menu<'a, R = In, W = Out> {
     /// The global format of the menu.
     pub fmt: Format<'a>,
@@ -403,35 +451,42 @@ impl<'a> From<Fields<'a>> for Menu<'a> {
     }
 }
 
-impl<'a, const N: usize> From<SizedFields<'a, N>> for Menu<'a> {
-    fn from(fields: SizedFields<'a, N>) -> Self {
+impl<'a, const N: usize> From<&'a [Field<'a>; N]> for Menu<'a> {
+    fn from(fields: &'a [Field<'a>; N]) -> Self {
         Self::from(fields.as_ref())
     }
 }
 
-impl<'a, R, W> Menu<'a, R, W> {
-    fn inner_new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+impl<'a, R, W> RefStream<'a, Fields<'a, R, W>, R, W> for Menu<'a, R, W> {
+    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
         Self {
             title: None,
+            fmt: Format::default(),
             fields,
             stream,
-            fmt: Format::default(),
         }
     }
+}
 
+impl<'a, R, W> Menu<'a, R, W> {
+    /// Creates a menu with an owned stream and its fields.
     pub fn new_owned(stream: MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Owned(stream), fields)
+        Self::owned(stream, fields)
     }
 
+    /// Creates a menu with a borrowed stream and its fields.
     pub fn new_borrowed(stream: &'a mut MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
-        Self::inner_new(Stream::Borrowed(stream), fields)
+        Self::borrowed(stream, fields)
     }
 
+    /// Defines the global formatting applied to all the fields the menu displays.
     pub fn format(mut self, fmt: Format<'a>) -> Self {
         self.fmt = fmt;
         self
     }
 
+    /// Defines the title of the menu, which corresponds to the string slice displayed
+    /// at the top when running the menu.
     pub fn title(mut self, title: &'a str) -> Self {
         self.title = Some(title);
         self
@@ -443,15 +498,35 @@ where
     R: BufRead,
     W: Write,
 {
+    /// Runs the menu.
+    ///
+    /// The mutability is from the operations done with the stream.
+    ///
+    /// It prints to the stream the fields next to their indexes, then asks the user to
+    /// select a field. Then, it runs the corresponding procedure
+    /// matching the selected field [kind](Kind).
     pub fn run(&mut self) -> MenuResult {
         run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
     }
 }
 
+/// Recursive function used to run the current prompt state of the menu.
+///
+/// It prints out to the stream the fields next to their indexes, then asks the user to
+/// select a field. Then, it runs the corresponding procedure matching the selected field kind.
+///
+/// The function returns a wrapped `Option<usize>`. The index inside corresponds to the current
+/// level of depth of the menu. With recursion, it allows to go back to the indexed depth
+/// level from the current running prompt.
+// FIXME: Replace the recursive function by a regular function.
 fn run_with<R: BufRead, W: Write>(
+    // The message/title displayed on the top.
     msg: Option<&str>,
+    // The stream used by the menu.
     stream: &mut MenuStream<R, W>,
+    // The fields of the current prompted menu.
     fields: Fields<R, W>,
+    // The formatting specifications used by the menu.
     fmt: &Format<'_>,
 ) -> MenuResult<Option<usize>> {
     loop {
@@ -465,6 +540,7 @@ fn run_with<R: BufRead, W: Write>(
             writeln!(stream, "{}{}{}", i + 1, fmt.chip, field_msg)?;
         }
 
+        // Gets the message and the field kind selected by the user.
         let (msg, kind) = loop {
             match select(stream, fmt.suffix, fields.len())?.and_then(|i| fields.get(i)) {
                 Some(field) => break field,
@@ -473,7 +549,7 @@ fn run_with<R: BufRead, W: Write>(
         };
 
         match kind {
-            Kind::Unit(f) => return f(stream).map(|_| None),
+            Kind::Map(f) => return f(stream).map(|_| None),
             Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
                 None => return Ok(None),
                 Some(0) => continue,
