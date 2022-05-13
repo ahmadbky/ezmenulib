@@ -6,23 +6,20 @@
 //! there exists the [`MenuBool`] type overriding this implementation, to accept more human values,
 //! such as `"yes"` or `"no"`.
 //!
-//! An other example is about multiple values providing. The [`Vec<T>`] struct does not implement
-//! the `FromStr` trait, and this is why there is the [`MenuVec<T>`] struct for this.
-//!
 //! ## Example
 //!
 //! ```no_run
 //! use ezmenulib::{prelude::*, customs::*};
 //!
-//! # use std::error::Error;
-//! # fn main() -> Result<(), Box<dyn Error>> {
-//! println!("Describe a project.");
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut project = Values::default();
 //!
-//! let authors: MenuVec<String> = project.written(&Written::from("Authors"))?;
-//! let hard: MenuBool = project.written(&Written::from("Was it hard?"))?;
-//! # Ok(())
+//! # #[cfg(feature = "expr")] {
+//! let calc: MenuNumber = project.written(&Written::from("Calculate"))?;
 //! # }
+//!
+//! let is_sure: MenuBool = project.written(&Written::from("Are you sure?"))?;
+//! # Ok(()) }
 //! ```
 
 #[cfg(test)]

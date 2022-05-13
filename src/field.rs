@@ -129,13 +129,12 @@ impl<'a> Default for Format<'a> {
 /// For a make-license CLI program for example, you can use it like below:
 ///
 /// ```no_run
-/// use ezmenulib::{
-///     prelude::*,
-///     customs::MenuVec,
-/// };
-/// let author: MenuVec<String> = Written::from("Give the author of the license")
-///     .prompt(&mut MenuStream::default())
-///     .unwrap();
+/// use ezmenulib::prelude::*;
+/// 
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let author: Vec<String> = Written::from("Give the authors of the license")
+///     .many_values(&mut MenuStream::default(), ", ")?;
+/// # Ok(()) }
 /// ```
 pub struct Written<'a> {
     msg: &'a str,

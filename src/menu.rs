@@ -383,14 +383,14 @@ where
 /// use ezmenulib::prelude::*;
 /// use std::io::Write;
 ///
-/// # fn main() -> Result<(), Box<dyn std::error::Error> {
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Menu::from(&[
 ///     ("Alice", Kind::Quit),
 ///     ("Bob", Kind::Quit),
 ///     ("Charlie", Kind::Quit),
 ///     ("SubMenu", Kind::Parent(&[
-///         ("Foo", Kind::Map(|s| Ok(s.write_str("foo")?))),
-///         ("Bar", Kind::Map(|s| Ok(s.write_str("bar")?))),
+///         ("Foo", Kind::Map(|s| Ok(writeln!(s, "foo")?))),
+///         ("Bar", Kind::Map(|s| Ok(writeln!(s, "bar")?))),
 ///         ("Go back!", Kind::Back(1)),
 ///     ])),
 /// ])
