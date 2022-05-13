@@ -48,6 +48,9 @@ pub fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<St
     Ok(out.trim().to_owned())
 }
 
+/// Prompts the user to enter an index to select a value among the available values.
+/// 
+/// The available values are in theory printed before calling this function.
 pub fn select<R: BufRead, W: Write>(
     stream: &mut MenuStream<R, W>,
     suffix: &str,

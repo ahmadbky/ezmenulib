@@ -35,12 +35,7 @@ macro_rules! impl_fmt {
             /// by the `r` specification of `prefix`.
             pub(crate) fn merged(&self, r: &Format<'a>) -> Self {
                 Self {$(
-                    $i: {
-                        match self.$i == DEFAULT_FMT.$i {
-                            true => r.$i,
-                            false => self.$i,
-                        }
-                    },
+                    $i: if self.$i == DEFAULT_FMT.$i { r.$i } else { self.$i },
                 )*}
             }
 

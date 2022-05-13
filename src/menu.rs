@@ -435,10 +435,7 @@ impl<R, W> Display for Menu<'_, R, W> {
         // Fields
         // The chip representation is managed by the field itself.
         for (i, field) in self.fields.iter().enumerate() {
-            write!(f, "{}", i + 1)?;
-            f.write_str(self.fmt.chip)?;
-            f.write_str(field.0)?;
-            f.write_str("\n")?;
+            writeln!(f, "{}{}{}", i + 1, self.fmt.chip, field.0)?;
         }
 
         Ok(())
