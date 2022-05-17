@@ -13,7 +13,7 @@
 //!
 //! If you want to use the derive Menu macro,
 //! you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
-//! This crate may however contain features that are not available on the ezmenu crate.
+//! This crate may however contain features that are not yet available on the ezmenu crate.
 
 #![warn(missing_docs, missing_copy_implementations, unused_allocation)]
 
@@ -35,8 +35,8 @@ pub mod prelude {
 use crate::field::Format;
 use std::env::VarError;
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::{fmt, io};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::io;
 
 pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     prefix: "--> ",
