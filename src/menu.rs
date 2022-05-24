@@ -8,7 +8,7 @@ mod stream;
 pub use crate::menu::stream::MenuStream;
 use crate::menu::stream::Stream;
 use crate::prelude::*;
-use crate::utils::select;
+use crate::utils::{check_fields, select};
 
 use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
@@ -22,7 +22,7 @@ pub type In = BufReader<Stdin>;
 pub type Out = Stdout;
 
 /// Used to retrieve the stream from a container.
-pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
+pub trait Streamable<'a, T> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     fn take_stream(self) -> MenuStream<'a, R, W>;
 
@@ -30,27 +30,25 @@ pub trait Streamable<'a, R: 'a, W: 'a>: Sized {
     ///
     /// # Panics
     ///
-    /// If the `Streamable::take_stream` method panics at runtime,
-    /// then this method will also panic at runtime.
-    fn take_io(self) -> (R, W) {
-        self.take_stream().retrieve()
-    }
+    /// Because the stream may not be owned by the container, this function may panic
+    /// at runtime, because it attempts to retrieve the ownership of the stream it does not own.
+    fn take_stream(self) -> T;
 
     /// Returns a reference to the stream the container uses.
-    fn get_stream(&self) -> &MenuStream<'a, R, W>;
+    fn get_stream(&self) -> &T;
 
     /// Returns a mutable reference to the stream the container uses.
-    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W>;
+    fn get_mut_stream(&mut self) -> &mut T;
 }
 
-trait RefStream<'a, T, R, W>: Sized {
-    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, arg: T) -> Self;
+trait RefStream<'a, S: 'a, Arg>: Sized {
+    fn new(stream: Stream<'a, S>, arg: Arg) -> Self;
 
-    fn borrowed(stream: &'a mut MenuStream<'a, R, W>, arg: T) -> Self {
+    fn borrowed(stream: &'a mut S, arg: Arg) -> Self {
         Self::new(Stream::Borrowed(stream), arg)
     }
 
-    fn owned(stream: MenuStream<'a, R, W>, arg: T) -> Self {
+    fn owned(stream: S, arg: Arg) -> Self {
         Self::new(Stream::Owned(stream), arg)
     }
 }
@@ -159,7 +157,7 @@ impl<'a> From<Format<'a>> for Values<'a> {
     }
 }
 
-impl<'a, R, W> RefStream<'a, Format<'a>, R, W> for Values<'a, R, W> {
+impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
     fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
         Self { fmt, stream }
     }
@@ -177,7 +175,7 @@ impl<'a, R, W> Values<'a, R, W> {
     }
 }
 
-impl<'a, R, W> Streamable<'a, R, W> for Values<'a, R, W> {
+impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for Values<'a, R, W> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
