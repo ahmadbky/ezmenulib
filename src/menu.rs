@@ -5,6 +5,13 @@ mod tests;
 
 mod stream;
 
+#[cfg(feature = "i-tui")]
+mod tui_run;
+pub use tui_run::*;
+
+#[cfg(feature = "i-cursive")]
+use cursive::View;
+
 pub use crate::menu::stream::MenuStream;
 use crate::menu::stream::Stream;
 use crate::prelude::*;
@@ -24,9 +31,6 @@ pub type Out = Stdout;
 /// Used to retrieve the stream from a container.
 pub trait Streamable<'a, T> {
     /// Returns the ownership of the stream it contains, consuming `self`.
-    fn take_stream(self) -> MenuStream<'a, R, W>;
-
-    /// Returns the ownership of the reader and writer, consuming `self`.
     ///
     /// # Panics
     ///
@@ -504,6 +508,13 @@ where
     /// matching the selected field [kind](Kind).
     pub fn run(&mut self) -> MenuResult {
         run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
+    }
+}
+
+#[cfg(feature = "i-cursive")]
+impl<R, W> View for RawMenu<'static, R, W> {
+    fn draw(&self, _printer: &cursive::Printer) {
+        todo!()
     }
 }
 

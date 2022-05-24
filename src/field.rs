@@ -3,6 +3,11 @@
 #[cfg(test)]
 mod tests;
 
+use tui::{
+    backend::{Backend, CrosstermBackend},
+    Terminal,
+};
+
 use crate::prelude::*;
 use crate::utils::*;
 use crate::DEFAULT_FMT;
@@ -959,5 +964,22 @@ pub enum Kind<'a, R = In, W = Out> {
     /// the current level if the index is at `0` when the user will select the field.
     Back(usize),
     /// Closes all the nested menus to the top when the user selected the field.
+    Quit,
+}
+
+#[cfg(feature = "i-tui")]
+pub type TuiField<'a, B = CrosstermBackend<Out>> = (&'a str, TuiKind<'a, B>);
+
+#[cfg(feature = "i-tui")]
+pub type TuiFields<'a, B = CrosstermBackend<Out>> = &'a [TuiField<'a, B>];
+
+#[cfg(feature = "i-tui")]
+pub type TuiBinding<B> = fn(&mut Terminal<B>) -> MenuResult;
+
+#[cfg(feature = "i-tui")]
+pub enum TuiKind<'a, B: Backend = CrosstermBackend<Out>> {
+    Map(TuiBinding<B>),
+    Parent(TuiFields<'a, B>),
+    Back(usize),
     Quit,
 }
