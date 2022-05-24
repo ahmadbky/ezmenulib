@@ -18,7 +18,7 @@ fn lastname(s: &mut MenuStream) -> MenuResult {
 }
 
 fn main() {
-    Menu::from(&[
+    RawMenu::from(&[
         ("Play", Kind::Map(playing)),
         (
             "Settings",

@@ -130,7 +130,7 @@ impl<'a> Default for Format<'a> {
 ///
 /// ```no_run
 /// use ezmenulib::prelude::*;
-/// 
+///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let author: Vec<String> = Written::from("Give the authors of the license")
 ///     .many_values(&mut MenuStream::default(), ", ")?;
@@ -747,9 +747,7 @@ where
 
 impl<'a, T, const N: usize> Selected<'a, T, N> {
     fn inner_new(msg: &'a str, fields: [(&'a str, T); N], default: Option<usize>) -> Self {
-        if fields.is_empty() {
-            panic!("empty fields for the selectable values");
-        }
+        check_fields(fields.as_ref());
 
         Self {
             fmt: Default::default(),

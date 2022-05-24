@@ -49,7 +49,7 @@ pub fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<St
 }
 
 /// Prompts the user to enter an index to select a value among the available values.
-/// 
+///
 /// The available values are in theory printed before calling this function.
 pub fn select<R: BufRead, W: Write>(
     stream: &mut MenuStream<R, W>,
@@ -61,4 +61,10 @@ pub fn select<R: BufRead, W: Write>(
         Ok(i) if i >= 1 && i <= max => Some(i - 1),
         _ => None,
     })
+}
+
+pub fn check_fields<T>(fields: &[T]) {
+    if fields.is_empty() {
+        panic!("empty fields for the selectable values");
+    }
 }

@@ -397,7 +397,7 @@ where
 /// .run()?;
 /// # Ok(()) }
 /// ```
-pub struct Menu<'a, R = In, W = Out> {
+pub struct RawMenu<'a, R = In, W = Out> {
     /// The global format of the menu.
     pub fmt: Format<'a>,
     title: Option<&'a str>,
@@ -405,7 +405,7 @@ pub struct Menu<'a, R = In, W = Out> {
     stream: Stream<'a, MenuStream<'a, R, W>>,
 }
 
-impl<'a, R, W> Streamable<'a, R, W> for Menu<'a, R, W> {
+impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
     /// Returns the ownership of the stream the menu contains, consuming `self`.
     ///
     /// # Panics
@@ -425,7 +425,7 @@ impl<'a, R, W> Streamable<'a, R, W> for Menu<'a, R, W> {
     }
 }
 
-impl<R, W> Display for Menu<'_, R, W> {
+impl<R, W> Display for RawMenu<'_, R, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Title
         if let Some(title) = self.title {
@@ -442,20 +442,22 @@ impl<R, W> Display for Menu<'_, R, W> {
     }
 }
 
-impl<'a> From<Fields<'a>> for Menu<'a> {
+impl<'a> From<Fields<'a>> for RawMenu<'a> {
     fn from(fields: Fields<'a>) -> Self {
         Self::new_owned(MenuStream::default(), fields)
     }
 }
 
-impl<'a, const N: usize> From<&'a [Field<'a>; N]> for Menu<'a> {
+impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
     fn from(fields: &'a [Field<'a>; N]) -> Self {
         Self::from(fields.as_ref())
     }
 }
 
-impl<'a, R, W> RefStream<'a, Fields<'a, R, W>, R, W> for Menu<'a, R, W> {
+impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
     fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+        check_fields(fields);
+
         Self {
             title: None,
             fmt: Format::default(),
@@ -465,7 +467,7 @@ impl<'a, R, W> RefStream<'a, Fields<'a, R, W>, R, W> for Menu<'a, R, W> {
     }
 }
 
-impl<'a, R, W> Menu<'a, R, W> {
+impl<'a, R, W> RawMenu<'a, R, W> {
     /// Creates a menu with an owned stream and its fields.
     pub fn new_owned(stream: MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
         Self::owned(stream, fields)
@@ -490,7 +492,7 @@ impl<'a, R, W> Menu<'a, R, W> {
     }
 }
 
-impl<'a, R, W> Menu<'a, R, W>
+impl<'a, R, W> RawMenu<'a, R, W>
 where
     R: BufRead,
     W: Write,
