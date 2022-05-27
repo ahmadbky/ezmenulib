@@ -5,11 +5,11 @@ mod tests;
 
 mod stream;
 
-#[cfg(feature = "i-tui")]
-mod tui_run;
-pub use tui_run::*;
+#[cfg(feature = "tui")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
+pub mod tui_run;
 
-#[cfg(feature = "i-cursive")]
+#[cfg(feature = "cursive")]
 use cursive::View;
 
 pub use crate::menu::stream::MenuStream;
@@ -45,7 +45,7 @@ pub trait Streamable<'a, T> {
     fn get_mut_stream(&mut self) -> &mut T;
 }
 
-trait RefStream<'a, S: 'a, Arg>: Sized {
+pub trait RefStream<'a, S: 'a, Arg>: Sized {
     fn new(stream: Stream<'a, S>, arg: Arg) -> Self;
 
     fn borrowed(stream: &'a mut S, arg: Arg) -> Self {
@@ -446,7 +446,7 @@ impl<R, W> Display for RawMenu<'_, R, W> {
 
 impl<'a> From<Fields<'a>> for RawMenu<'a> {
     fn from(fields: Fields<'a>) -> Self {
-        Self::new_owned(MenuStream::default(), fields)
+        Self::owned(MenuStream::default(), fields)
     }
 }
 
@@ -470,16 +470,6 @@ impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu
 }
 
 impl<'a, R, W> RawMenu<'a, R, W> {
-    /// Creates a menu with an owned stream and its fields.
-    pub fn new_owned(stream: MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
-        Self::owned(stream, fields)
-    }
-
-    /// Creates a menu with a borrowed stream and its fields.
-    pub fn new_borrowed(stream: &'a mut MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
-        Self::borrowed(stream, fields)
-    }
-
     /// Defines the global formatting applied to all the fields the menu displays.
     pub fn format(mut self, fmt: Format<'a>) -> Self {
         self.fmt = fmt;
@@ -511,7 +501,8 @@ where
     }
 }
 
-#[cfg(feature = "i-cursive")]
+#[cfg(feature = "cursive")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "cursive")))]
 impl<R, W> View for RawMenu<'static, R, W> {
     fn draw(&self, _printer: &cursive::Printer) {
         todo!()

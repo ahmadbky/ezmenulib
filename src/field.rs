@@ -3,10 +3,10 @@
 #[cfg(test)]
 mod tests;
 
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    Terminal,
-};
+#[cfg(feature = "tui")]
+use crate::menu::tui_run::TuiBackend;
+#[cfg(feature = "tui")]
+use tui::{backend::Backend, Terminal};
 
 use crate::prelude::*;
 use crate::utils::*;
@@ -950,7 +950,7 @@ pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 /// This function is called right after the user selected the corresponding field.
 ///
 /// See [`Kind::Map`] for more information.
-pub type Binding<R, W> = fn(&mut MenuStream<R, W>) -> MenuResult;
+pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
@@ -967,17 +967,21 @@ pub enum Kind<'a, R = In, W = Out> {
     Quit,
 }
 
-#[cfg(feature = "i-tui")]
-pub type TuiField<'a, B = CrosstermBackend<Out>> = (&'a str, TuiKind<'a, B>);
+#[cfg(feature = "tui")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
+pub type TuiField<'a, B = TuiBackend> = (&'a str, TuiKind<'a, B>);
 
-#[cfg(feature = "i-tui")]
-pub type TuiFields<'a, B = CrosstermBackend<Out>> = &'a [TuiField<'a, B>];
+#[cfg(feature = "tui")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
+pub type TuiFields<'a, B = TuiBackend> = &'a [TuiField<'a, B>];
 
-#[cfg(feature = "i-tui")]
-pub type TuiBinding<B> = fn(&mut Terminal<B>) -> MenuResult;
+#[cfg(feature = "tui")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
+pub type TuiBinding<B = TuiBackend> = fn(&mut Terminal<B>) -> MenuResult;
 
-#[cfg(feature = "i-tui")]
-pub enum TuiKind<'a, B: Backend = CrosstermBackend<Out>> {
+#[cfg(feature = "tui")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
+pub enum TuiKind<'a, B: Backend = TuiBackend> {
     Map(TuiBinding<B>),
     Parent(TuiFields<'a, B>),
     Back(usize),

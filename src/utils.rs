@@ -63,6 +63,7 @@ pub fn select<R: BufRead, W: Write>(
     })
 }
 
+/// Checks that the menu fields are not empty at runtime.
 pub fn check_fields<T>(fields: &[T]) {
     if fields.is_empty() {
         panic!("empty fields for the selectable values");

@@ -1,33 +1,46 @@
-use crate::prelude::*;
-use crossterm::event::{
-    read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
-};
-use crossterm::execute;
-use crossterm::terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use std::io::{stdout, Write};
-use std::ops::{Deref, DerefMut};
-use tui::backend::CrosstermBackend;
-use tui::style::{Color, Modifier, Style};
+mod event;
+pub mod utils;
 
-use tui::buffer::Buffer;
-use tui::layout::{Alignment, Rect};
-use tui::widgets::{Block, Borders, Widget};
-use tui::{backend::Backend, Terminal};
+use crate::prelude::*;
+use std::io::{stdin, Read, Stdin};
+use std::ops::{Deref, DerefMut};
+
+use tui::{
+    backend::Backend,
+    buffer::Buffer,
+    layout::{Alignment, Rect},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Widget},
+    Terminal,
+};
+
+#[cfg(feature = "crossterm")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "crossterm")))]
+pub type TuiBackend<W = Out> = tui::backend::CrosstermBackend<W>;
+
+#[cfg(feature = "termion")]
+#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "termion")))]
+pub type TuiBackend<W = Out> =
+    tui::backend::TermionBackend<termion::input::MouseTerminal<termion::raw::RawTerminal<W>>>;
+
+use self::event::{Event, KeyEvent};
+use self::utils::{restore_terminal, setup_terminal};
 
 use super::stream::Stream;
 use super::RefStream;
 
-type FieldStyle = (Style, Color);
+pub type FieldStyle = (Style, Color);
 
-pub struct TuiMenu<'a, B: Backend = CrosstermBackend<Out>> {
+pub struct TuiMenu<'a, R = Stdin, B: Backend = TuiBackend> {
     block: Block<'a>,
-    fields: TuiFields<'a, B>,
     s_style: FieldStyle,
     f_style: FieldStyle,
+    fields: TuiFields<'a, B>,
     term: Stream<'a, Terminal<B>>,
+    reader: fn() -> R,
 }
 
-impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
+impl<'a, R, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, R, B> {
     fn take_stream(self) -> Terminal<B> {
         self.term.retrieve()
     }
@@ -41,7 +54,7 @@ impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
     }
 }
 
-impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
+impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, Stdin, B> {
     fn new(term: Stream<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
         Self {
             block: Block::default()
@@ -56,6 +69,7 @@ impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a
             f_style: (Style::default().fg(Color::Black), Color::White),
             fields,
             term,
+            reader: stdin,
         }
     }
 }
@@ -64,14 +78,7 @@ impl<'a> TryFrom<TuiFields<'a>> for TuiMenu<'a> {
     type Error = MenuError;
 
     fn try_from(fields: TuiFields<'a>) -> MenuResult<Self> {
-        // Setup terminal
-        enable_raw_mode()?;
-        let mut stdout = stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-        let backend = CrosstermBackend::new(stdout);
-        let term = Terminal::new(backend)?;
-
-        Ok(Self::new_owned(term, fields))
+        Ok(Self::owned(setup_terminal()?, fields))
     }
 }
 
@@ -83,15 +90,7 @@ impl<'a, const N: usize> TryFrom<&'a [TuiField<'a>; N]> for TuiMenu<'a> {
     }
 }
 
-impl<'a, B: Backend> TuiMenu<'a, B> {
-    pub fn new_owned(term: Terminal<B>, fields: TuiFields<'a, B>) -> Self {
-        Self::owned(term, fields)
-    }
-
-    pub fn new_borrowed(term: &'a mut Terminal<B>, fields: TuiFields<'a, B>) -> Self {
-        Self::borrowed(term, fields)
-    }
-
+impl<'a, R, B: Backend> TuiMenu<'a, R, B> {
     pub fn selected_style(mut self, style: Style) -> Self {
         self.s_style.0 = style;
         self
@@ -116,7 +115,13 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
         self.block = b;
         self
     }
+}
 
+impl<'a, R, B> TuiMenu<'a, R, B>
+where
+    R: Read,
+    B: Backend,
+{
     pub fn run(&mut self) -> MenuResult {
         self.run_with(self.term.size()?)
     }
@@ -128,6 +133,7 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
                 area,
                 s_style: &self.s_style,
                 f_style: &self.f_style,
+                reader: self.reader,
             },
             &self.block,
             self.fields,
@@ -136,18 +142,9 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
     }
 }
 
-impl<'a, B> TuiMenu<'a, B>
-where
-    B: Backend + Write,
-{
+impl<'a, R> TuiMenu<'a, R, TuiBackend> {
     pub fn restore_term(&mut self) -> MenuResult {
-        execute!(
-            self.term.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture,
-        )?;
-        self.term.show_cursor()?;
-        Ok(())
+        restore_terminal(self.term.deref_mut()).map_err(MenuError::from)
     }
 }
 
@@ -176,19 +173,20 @@ impl<'a> Widget for MenuWidget<'a> {
     }
 }
 
-struct RunParams<'a, B: Backend> {
+struct RunParams<'a, B: Backend, R> {
     term: &'a mut Terminal<B>,
     area: Rect,
     s_style: &'a FieldStyle,
     f_style: &'a FieldStyle,
+    reader: fn() -> R,
 }
 
-fn run_with<B: Backend>(
-    params: &mut RunParams<B>,
+fn run_with<B: Backend, R: Read>(
+    params: &mut RunParams<B, R>,
     block: &Block,
     fields: TuiFields<B>,
 ) -> MenuResult<Option<usize>> {
-    let mut selected = 0usize;
+    let mut selected = 0;
 
     loop {
         // The messages displayed
@@ -207,15 +205,14 @@ fn run_with<B: Backend>(
             );
         })?;
 
-        if let Event::Key(KeyEvent { code, modifiers }) = read()? {
-            match code {
-                KeyCode::Char('q') => return Ok(None),
-                KeyCode::Char('c') if modifiers == KeyModifiers::CONTROL => return Ok(None),
-                KeyCode::Up | KeyCode::Left => {
+        if let Event::Key(k) = event::read((params.reader)())? {
+            match k {
+                KeyEvent::Char('q') | KeyEvent::Ctrl('c') => return Ok(None),
+                KeyEvent::Up | KeyEvent::Left => {
                     selected = selected.checked_sub(1).unwrap_or(fields.len() - 1);
                     continue;
                 }
-                KeyCode::Down | KeyCode::Right => {
+                KeyEvent::Down | KeyEvent::Right => {
                     selected = if selected == fields.len() - 1 {
                         0
                     } else {
@@ -223,10 +220,13 @@ fn run_with<B: Backend>(
                     };
                     continue;
                 }
-                KeyCode::Enter => {
+                KeyEvent::Enter => {
                     let (msg, kind) = &fields[selected];
                     match kind {
-                        TuiKind::Map(b) => return b(params.term).map(|_| None),
+                        TuiKind::Map(b) => {
+                            b(params.term)?;
+                            return Ok(None);
+                        }
                         TuiKind::Parent(fields) => {
                             match run_with(params, &block.clone().title(*msg), fields)? {
                                 None => return Ok(None),

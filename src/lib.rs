@@ -17,6 +17,11 @@
 
 #![warn(missing_docs, missing_copy_implementations, unused_allocation)]
 
+#[cfg(all(feature = "crossterm", feature = "termion"))]
+compile_error!(
+    "backend features \"crossterm\" and \"termion\" cannot be enabled at the same time."
+);
+
 pub mod customs;
 pub mod field;
 pub mod menu;

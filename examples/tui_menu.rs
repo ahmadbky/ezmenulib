@@ -1,8 +1,4 @@
-use ezmenulib::prelude::*;
-use tui::{
-    style::{Color, Style},
-    widgets::{Block, BorderType, Borders},
-};
+use ezmenulib::{menu::tui_run::TuiMenu, prelude::*};
 
 fn main() -> MenuResult {
     let mut menu = TuiMenu::try_from(&[
@@ -16,15 +12,10 @@ fn main() -> MenuResult {
                 ("go back", TuiKind::Back(1)),
             ]),
         ),
-    ])?
-    .with_block(
-        Block::default()
-            .title("Hey")
-            .borders(Borders::all())
-            .border_type(BorderType::Double)
-            .border_style(Style::default().fg(Color::Green)),
-    );
+    ])?;
 
     menu.run()?;
-    menu.restore_term()
+    menu.restore_term()?;
+
+    Ok(())
 }

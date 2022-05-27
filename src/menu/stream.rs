@@ -16,7 +16,7 @@ macro_rules! map_impl {
     )*};
 }
 
-pub(super) enum Stream<'a, T> {
+pub enum Stream<'a, T> {
     Owned(T),
     Borrowed(&'a mut T),
 }
