@@ -3,11 +3,6 @@
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "tui")]
-use crate::menu::tui_run::TuiBackend;
-#[cfg(feature = "tui")]
-use tui::{backend::Backend, Terminal};
-
 use crate::prelude::*;
 use crate::utils::*;
 use crate::DEFAULT_FMT;
@@ -964,26 +959,5 @@ pub enum Kind<'a, R = In, W = Out> {
     /// the current level if the index is at `0` when the user will select the field.
     Back(usize),
     /// Closes all the nested menus to the top when the user selected the field.
-    Quit,
-}
-
-#[cfg(feature = "tui")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
-pub type TuiField<'a, B = TuiBackend> = (&'a str, TuiKind<'a, B>);
-
-#[cfg(feature = "tui")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
-pub type TuiFields<'a, B = TuiBackend> = &'a [TuiField<'a, B>];
-
-#[cfg(feature = "tui")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
-pub type TuiBinding<B = TuiBackend> = fn(&mut Terminal<B>) -> MenuResult;
-
-#[cfg(feature = "tui")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
-pub enum TuiKind<'a, B: Backend = TuiBackend> {
-    Map(TuiBinding<B>),
-    Parent(TuiFields<'a, B>),
-    Back(usize),
     Quit,
 }

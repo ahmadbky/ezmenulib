@@ -1,9 +1,9 @@
 mod event;
-pub mod utils;
 
-use crate::prelude::*;
-use std::io::{stdin, Read, Stdin};
-use std::ops::{Deref, DerefMut};
+use std::{
+    io::{self, stdout},
+    ops::{Deref, DerefMut},
+};
 
 use tui::{
     backend::Backend,
@@ -14,33 +14,54 @@ use tui::{
     Terminal,
 };
 
-#[cfg(feature = "crossterm")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "crossterm")))]
-pub type TuiBackend<W = Out> = tui::backend::CrosstermBackend<W>;
-
-#[cfg(feature = "termion")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "termion")))]
-pub type TuiBackend<W = Out> =
-    tui::backend::TermionBackend<termion::input::MouseTerminal<termion::raw::RawTerminal<W>>>;
+use crate::{
+    menu::{Object, RefStream, Streamable},
+    MenuError, MenuResult,
+};
 
 use self::event::{Event, KeyEvent};
-use self::utils::{restore_terminal, setup_terminal};
 
-use super::stream::Stream;
-use super::RefStream;
+#[cfg(feature = "crossterm")]
+#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
+pub mod crossterm;
+#[cfg(feature = "crossterm")]
+use self::crossterm::{
+    read as ct_read, restore_terminal as ct_restore_terminal, setup_terminal as ct_setup_terminal,
+    Crossterm,
+};
+#[cfg(feature = "crossterm")]
+use tui::backend::CrosstermBackend;
+
+#[cfg(feature = "termion")]
+#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
+pub mod termion;
+#[cfg(feature = "termion")]
+use self::termion::{
+    read as t_read, restore_terminal as t_restore_terminal, setup_terminal as t_setup_terminal,
+    Termion,
+};
 
 pub type FieldStyle = (Style, Color);
 
-pub struct TuiMenu<'a, R = Stdin, B: Backend = TuiBackend> {
+type Reader = fn() -> io::Result<Event>;
+
+#[cfg(feature = "crossterm")]
+#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
+pub type CTMenu<'a> = TuiMenu<'a, Crossterm>;
+
+#[cfg(feature = "termion")]
+#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
+pub type TMenu<'a> = TuiMenu<'a, Termion>;
+
+pub struct TuiMenu<'a, B: Backend> {
     block: Block<'a>,
     s_style: FieldStyle,
     f_style: FieldStyle,
     fields: TuiFields<'a, B>,
-    term: Stream<'a, Terminal<B>>,
-    reader: fn() -> R,
+    term: Object<'a, Terminal<B>>,
 }
 
-impl<'a, R, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, R, B> {
+impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
     fn take_stream(self) -> Terminal<B> {
         self.term.retrieve()
     }
@@ -54,8 +75,8 @@ impl<'a, R, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, R, B> {
     }
 }
 
-impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, Stdin, B> {
-    fn new(term: Stream<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
+impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
+    fn new(term: Object<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
         Self {
             block: Block::default()
                 .borders(Borders::all())
@@ -69,28 +90,54 @@ impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a
             f_style: (Style::default().fg(Color::Black), Color::White),
             fields,
             term,
-            reader: stdin,
         }
     }
 }
 
-impl<'a> TryFrom<TuiFields<'a>> for TuiMenu<'a> {
-    type Error = MenuError;
+#[cfg(feature = "crossterm")]
+#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
+impl<'a, const N: usize> TryFrom<&'a [TuiField<'a, Crossterm>; N]> for TuiMenu<'a, Crossterm> {
+    type Error = <Self as TryFrom<TuiFields<'a, Crossterm>>>::Error;
 
-    fn try_from(fields: TuiFields<'a>) -> MenuResult<Self> {
-        Ok(Self::owned(setup_terminal()?, fields))
-    }
-}
-
-impl<'a, const N: usize> TryFrom<&'a [TuiField<'a>; N]> for TuiMenu<'a> {
-    type Error = MenuError;
-
-    fn try_from(fields: &'a [TuiField<'a>; N]) -> MenuResult<Self> {
+    fn try_from(fields: &'a [TuiField<'a, Crossterm>; N]) -> Result<Self, Self::Error> {
         Self::try_from(fields.as_ref())
     }
 }
 
-impl<'a, R, B: Backend> TuiMenu<'a, R, B> {
+#[cfg(feature = "crossterm")]
+#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
+impl<'a> TryFrom<TuiFields<'a, Crossterm>> for TuiMenu<'a, Crossterm> {
+    type Error = MenuError;
+
+    fn try_from(fields: TuiFields<'a, Crossterm>) -> Result<Self, Self::Error> {
+        Ok(Self::owned(
+            Terminal::new(CrosstermBackend::new(stdout()))?,
+            fields,
+        ))
+    }
+}
+
+#[cfg(feature = "termion")]
+#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
+impl<'a, const N: usize> TryFrom<&'a [TuiField<'a, Termion>; N]> for TuiMenu<'a, Termion> {
+    type Error = <Self as TryFrom<TuiFields<'a, Termion>>>::Error;
+
+    fn try_from(fields: &'a [TuiField<'a, Termion>; N]) -> Result<Self, Self::Error> {
+        Self::try_from(fields.as_ref())
+    }
+}
+
+#[cfg(feature = "termion")]
+#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
+impl<'a> TryFrom<TuiFields<'a, Termion>> for TuiMenu<'a, Termion> {
+    type Error = MenuError;
+
+    fn try_from(fields: TuiFields<'a, Termion>) -> Result<Self, Self::Error> {
+        Ok(Self::owned(Terminal::new(Termion::new()?)?, fields))
+    }
+}
+
+impl<'a, B: Backend> TuiMenu<'a, B> {
     pub fn selected_style(mut self, style: Style) -> Self {
         self.s_style.0 = style;
         self
@@ -115,25 +162,15 @@ impl<'a, R, B: Backend> TuiMenu<'a, R, B> {
         self.block = b;
         self
     }
-}
 
-impl<'a, R, B> TuiMenu<'a, R, B>
-where
-    R: Read,
-    B: Backend,
-{
-    pub fn run(&mut self) -> MenuResult {
-        self.run_with(self.term.size()?)
-    }
-
-    pub fn run_with(&mut self, area: Rect) -> MenuResult {
+    fn run_with_read(&mut self, read_fn: Reader, area: Rect) -> MenuResult {
         run_with(
             &mut RunParams {
                 term: self.term.deref_mut(),
                 area,
                 s_style: &self.s_style,
                 f_style: &self.f_style,
-                reader: self.reader,
+                read_fn,
             },
             &self.block,
             self.fields,
@@ -142,9 +179,37 @@ where
     }
 }
 
-impl<'a, R> TuiMenu<'a, R, TuiBackend> {
-    pub fn restore_term(&mut self) -> MenuResult {
-        restore_terminal(self.term.deref_mut()).map_err(MenuError::from)
+#[cfg(feature = "crossterm")]
+#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
+impl<'a> TuiMenu<'a, Crossterm> {
+    pub fn run(&mut self) -> MenuResult {
+        self.run_with(self.term.size()?)
+    }
+
+    pub fn run_with(&mut self, area: Rect) -> MenuResult {
+        ct_setup_terminal(self.term.deref_mut())?;
+        self.run_with_read(ct_read, area)
+    }
+
+    pub fn close(&mut self) -> MenuResult {
+        ct_restore_terminal(self.term.deref_mut()).map_err(MenuError::from)
+    }
+}
+
+#[cfg(feature = "termion")]
+#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
+impl<'a> TuiMenu<'a, Termion> {
+    pub fn run(&mut self) -> MenuResult {
+        self.run_with(self.term.size()?)
+    }
+
+    pub fn run_with(&mut self, area: Rect) -> MenuResult {
+        t_setup_terminal(self.term.deref_mut())?;
+        self.run_with_read(t_read, area)
+    }
+
+    pub fn close(&mut self) -> MenuResult {
+        t_restore_terminal(&mut self.term).map_err(MenuError::from)
     }
 }
 
@@ -157,7 +222,7 @@ struct MenuWidget<'a> {
 }
 
 impl<'a> Widget for MenuWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(self, area @ Rect { x, y, width, .. }: Rect, buf: &mut Buffer) {
         self.block.render(area, buf);
 
         for (i, msg) in self.fields.into_iter().enumerate() {
@@ -167,22 +232,22 @@ impl<'a> Widget for MenuWidget<'a> {
                 (self.f_style.0, Style::default().bg(self.f_style.1))
             };
 
-            buf.set_stringn(2, 1 + i as u16, msg, area.width as usize - 3, fg_style);
-            buf.set_style(Rect::new(1, 1 + i as u16, area.width - 2, 1), bg_style);
+            buf.set_stringn(x + 2, y + 1 + i as u16, msg, width as usize - 4, fg_style);
+            buf.set_style(Rect::new(x + 1, y + 1 + i as u16, width - 2, 1), bg_style);
         }
     }
 }
 
-struct RunParams<'a, B: Backend, R> {
+struct RunParams<'a, B: Backend> {
     term: &'a mut Terminal<B>,
     area: Rect,
     s_style: &'a FieldStyle,
     f_style: &'a FieldStyle,
-    reader: fn() -> R,
+    read_fn: Reader,
 }
 
-fn run_with<B: Backend, R: Read>(
-    params: &mut RunParams<B, R>,
+fn run_with<B: Backend>(
+    params: &mut RunParams<B>,
     block: &Block,
     fields: TuiFields<B>,
 ) -> MenuResult<Option<usize>> {
@@ -205,7 +270,7 @@ fn run_with<B: Backend, R: Read>(
             );
         })?;
 
-        if let Event::Key(k) = event::read((params.reader)())? {
+        if let Event::Key(k) = (params.read_fn)()? {
             match k {
                 KeyEvent::Char('q') | KeyEvent::Ctrl('c') => return Ok(None),
                 KeyEvent::Up | KeyEvent::Left => {
@@ -243,4 +308,17 @@ fn run_with<B: Backend, R: Read>(
             }
         }
     }
+}
+
+pub type TuiField<'a, B> = (&'a str, TuiKind<'a, B>);
+
+pub type TuiFields<'a, B> = &'a [TuiField<'a, B>];
+
+pub type TuiBinding<B> = fn(&mut Terminal<B>) -> MenuResult;
+
+pub enum TuiKind<'a, B: Backend> {
+    Map(TuiBinding<B>),
+    Parent(TuiFields<'a, B>),
+    Back(usize),
+    Quit,
 }

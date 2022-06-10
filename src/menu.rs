@@ -5,15 +5,7 @@ mod tests;
 
 mod stream;
 
-#[cfg(feature = "tui")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "tui")))]
-pub mod tui_run;
-
-#[cfg(feature = "cursive")]
-use cursive::View;
-
-pub use crate::menu::stream::MenuStream;
-use crate::menu::stream::Stream;
+pub use crate::menu::stream::{MenuStream, Object};
 use crate::prelude::*;
 use crate::utils::{check_fields, select};
 
@@ -498,14 +490,6 @@ where
     /// matching the selected field [kind](Kind).
     pub fn run(&mut self) -> MenuResult {
         run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
-    }
-}
-
-#[cfg(feature = "cursive")]
-#[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "cursive")))]
-impl<R, W> View for RawMenu<'static, R, W> {
-    fn draw(&self, _printer: &cursive::Printer) {
-        todo!()
     }
 }
 

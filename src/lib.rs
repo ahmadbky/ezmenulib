@@ -17,10 +17,9 @@
 
 #![warn(missing_docs, missing_copy_implementations, unused_allocation)]
 
-#[cfg(all(feature = "crossterm", feature = "termion"))]
-compile_error!(
-    "backend features \"crossterm\" and \"termion\" cannot be enabled at the same time."
-);
+#[cfg(all(feature = "tui", any(feature = "crossterm", feature = "termion")))]
+#[cfg_attr(nightly, doc(cfg(feature = "tui")))]
+pub mod tui;
 
 pub mod customs;
 pub mod field;
