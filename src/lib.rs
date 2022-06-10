@@ -49,6 +49,8 @@ pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     show_default: true,
     suffix: ">> ",
     line_brk: true,
+    left_sur: "[",
+    right_sur: "]",
 };
 
 /// The error type used by the menu builder.

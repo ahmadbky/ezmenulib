@@ -502,7 +502,6 @@ where
 /// The function returns a wrapped `Option<usize>`. The index inside corresponds to the current
 /// level of depth of the menu. With recursion, it allows to go back to the indexed depth
 /// level from the current running prompt.
-// FIXME: Replace the recursive function by a regular function.
 fn run_with<R: BufRead, W: Write>(
     // The message/title displayed on the top.
     msg: Option<&str>,
@@ -516,12 +515,16 @@ fn run_with<R: BufRead, W: Write>(
     loop {
         // Title of current selective menu.
         if let Some(s) = msg {
-            writeln!(stream, "{}", s)?;
+            writeln!(stream, "{}{s}", fmt.prefix)?;
         }
 
         // Fields of current selective menu.
-        for (i, (field_msg, _)) in fields.iter().enumerate() {
-            writeln!(stream, "{}{}{}", i + 1, fmt.chip, field_msg)?;
+        for (i, (field_msg, _)) in (1..=fields.len()).zip(fields.iter()) {
+            writeln!(
+                stream,
+                "{}{i}{}{}{field_msg}",
+                fmt.left_sur, fmt.right_sur, fmt.chip
+            )?;
         }
 
         // Gets the message and the field kind selected by the user.

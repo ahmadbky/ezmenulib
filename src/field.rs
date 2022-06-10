@@ -76,6 +76,14 @@ impl_fmt!(
     /// Sets the prefix of the formatting (`"--> "` by default).
     ///
     /// It corresponds to the string slice displayed at the beginning of the field message.
+    left_sur: &'a str,
+    /// Defines the left "surrounding" of the index when displaying a list ("[" by default).
+    ///
+    /// It is displayed between at the beginning of the list field line, before the index.
+    right_sur: &'a str,
+    /// Defines the right "surrounding" of the index when displaying a list ("]" by default).
+    ///
+    /// It is displayed between the index and the chip.
     chip: &'a str,
     /// Defines the chip as marker type for lists (`" - "` by default).
     ///
@@ -914,7 +922,11 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
         f.write_str("\n")?;
 
         for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
-            write!(f, "{}{}{}", i, self.fmt.chip, msg)?;
+            write!(
+                f,
+                "{}{i}{}{}{msg}",
+                self.fmt.left_sur, self.fmt.right_sur, self.fmt.chip
+            )?;
             match self.default {
                 Some(x) if x == i && self.fmt.show_default => f.write_str(" (default)")?,
                 _ => (),

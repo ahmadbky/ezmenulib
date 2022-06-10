@@ -169,9 +169,9 @@ fn optional_written() -> Res {
 fn optional_select() -> Res {
     let sel = Selected::new("amount", [("one", 1), ("two", 2), ("three", 3)]);
     let res = "--> amount (optional)
-1 - one
-2 - two
-3 - three
+[1] - one
+[2] - two
+[3] - three
 >> ";
 
     let output = test_menu! {
@@ -219,7 +219,7 @@ fn select_one_field() -> Res {
 
     Ok(assert_eq!(
         output,
-        "--> select the type\n1 - mit\n>> >> >> >> "
+        "--> select the type\n[1] - mit\n>> >> >> >> "
     ))
 }
 
@@ -254,9 +254,9 @@ fn selectable() -> Res {
     Ok(assert_eq!(
         output,
         "--> select the type
-1 - MIT
-2 - GPL
-3 - BSD
+[1] - MIT
+[2] - GPL
+[3] - BSD
 >> "
     ))
 }
@@ -273,9 +273,9 @@ fn select_default() -> Res {
     Ok(assert_eq!(
         output,
         "--> select the type (optional)
-1 - MIT
-2 - GPL
-3 - BSD
+[1] - MIT
+[2] - GPL
+[3] - BSD
 >> "
     ))
 }
