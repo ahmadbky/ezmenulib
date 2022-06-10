@@ -33,11 +33,13 @@ rustc_version = "0.4.0"
 [features]
 default = []
 expr = ["dep:meval"]
-crossterm = ["dep:crossterm", "tui?/crossterm", "cursive?/crossterm-backend"]
-termion = ["dep:termion", "tui?/termion", "cursive?/termion-backend"]
-ncurses = ["cursive?/ncurses-backend"]
-pancurses = ["cursive?/pancurses-backend"]
-blt = ["cursive?/blt-backend"]
+crossterm = ["dep:crossterm", "tui?/crossterm"]
+termion = ["dep:termion", "tui?/termion"]
+c-crossterm = ["cursive?/crossterm-backend"]
+c-termion = ["cursive?/termion-backend"]
+c-ncurses = ["cursive?/ncurses-backend"]
+c-pancurses = ["cursive?/pancurses-backend"]
+c-blt = ["cursive?/blt-backend"]
 
 [[example]]
 name = "tui_menu"
