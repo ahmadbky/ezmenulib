@@ -71,7 +71,7 @@ Menu::from(&[
 
 This sample code prints the standard menu like above:
 
-```
+```text
 Basic menu
 1 - Play
 2 - Settings
@@ -99,6 +99,8 @@ PLAYING
 You can get values from the user, by asking him to write the value, or to select among valid values. Follow the `gen_license` example, a sample code to get information about a project to generate a license.
 
 ```rust
+use ezmenulib::prelude::*;
+
 #[derive(Debug)]
 enum Type {
     MIT,
@@ -120,10 +122,11 @@ impl Selectable<3> for Type {
 let mut lic = Values::default();
 
 let authors: Vec<String> =
-    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
-let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
-let date: u16 = lic.written(&Written::from("License date").default("2022"))?;
-let ty: Type = lic.selected(Selected::from("Select a license type"))?;
+    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ").unwrap();
+let name: Option<String> = lic.optional_written(&Written::from("Project name")).unwrap();
+let date: u16 =
+    lic.written(&Written::from("License date").default_value("2022")).unwrap();
+let ty: Type = lic.selected(Selected::from("Select a license type")).unwrap();
 
 println!(
     "{:?} License, Copyright (C) {} {}\n{}",
@@ -136,7 +139,7 @@ println!(
 
 This sample code prints the standard menu like above:
 
-```
+```text
 --> Authors (example: Ahmad, ...)
 >> Ahmad Baalbaky, Hello
 --> Project name (optional)
@@ -160,13 +163,16 @@ The library allows you to customize the text format behavior in many ways. The r
 You may remove the line break between the prompt and the suffix before the user input for example:
 
 ```rust
+use ezmenulib::prelude::*;
+
 let name: String = Written::from("Name")
     .format(Format {
         line_brk: false,
         suffix: ": ",
         ..Default::default()
     })
-    .prompt(&mut MenuStream::default())?;
+    .prompt(&mut MenuStream::default())
+    .unwrap();
 ```
 
 The format can be global and inherited by the [`Values`](https://docs.rs/ezmenulib/latest/ezmenulib/menu/struct.Values.html) container on the following prompts ([`Written`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Written.html) and [`Selected`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Selected.html)).
