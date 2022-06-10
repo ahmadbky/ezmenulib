@@ -1,4 +1,4 @@
-mod event;
+pub mod event;
 
 use std::{
     io::{self, stdout},
@@ -59,6 +59,7 @@ pub struct TuiMenu<'a, B: Backend> {
     f_style: FieldStyle,
     fields: TuiFields<'a, B>,
     term: Object<'a, Terminal<B>>,
+    once: bool,
 }
 
 impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
@@ -90,6 +91,7 @@ impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a
             f_style: (Style::default().fg(Color::Black), Color::White),
             fields,
             term,
+            once: false,
         }
     }
 }
@@ -163,6 +165,11 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
         self
     }
 
+    pub fn run_once(mut self, once: bool) -> Self {
+        self.once = once;
+        self
+    }
+
     fn run_with_read(&mut self, read_fn: Reader, area: Rect) -> MenuResult {
         run_with(
             &mut RunParams {
@@ -171,6 +178,7 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
                 s_style: &self.s_style,
                 f_style: &self.f_style,
                 read_fn,
+                once: self.once,
             },
             &self.block,
             self.fields,
@@ -244,6 +252,7 @@ struct RunParams<'a, B: Backend> {
     s_style: &'a FieldStyle,
     f_style: &'a FieldStyle,
     read_fn: Reader,
+    once: bool,
 }
 
 fn run_with<B: Backend>(
@@ -273,33 +282,28 @@ fn run_with<B: Backend>(
         if let Event::Key(k) = (params.read_fn)()? {
             match k {
                 KeyEvent::Char('q') | KeyEvent::Ctrl('c') => return Ok(None),
-                KeyEvent::Up | KeyEvent::Left => {
-                    selected = selected.checked_sub(1).unwrap_or(fields.len() - 1);
-                    continue;
-                }
-                KeyEvent::Down | KeyEvent::Right => {
-                    selected = if selected == fields.len() - 1 {
-                        0
-                    } else {
-                        selected + 1
-                    };
-                    continue;
-                }
+                KeyEvent::Up | KeyEvent::Left if selected == 0 => selected = fields.len() - 1,
+                KeyEvent::Up | KeyEvent::Left => selected -= 1,
+                KeyEvent::Down | KeyEvent::Right if selected == fields.len() - 1 => selected = 0,
+                KeyEvent::Down | KeyEvent::Right => selected += 1,
                 KeyEvent::Enter => {
                     let (msg, kind) = &fields[selected];
                     match kind {
                         TuiKind::Map(b) => {
                             b(params.term)?;
-                            return Ok(None);
+                            if params.once {
+                                return Ok(None);
+                            }
+                            params.term.clear()?;
                         }
                         TuiKind::Parent(fields) => {
                             match run_with(params, &block.clone().title(*msg), fields)? {
                                 None => return Ok(None),
-                                Some(0) => continue,
+                                Some(0) => (),
                                 Some(i) => return Ok(Some(i - 1)),
                             }
                         }
-                        TuiKind::Back(0) => continue,
+                        TuiKind::Back(0) => (),
                         TuiKind::Back(i) => return Ok(Some(i - 1)),
                         TuiKind::Quit => return Ok(None),
                     }
