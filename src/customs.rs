@@ -31,8 +31,8 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 macro_rules! impl_inner {
-    ($name:ident$(<$($generic:ident),*>)?: $ty:ty$(, $meta:meta)?) => {
-        $(#[$meta])?
+    ($name:ident$(<$($generic:ident),*>)?: $ty:ty$(, $meta:meta)*) => {
+        $(#[$meta])*
         impl$(<$($generic),*>)? AsRef<$ty> for $name$(<$($generic),*>)? {
             #[inline]
             fn as_ref(&self) -> &$ty {
@@ -40,7 +40,7 @@ macro_rules! impl_inner {
             }
         }
 
-        $(#[$meta])?
+        $(#[$meta])*
         impl$(<$($generic),*>)? AsMut<$ty> for $name$(<$($generic),*>)?  {
             #[inline]
             fn as_mut(&mut self) -> &mut $ty {
@@ -48,7 +48,7 @@ macro_rules! impl_inner {
             }
         }
 
-        $(#[$meta])?
+        $(#[$meta])*
         impl$(<$($generic),*>)? Deref for $name$(<$($generic),*>)?  {
             type Target = $ty;
 
@@ -58,7 +58,7 @@ macro_rules! impl_inner {
             }
         }
 
-        $(#[$meta])?
+        $(#[$meta])*
         impl$(<$($generic),*>)? DerefMut for $name$(<$($generic),*>)?  {
             #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
@@ -66,7 +66,7 @@ macro_rules! impl_inner {
             }
         }
 
-        $(#[$meta])?
+        $(#[$meta])*
         impl$(<$($generic),*>)? From<$name$(<$($generic),*>)? > for $ty {
             #[inline]
             fn from(t: $name$(<$($generic),*>)?) -> Self {
@@ -127,6 +127,7 @@ impl FromStr for MenuBool {
 /// ```
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 #[cfg(feature = "expr")]
+#[cfg_attr(nightly, doc(cfg(feature = "expr")))]
 pub struct MenuNumber(pub f64);
 
 #[cfg(feature = "expr")]
@@ -137,7 +138,11 @@ impl Display for MenuNumber {
     }
 }
 
-impl_inner!(MenuNumber: f64, cfg(feature = "expr"));
+impl_inner!(
+    MenuNumber: f64,
+    cfg(feature = "expr"),
+    cfg_attr(nightly, doc(cfg(feature = "expr")))
+);
 
 #[cfg(feature = "expr")]
 impl FromStr for MenuNumber {
