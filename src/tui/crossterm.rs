@@ -8,7 +8,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::io::{self};
+use std::io;
 use tui::{backend::CrosstermBackend, Terminal};
 
 pub type Crossterm<W = Out> = CrosstermBackend<W>;
@@ -65,8 +65,14 @@ impl From<CTEvent> for Event {
     }
 }
 
-pub(crate) fn read() -> io::Result<Event> {
+pub fn read() -> io::Result<Event> {
     ct_read().map(Event::from)
+}
+
+pub fn new_terminal() -> io::Result<Terminal<Crossterm>> {
+    let mut term = Terminal::new(Crossterm::new(io::stdout()))?;
+    setup_terminal(&mut term)?;
+    Ok(term)
 }
 
 pub fn setup_terminal(term: &mut Terminal<Crossterm>) -> io::Result<()> {

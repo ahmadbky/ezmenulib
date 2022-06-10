@@ -1,20 +1,20 @@
 use crate::{menu::Out, tui::event::*};
 use std::{
     fmt,
-    io::{self, stdin, stdout, Error, Read, Stdout, Write},
+    io::{self, stdin, stdout, Error, Write},
     ops::{Deref, DerefMut},
 };
 use termion::{
     clear::All,
     cursor::{DetectCursorPos, Goto, Hide, Show},
     event::{Event as TEvent, Key as TKey, MouseButton as TMouseButton, MouseEvent as TMouseEvent},
-    input::{MouseTerminal, TermRead},
+    input::{TermRead},
     raw::{IntoRawMode, RawTerminal},
     screen::{ToAlternateScreen, ToMainScreen},
     terminal_size,
 };
 use tui::{
-    backend::{Backend, TermionBackend},
+    backend::{Backend},
     buffer::Cell,
     layout::Rect,
     style::{Color, Modifier},
@@ -206,11 +206,17 @@ impl From<TEvent> for Event {
     }
 }
 
-pub(crate) fn read() -> io::Result<Event> {
+pub fn read() -> io::Result<Event> {
     for event in stdin().events() {
         return event.map(Event::from);
     }
     Err(Error::last_os_error())
+}
+
+pub fn new_terminal() -> io::Result<Terminal<Termion>> {
+    let mut term = Terminal::new(Termion::new()?)?;
+    setup_terminal(&mut term)?;
+    Ok(term)
 }
 
 pub fn setup_terminal<W: Write>(term: &mut Terminal<Termion<W>>) -> io::Result<()> {
