@@ -16,18 +16,19 @@ macro_rules! map_impl {
     )*};
 }
 
-pub enum Stream<'a, T> {
+#[doc(hidden)]
+pub enum Object<'a, T> {
     Owned(T),
     Borrowed(&'a mut T),
 }
 
-impl<T: Default> Default for Stream<'_, T> {
+impl<T: Default> Default for Object<'_, T> {
     fn default() -> Self {
         Self::Owned(T::default())
     }
 }
 
-impl<T> Stream<'_, T> {
+impl<T> Object<'_, T> {
     pub fn retrieve(self) -> T {
         match self {
             Self::Owned(t) => t,
@@ -36,7 +37,7 @@ impl<T> Stream<'_, T> {
     }
 }
 
-impl<T> Deref for Stream<'_, T> {
+impl<T> Deref for Object<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -47,7 +48,7 @@ impl<T> Deref for Stream<'_, T> {
     }
 }
 
-impl<T> DerefMut for Stream<'_, T> {
+impl<T> DerefMut for Object<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Owned(t) => t,
@@ -116,8 +117,8 @@ impl<T> DerefMut for Stream<'_, T> {
 /// let (input, output) = stream.retrieve();
 /// ```
 pub struct MenuStream<'a, R = super::In, W = super::Out> {
-    reader: Stream<'a, R>,
-    writer: Stream<'a, W>,
+    reader: Object<'a, R>,
+    writer: Object<'a, W>,
 }
 
 impl Default for MenuStream<'_> {
@@ -139,16 +140,16 @@ impl<'a, R, W> MenuStream<'a, R, W> {
     /// Instantiates the stream with a given reader and writer.
     pub fn new(reader: R, writer: W) -> Self {
         Self {
-            reader: Stream::Owned(reader),
-            writer: Stream::Owned(writer),
+            reader: Object::Owned(reader),
+            writer: Object::Owned(writer),
         }
     }
 
     /// Instantiates the stream with a borrowed reader and a borrowed writer.
     pub fn with(reader: &'a mut R, writer: &'a mut W) -> Self {
         Self {
-            reader: Stream::Borrowed(reader),
-            writer: Stream::Borrowed(writer),
+            reader: Object::Borrowed(reader),
+            writer: Object::Borrowed(writer),
         }
     }
 

@@ -38,14 +38,15 @@ pub trait Streamable<'a, T> {
 }
 
 pub trait RefStream<'a, S: 'a, Arg>: Sized {
-    fn new(stream: Stream<'a, S>, arg: Arg) -> Self;
+    #[doc(hidden)]
+    fn new(stream: Object<'a, S>, arg: Arg) -> Self;
 
     fn borrowed(stream: &'a mut S, arg: Arg) -> Self {
-        Self::new(Stream::Borrowed(stream), arg)
+        Self::new(Object::Borrowed(stream), arg)
     }
 
     fn owned(stream: S, arg: Arg) -> Self {
-        Self::new(Stream::Owned(stream), arg)
+        Self::new(Object::Owned(stream), arg)
     }
 }
 
@@ -95,7 +96,7 @@ pub trait RefStream<'a, S: 'a, Arg>: Sized {
 /// let stream = menu.take_stream();
 /// // or:
 /// # let mut menu = Values::default();
-/// let (reader, writer) = menu.take_io();
+/// let (reader, writer) = menu.take_stream().retrieve();
 /// ```
 ///
 /// Giving a mutable reference to the stream to the container:
@@ -109,7 +110,7 @@ pub trait RefStream<'a, S: 'a, Arg>: Sized {
 pub struct Values<'a, R = In, W = Out> {
     /// The global format of the container.
     pub fmt: Format<'a>,
-    stream: Stream<'a, MenuStream<'a, R, W>>,
+    stream: Object<'a, MenuStream<'a, R, W>>,
 }
 
 /// Returns the default container, which corresponds to the
@@ -123,7 +124,7 @@ impl Default for Values<'_> {
     fn default() -> Self {
         Self {
             fmt: Format::default(),
-            stream: Stream::default(),
+            stream: Object::default(),
         }
     }
 }
@@ -154,7 +155,7 @@ impl<'a> From<Format<'a>> for Values<'a> {
 }
 
 impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
-    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
+    fn new(stream: Object<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
         Self { fmt, stream }
     }
 }
@@ -396,7 +397,7 @@ pub struct RawMenu<'a, R = In, W = Out> {
     pub fmt: Format<'a>,
     title: Option<&'a str>,
     fields: Fields<'a, R, W>,
-    stream: Stream<'a, MenuStream<'a, R, W>>,
+    stream: Object<'a, MenuStream<'a, R, W>>,
 }
 
 impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
@@ -449,7 +450,7 @@ impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
 }
 
 impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
-    fn new(stream: Stream<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+    fn new(stream: Object<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
         check_fields(fields);
 
         Self {
