@@ -1,10 +1,7 @@
 <div style="text-align: center;">
 
-# EZMenuLib
+# EZMenuLib &emsp; [![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](./LICENSE) [![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib) [![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
 
-[![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](./LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib)
-[![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
 </div>
 
 Fast designing menus for your Rust CLI programs.
@@ -49,7 +46,7 @@ fn lastnaming(s: &mut MenuStream) -> MenuResult {
     Ok(())
 }
 
-Menu::from(&[
+RawMenu::from(&[
     ("Play", Kind::Map(playing)),
     (
         "Settings",
@@ -66,7 +63,6 @@ Menu::from(&[
 ])
 .title("Basic menu")
 .run()?;
-}
 ```
 
 This sample code prints the standard menu like above:
@@ -122,11 +118,11 @@ impl Selectable<3> for Type {
 let mut lic = Values::default();
 
 let authors: Vec<String> =
-    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ").unwrap();
-let name: Option<String> = lic.optional_written(&Written::from("Project name")).unwrap();
+    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
+let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
 let date: u16 =
-    lic.written(&Written::from("License date").default_value("2022")).unwrap();
-let ty: Type = lic.selected(Selected::from("Select a license type")).unwrap();
+    lic.written(&Written::from("License date").default_value("2022"))?;
+let ty: Type = lic.selected(Selected::from("Select a license type"))?;
 
 println!(
     "{:?} License, Copyright (C) {} {}\n{}",
@@ -171,8 +167,7 @@ let name: String = Written::from("Name")
         suffix: ": ",
         ..Default::default()
     })
-    .prompt(&mut MenuStream::default())
-    .unwrap();
+    .prompt(&mut MenuStream::default())?;
 ```
 
 The format can be global and inherited by the [`Values`](https://docs.rs/ezmenulib/latest/ezmenulib/menu/struct.Values.html) container on the following prompts ([`Written`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Written.html) and [`Selected`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Selected.html)).
