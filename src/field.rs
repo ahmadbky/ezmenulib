@@ -957,12 +957,13 @@ pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 /// This function is called right after the user selected the corresponding field.
 ///
 /// See [`Kind::Map`] for more information.
-pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
+// pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
+type Binding<R, W> = dyn Fn(&mut MenuStream<R, W>) -> MenuResult;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
     /// Maps a function to call right after the user select the field.
-    Map(Binding<R, W>),
+    Map(&'a Binding<R, W>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
     Parent(Fields<'a, R, W>),
     /// Allows the user to go back to the given depth level from the current running prompt.

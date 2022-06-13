@@ -23,7 +23,7 @@ fn first(term: &mut Terminal<CrosstermBackend<Stdout>>) -> MenuResult {
 
 fn main() -> MenuResult {
     let mut menu = TuiMenu::<Crossterm>::try_from(&[
-        ("first", TuiKind::Map(first)),
+        ("first", TuiKind::Map(&first)),
         ("second", TuiKind::Quit),
         (
             "third",

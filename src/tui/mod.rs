@@ -318,10 +318,10 @@ pub type TuiField<'a, B> = (&'a str, TuiKind<'a, B>);
 
 pub type TuiFields<'a, B> = &'a [TuiField<'a, B>];
 
-pub type TuiBinding<B> = fn(&mut Terminal<B>) -> MenuResult;
+pub type TuiBinding<B> = dyn Fn(&mut Terminal<B>) -> MenuResult;
 
 pub enum TuiKind<'a, B: Backend> {
-    Map(TuiBinding<B>),
+    Map(&'a TuiBinding<B>),
     Parent(TuiFields<'a, B>),
     Back(usize),
     Quit,
