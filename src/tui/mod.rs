@@ -1,6 +1,7 @@
 pub mod event;
 
 use std::{
+    fmt,
     io::{self, stdout},
     ops::{Deref, DerefMut},
 };
@@ -53,6 +54,7 @@ pub type CTMenu<'a> = TuiMenu<'a, Crossterm>;
 #[cfg_attr(nightly, doc(cfg(feature = "termion")))]
 pub type TMenu<'a> = TuiMenu<'a, Termion>;
 
+#[derive(Debug)]
 pub struct TuiMenu<'a, B: Backend> {
     block: Block<'a>,
     s_style: FieldStyle,
@@ -325,4 +327,16 @@ pub enum TuiKind<'a, B: Backend> {
     Parent(TuiFields<'a, B>),
     Back(usize),
     Quit,
+}
+
+impl<'a, B: Backend> fmt::Debug for TuiKind<'a, B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Field::")?;
+        match self {
+            Self::Map(_) => f.debug_tuple("Map").finish(),
+            Self::Parent(fields) => f.debug_tuple("Parent").field(fields).finish(),
+            Self::Back(i) => f.debug_tuple("Back").field(i).finish(),
+            Self::Quit => write!(f, "Quit"),
+        }
+    }
 }

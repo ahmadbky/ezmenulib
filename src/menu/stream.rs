@@ -16,6 +16,7 @@ macro_rules! map_impl {
     )*};
 }
 
+#[derive(Debug)]
 #[doc(hidden)]
 pub enum Object<'a, T> {
     Owned(T),
@@ -116,6 +117,7 @@ impl<T> DerefMut for Object<'_, T> {
 /// // ...
 /// let (input, output) = stream.retrieve();
 /// ```
+#[derive(Debug)]
 pub struct MenuStream<'a, R = super::In, W = super::Out> {
     reader: Object<'a, R>,
     writer: Object<'a, W>,

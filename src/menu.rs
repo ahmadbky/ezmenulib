@@ -107,6 +107,7 @@ pub trait RefStream<'a, S: 'a, Arg>: Sized {
 /// // We can also give the ownership:
 /// // let mut menu = Values::from(my_stream);
 /// ```
+#[derive(Debug)]
 pub struct Values<'a, R = In, W = Out> {
     /// The global format of the container.
     pub fmt: Format<'a>,
@@ -392,6 +393,7 @@ where
 /// .run()?;
 /// # Ok(()) }
 /// ```
+#[derive(Debug)]
 pub struct RawMenu<'a, R = In, W = Out> {
     /// The global format of the menu.
     pub fmt: Format<'a>,

@@ -15,7 +15,13 @@
 //! you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
 //! This crate may however contain features that are not yet available on the ezmenu crate.
 
-#![warn(missing_docs)]
+#![warn(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    unreachable_pub,
+    unused_lifetimes
+)]
 #![cfg_attr(nightly, feature(doc_cfg))]
 
 #[cfg(all(feature = "tui", any(feature = "crossterm", feature = "termion")))]

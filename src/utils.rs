@@ -12,19 +12,19 @@ use std::io::Write;
 /// It is useful because it always returns true no matter the output value,
 /// "keeping" the value in the context of the associated functions
 /// (see [`Written::prompt`] or [`Written::many_values`] methods).
-pub fn keep<T>(_val: &T) -> bool {
+pub(crate) fn keep<T>(_val: &T) -> bool {
     true
 }
 
 /// Shows the text using the given stream and maps the `io::Error` into a `MenuError`.
-pub fn show<T: ?Sized + Display, S: Write>(text: &T, stream: &mut S) -> MenuResult {
+pub(crate) fn show<T: ?Sized + Display, S: Write>(text: &T, stream: &mut S) -> MenuResult {
     write!(stream, "{}", text)?;
     stream.flush().map_err(MenuError::from)
 }
 
 /// Shows the text using the given stream, then prompts a value to the user and
 /// returns the corresponding String.
-pub fn prompt<T: ?Sized + Display, R: BufRead, W: Write>(
+pub(crate) fn prompt<T: ?Sized + Display, R: BufRead, W: Write>(
     text: &T,
     stream: &mut MenuStream<R, W>,
 ) -> MenuResult<String> {
@@ -33,7 +33,7 @@ pub fn prompt<T: ?Sized + Display, R: BufRead, W: Write>(
 }
 
 /// Panics at runtime, emphasizing that the given `default` value is incorrect for `T` type.
-pub fn default_failed<T>(default: &str) -> ! {
+pub(crate) fn default_failed<T>(default: &str) -> ! {
     panic!(
         "`{}` has been used as default value but is incorrect for `{}` type",
         default,
@@ -42,7 +42,7 @@ pub fn default_failed<T>(default: &str) -> ! {
 }
 
 /// Returns the input value as a String from the given input stream.
-pub fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<String> {
+pub(crate) fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<String> {
     let mut out = String::new();
     stream.read_line(&mut out)?;
     Ok(out.trim().to_owned())
@@ -51,7 +51,7 @@ pub fn read_input<R: BufRead, W>(stream: &mut MenuStream<R, W>) -> MenuResult<St
 /// Prompts the user to enter an index to select a value among the available values.
 ///
 /// The available values are in theory printed before calling this function.
-pub fn select<R: BufRead, W: Write>(
+pub(crate) fn select<R: BufRead, W: Write>(
     stream: &mut MenuStream<R, W>,
     suffix: &str,
     max: usize,
@@ -64,7 +64,7 @@ pub fn select<R: BufRead, W: Write>(
 }
 
 /// Checks that the menu fields are not empty at runtime.
-pub fn check_fields<T>(fields: &[T]) {
+pub(crate) fn check_fields<T>(fields: &[T]) {
     if fields.is_empty() {
         panic!("empty fields for the selectable values");
     }

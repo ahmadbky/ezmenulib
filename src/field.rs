@@ -20,7 +20,7 @@ macro_rules! impl_fmt {
         $(#[doc = $doc:expr])*
     )*) => {
         $(#[doc = $main_doc])*
-        #[derive(Clone)]
+        #[derive(Debug, Clone)]
         pub struct Format<'a> {$(
             $(#[doc = $doc])*
             pub $i: $t,
@@ -144,6 +144,7 @@ impl<'a> Default for Format<'a> {
 ///     .many_values(&mut MenuStream::default(), ", ")?;
 /// # Ok(()) }
 /// ```
+#[derive(Debug)]
 pub struct Written<'a> {
     msg: &'a str,
     /// The format of the written field value.
@@ -735,7 +736,7 @@ pub trait Selectable<const N: usize>: Sized {
 ///     .unwrap();
 /// ```
 // Clone is implemented on it because it is moved once the user selected the value.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Selected<'a, T, const N: usize> {
     /// The format used by the selected field value.
     pub fmt: Format<'a>,
@@ -973,4 +974,16 @@ pub enum Kind<'a, R = In, W = Out> {
     Back(usize),
     /// Closes all the nested menus to the top when the user selected the field.
     Quit,
+}
+
+impl<'a, R, W> fmt::Debug for Kind<'a, R, W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("Field::")?;
+        match self {
+            Self::Map(_) => f.write_str("Map"),
+            Self::Parent(fields) => f.debug_tuple("Parent").field(fields).finish(),
+            Self::Back(i) => f.debug_tuple("Back").field(i).finish(),
+            Self::Quit => f.write_str("Quit"),
+        }
+    }
 }

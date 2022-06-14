@@ -31,6 +31,12 @@ pub struct Termion<W: Write = Out> {
     buf: RawTerminal<W>,
 }
 
+impl<W: Write> fmt::Debug for Termion<W> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Termion").finish()
+    }
+}
+
 impl Termion {
     #[inline]
     pub fn new() -> io::Result<Self> {
