@@ -2,25 +2,31 @@
 
 ## 0.3.0 (WIP)
 
-* Removed `T: FromStr` and `<T as FromStr>::Err: 'static + Debug` restrictions for `SelectMenu`.
-  * Now the output type `T` has to be `'static`.
-  * The user has to enter the index of the selection.
-  * To bind the output value to its selection field, you use the `SelectField::new` function.
-  * Retrieving a selectable menu output from a value-menu is no more done with
-`<ValueMenu as MenuBuilder>::next_output` function, because it requests output to
-implement `FromStr`. Instead, it is done with `ValueMenu::next_select` function, to bypass this restriction.
-* Introducing `Query<T>` type, used for control flow.
-* Removed common `MenuBuilder` trait.
-* Removed `new_line` field on `ValueFieldFormatting`.
-  * Now always on `true`, meaning there will always be a line break between prompt and prefix.
-provided, but only reprints the prefix.
-* Renamed `GetStream` trait to `Streamable`.
-* Fixing IO error never returned in loop.
-* [`chrono`](https://docs.rs/chrono/0.4.19) crate is now re-exported and available from the `ezmenulib` crate.
-* Introducing `ValueMenu::next_value_until` and `ValueField::build_until` methods.
-* Added example showing for `ValueField`.
-  * Separating by comma between default value and example at the prompt, according to the formatting rules.
-* Added math expression as value type, using [`meval`](https://docs.rs/meval/0.2.0) crate.
+### Breaking changes
+
+* Moving out the field types from the value-menus.
+  * `ValueMenu` has been renamed to `Values`.
+  * `Field` enum has been removed and replaced by structs `Written` and `Selected`.
+  * `Values` does not contain any fields but uses the given field to retrieve a value from the user at a given instruction.
+  * `Values` only requires the output `T` type to implement `FromStr`.
+  * `Selected` does not require anymore any implementation from the output `T` selected type.
+* Real menus.
+  * New struct: `RawMenu` for building basic CLI menus.
+
+### Other changes
+
+* `MenuError` does not handle parsing error anymore.
+* New custom value type: `MenuNumber`, with `expr` feature using `meval` crate.
+  * `MenuOption` and `MenuVec` custom value types have been removed.
+* New trait: `Selectable`.
+* `MenuBuilder` trait has been removed.
+* `ValueFieldFormatting` has been renamed to `Format`.
+  * `Format`'s fields have been renamed for more convenience.
+  * New fields: `left_sur` and `right_sur`.
+* `SelectTitle` struct has been removed.
+  * And so `TitlePos` too.
+* `GetStream` trait has been renamed to `UsesStream`.
+  * The output type is not only `MenuStream` anymore, but a generic `T` type according to the implementation on the structs.
 
 ## 0.2.10 (migrated from 0.2.9)
 
