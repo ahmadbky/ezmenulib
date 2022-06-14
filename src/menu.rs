@@ -400,6 +400,7 @@ pub struct RawMenu<'a, R = In, W = Out> {
     title: Option<&'a str>,
     fields: Fields<'a, R, W>,
     stream: Object<'a, MenuStream<'a, R, W>>,
+    once: bool,
 }
 
 impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
@@ -460,6 +461,7 @@ impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu
             fmt: Format::default(),
             fields,
             stream,
+            once: false,
         }
     }
 }
@@ -477,9 +479,16 @@ impl<'a, R, W> RawMenu<'a, R, W> {
         self.title = Some(title);
         self
     }
+
+    /// Defines if the menu should run once or loop when calling a mapped function
+    /// to a field.
+    pub fn run_once(mut self, once: bool) -> Self {
+        self.once = once;
+        self
+    }
 }
 
-impl<'a, R, W> RawMenu<'a, R, W>
+impl<R, W> RawMenu<'_, R, W>
 where
     R: BufRead,
     W: Write,
@@ -492,8 +501,25 @@ where
     /// select a field. Then, it runs the corresponding procedure
     /// matching the selected field [kind](Kind).
     pub fn run(&mut self) -> MenuResult {
-        run_with(self.title, self.stream.deref_mut(), self.fields, &self.fmt).map(|_| ())
+        run_with(
+            &mut RunParams {
+                stream: self.stream.deref_mut(),
+                fmt: &self.fmt,
+                once: self.once,
+            },
+            self.title,
+            self.fields,
+        )
+        .map(|_| ())
     }
+}
+
+/// Represents the parameters of the menu currently running, which are the same
+/// at any state of the menu (any depth of the `run_with` recursive function).
+struct RunParams<'a, 'b: 'a, R, W> {
+    stream: &'a mut MenuStream<'b, R, W>,
+    fmt: &'a Format<'b>,
+    once: bool,
 }
 
 /// Recursive function used to run the current prompt state of the menu.
@@ -505,48 +531,53 @@ where
 /// level of depth of the menu. With recursion, it allows to go back to the indexed depth
 /// level from the current running prompt.
 fn run_with<R: BufRead, W: Write>(
-    // The message/title displayed on the top.
+    params: &mut RunParams<R, W>,
     msg: Option<&str>,
-    // The stream used by the menu.
-    stream: &mut MenuStream<R, W>,
-    // The fields of the current prompted menu.
     fields: Fields<R, W>,
-    // The formatting specifications used by the menu.
-    fmt: &Format<'_>,
 ) -> MenuResult<Option<usize>> {
+    let quit = Ok(None);
+    let back = |i| Ok(Some(i - 1));
+
     loop {
         // Title of current selective menu.
         if let Some(s) = msg {
-            writeln!(stream, "{}{s}", fmt.prefix)?;
+            writeln!(params.stream, "{}{s}", params.fmt.prefix)?;
         }
 
         // Fields of current selective menu.
         for (i, (field_msg, _)) in (1..=fields.len()).zip(fields.iter()) {
             writeln!(
-                stream,
+                params.stream,
                 "{}{i}{}{}{field_msg}",
-                fmt.left_sur, fmt.right_sur, fmt.chip
+                params.fmt.left_sur, params.fmt.right_sur, params.fmt.chip
             )?;
         }
 
         // Gets the message and the field kind selected by the user.
         let (msg, kind) = loop {
-            match select(stream, fmt.suffix, fields.len())?.and_then(|i| fields.get(i)) {
+            match select(params.stream, params.fmt.suffix, fields.len())?
+                .and_then(|i| fields.get(i))
+            {
                 Some(field) => break field,
                 None => continue,
             }
         };
 
         match kind {
-            Kind::Map(f) => return f(stream).map(|_| None),
-            Kind::Parent(fields) => match run_with(Some(msg), stream, fields, fmt)? {
-                None => return Ok(None),
-                Some(0) => continue,
-                Some(i) => return Ok(Some(i - 1)),
+            Kind::Map(f) => {
+                f(params.stream)?;
+                if params.once {
+                    return quit;
+                }
+            }
+            Kind::Parent(fields) => match run_with(params, Some(msg), fields)? {
+                None => return quit,
+                Some(0) => (),
+                Some(i) => return back(i),
             },
-            Kind::Back(0) => continue,
-            Kind::Back(i) => return Ok(Some(i - 1)),
-            Kind::Quit => return Ok(None),
+            Kind::Back(0) => (),
+            Kind::Back(i) => return back(*i),
+            Kind::Quit => return quit,
         }
     }
 }
