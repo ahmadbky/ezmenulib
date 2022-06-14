@@ -21,7 +21,7 @@ pub type In = BufReader<Stdin>;
 pub type Out = Stdout;
 
 /// Used to retrieve the stream from a container.
-pub trait Streamable<'a, T> {
+pub trait UsesStream<T> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
@@ -37,7 +37,7 @@ pub trait Streamable<'a, T> {
     fn get_mut_stream(&mut self) -> &mut T;
 }
 
-pub trait RefStream<'a, S: 'a, Arg>: Sized {
+pub trait FromStream<'a, S: 'a, Arg>: Sized {
     #[doc(hidden)]
     fn new(stream: Object<'a, S>, arg: Arg) -> Self;
 
@@ -155,7 +155,7 @@ impl<'a> From<Format<'a>> for Values<'a> {
     }
 }
 
-impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
+impl<'a, R, W> FromStream<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
     fn new(stream: Object<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
         Self { fmt, stream }
     }
@@ -173,7 +173,7 @@ impl<'a, R, W> Values<'a, R, W> {
     }
 }
 
-impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for Values<'a, R, W> {
+impl<'a, R, W> UsesStream<MenuStream<'a, R, W>> for Values<'a, R, W> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
@@ -403,7 +403,7 @@ pub struct RawMenu<'a, R = In, W = Out> {
     once: bool,
 }
 
-impl<'a, R, W> Streamable<'a, MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
+impl<'a, R, W> UsesStream<MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
     /// Returns the ownership of the stream the menu contains, consuming `self`.
     ///
     /// # Panics
@@ -452,7 +452,7 @@ impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
     }
 }
 
-impl<'a, R, W> RefStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
+impl<'a, R, W> FromStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
     fn new(stream: Object<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
         check_fields(fields);
 
