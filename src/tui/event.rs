@@ -1,3 +1,7 @@
+//! Module defining the event types used by the library.
+//!
+//! It is a merged version between `crossterm` and `termion` event types.
+
 #[derive(Debug, Clone, Copy)]
 pub enum Event {
     Key(KeyEvent),

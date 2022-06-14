@@ -1,3 +1,7 @@
+//! Module defining the types for the `tui` feature.
+//!
+//! This module is mainly used to generate menu using the [`tui`](https://docs.rs/tui/) crate.
+
 pub mod event;
 
 use std::{
@@ -16,7 +20,7 @@ use tui::{
 };
 
 use crate::{
-    menu::{Object, RefStream, Streamable},
+    menu::{FromStream, Object, UsesStream},
     MenuError, MenuResult,
 };
 
@@ -64,7 +68,7 @@ pub struct TuiMenu<'a, B: Backend> {
     once: bool,
 }
 
-impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
+impl<'a, B: Backend> UsesStream<Terminal<B>> for TuiMenu<'a, B> {
     fn take_stream(self) -> Terminal<B> {
         self.term.retrieve()
     }
@@ -78,7 +82,7 @@ impl<'a, B: Backend> Streamable<'a, Terminal<B>> for TuiMenu<'a, B> {
     }
 }
 
-impl<'a, B: Backend> RefStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
+impl<'a, B: Backend> FromStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
     fn new(term: Object<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
         Self {
             block: Block::default()

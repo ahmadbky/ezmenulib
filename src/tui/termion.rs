@@ -8,13 +8,13 @@ use termion::{
     clear::All,
     cursor::{DetectCursorPos, Goto, Hide, Show},
     event::{Event as TEvent, Key as TKey, MouseButton as TMouseButton, MouseEvent as TMouseEvent},
-    input::{TermRead},
+    input::TermRead,
     raw::{IntoRawMode, RawTerminal},
     screen::{ToAlternateScreen, ToMainScreen},
     terminal_size,
 };
 use tui::{
-    backend::{Backend},
+    backend::Backend,
     buffer::Cell,
     layout::Rect,
     style::{Color, Modifier},
