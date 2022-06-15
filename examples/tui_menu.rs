@@ -1,6 +1,6 @@
 use std::io::Stdout;
 
-use ::crossterm::terminal::enable_raw_mode;
+use ::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ezmenulib::{
     prelude::*,
     tui::{
@@ -13,12 +13,19 @@ use tui::{backend::CrosstermBackend, Terminal};
 
 fn first(term: &mut Terminal<CrosstermBackend<Stdout>>) -> MenuResult {
     restore_terminal(term)?;
-    println!("you picked first (press any key to return)");
-    // Pauses until the user presses a key
+    println!("You picked first.");
+    wait()?;
+    setup_terminal(term)?;
+    Ok(())
+}
+
+/// Pauses until the user presses a key
+fn wait() -> MenuResult {
+    println!("Press any key to continue.");
     enable_raw_mode()?;
     while !matches!(read()?, Event::Key(_)) {}
-    setup_terminal(term)?;
-    return Ok(());
+    disable_raw_mode()?;
+    Ok(())
 }
 
 fn main() -> MenuResult {
@@ -34,6 +41,9 @@ fn main() -> MenuResult {
             ]),
         ),
     ])?;
+
+    println!("This is a basic menu built with ezmenulib using tui-rs.");
+    wait()?;
 
     menu.run()?;
     menu.close()

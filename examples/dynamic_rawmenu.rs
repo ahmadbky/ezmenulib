@@ -33,16 +33,10 @@ fn change_name(s: &mut MenuStream, name: Res<String>, span: &str) -> MenuResult 
         Written::from(format!("Enter the new {span}name").as_str()).optional_value(s)?;
     if let Some(new) = new {
         *name.borrow_mut() = new;
+    } else {
+        writeln!(s, "The {span}name hasn't been modified.")?;
     }
     Ok(())
-}
-
-fn firstname(s: &mut MenuStream, name: Res<String>) -> MenuResult {
-    change_name(s, name, "first")
-}
-
-fn lastname(s: &mut MenuStream, name: Res<String>) -> MenuResult {
-    change_name(s, name, "last")
 }
 
 fn main() -> MenuResult {
@@ -61,9 +55,12 @@ fn main() -> MenuResult {
                     Kind::Parent(&[
                         (
                             "Firstname",
-                            Kind::Map(&move |s| firstname(s, first.clone())),
+                            Kind::Map(&move |s| change_name(s, first.clone(), "first")),
                         ),
-                        ("Lastname", Kind::Map(&move |s| lastname(s, last.clone()))),
+                        (
+                            "Lastname",
+                            Kind::Map(&move |s| change_name(s, last.clone(), "last")),
+                        ),
                         ("Main menu", Kind::Back(2)),
                     ]),
                 ),
