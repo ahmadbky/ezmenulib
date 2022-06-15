@@ -1,3 +1,6 @@
+//! Contains the util functions and types to manipulate the terminal
+//! using the [`termion`](https://doccs.rs/termion/1.5.0) backend.
+
 use crate::{menu::Out, tui::event::*};
 use std::{
     fmt,

@@ -20,7 +20,7 @@ use tui::{
 };
 
 use crate::{
-    menu::{FromStream, Object, UsesStream},
+    menu::{FromMutable, Mutable, UsesMutable},
     MenuError, MenuResult,
 };
 
@@ -46,17 +46,13 @@ use self::termion::{
     Termion,
 };
 
+/// Represents the style of a field in the printed menu.
+///
+/// The first `Style` field corresponds to the style of the text,
+/// and the `Color` field corresponds to the background color of the menu field.
 pub type FieldStyle = (Style, Color);
 
 type Reader = fn() -> io::Result<Event>;
-
-#[cfg(feature = "crossterm")]
-#[cfg_attr(nightly, doc(cfg(feature = "crossterm")))]
-pub type CTMenu<'a> = TuiMenu<'a, Crossterm>;
-
-#[cfg(feature = "termion")]
-#[cfg_attr(nightly, doc(cfg(feature = "termion")))]
-pub type TMenu<'a> = TuiMenu<'a, Termion>;
 
 #[derive(Debug)]
 pub struct TuiMenu<'a, B: Backend> {
@@ -64,26 +60,26 @@ pub struct TuiMenu<'a, B: Backend> {
     s_style: FieldStyle,
     f_style: FieldStyle,
     fields: TuiFields<'a, B>,
-    term: Object<'a, Terminal<B>>,
+    term: Mutable<'a, Terminal<B>>,
     once: bool,
 }
 
-impl<'a, B: Backend> UsesStream<Terminal<B>> for TuiMenu<'a, B> {
-    fn take_stream(self) -> Terminal<B> {
+impl<'a, B: Backend> UsesMutable<Terminal<B>> for TuiMenu<'a, B> {
+    fn take_object(self) -> Terminal<B> {
         self.term.retrieve()
     }
 
-    fn get_stream(&self) -> &Terminal<B> {
+    fn get_object(&self) -> &Terminal<B> {
         self.term.deref()
     }
 
-    fn get_mut_stream(&mut self) -> &mut Terminal<B> {
+    fn get_mut_object(&mut self) -> &mut Terminal<B> {
         self.term.deref_mut()
     }
 }
 
-impl<'a, B: Backend> FromStream<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
-    fn new(term: Object<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
+impl<'a, B: Backend> FromMutable<'a, Terminal<B>, TuiFields<'a, B>> for TuiMenu<'a, B> {
+    fn new(term: Mutable<'a, Terminal<B>>, fields: TuiFields<'a, B>) -> Self {
         Self {
             block: Block::default()
                 .borders(Borders::all())
