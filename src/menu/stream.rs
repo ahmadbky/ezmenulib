@@ -16,40 +16,56 @@ macro_rules! map_impl {
     )*};
 }
 
+/// Represents a mutable object in the library.
+///
+/// A mutable object may be owned or mutably borrowed.
+/// It is useful because it allows to use `T`'s methods in both ways.
+///
+/// For example, the [`RawMenu`](crate::prelude::RawMenu) struct uses a mutable
+/// [`MenuStream`], and the latter can be borrowed to the menu struct,
+/// thank to the [`FromMutable`] trait.
+///
+/// You can also retrieve the inner object **if it is owned** with the [`UsesMutable`] trait.
 #[derive(Debug)]
-#[doc(hidden)]
-pub enum Object<'a, T> {
+pub enum Mutable<'a, T> {
+    /// The owned `T` object.
     Owned(T),
+    /// The mutably borrowed `T` object, living for `'a` lifetime.
     Borrowed(&'a mut T),
 }
 
-impl<T: Default> Default for Object<'_, T> {
+impl<T: Default> Default for Mutable<'_, T> {
     fn default() -> Self {
         Self::Owned(T::default())
     }
 }
 
-impl<T> Object<'_, T> {
+impl<T> Mutable<'_, T> {
+    /// Returns the inner object **if it is owned**, consuming `self`.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the inner `T` object is [borrowed](Mutable::Borrowed).
     pub fn retrieve(self) -> T {
         match self {
             Self::Owned(t) => t,
-            Self::Borrowed(_) => panic!("the stream must be owned to retrieve it"),
+            Self::Borrowed(_) => panic!("the object must be owned to retrieve it"),
         }
     }
 }
 
-impl<T> Deref for Object<'_, T> {
+impl<T> Deref for Mutable<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Owned(t) => t,
-            Self::Borrowed(t) => *t as &T,
+            Self::Borrowed(t) => *t,
         }
     }
 }
 
-impl<T> DerefMut for Object<'_, T> {
+impl<T> DerefMut for Mutable<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Owned(t) => t,
@@ -119,8 +135,8 @@ impl<T> DerefMut for Object<'_, T> {
 /// ```
 #[derive(Debug)]
 pub struct MenuStream<'a, R = super::In, W = super::Out> {
-    reader: Object<'a, R>,
-    writer: Object<'a, W>,
+    reader: Mutable<'a, R>,
+    writer: Mutable<'a, W>,
 }
 
 impl Default for MenuStream<'_> {
@@ -142,16 +158,16 @@ impl<'a, R, W> MenuStream<'a, R, W> {
     /// Instantiates the stream with a given reader and writer.
     pub fn new(reader: R, writer: W) -> Self {
         Self {
-            reader: Object::Owned(reader),
-            writer: Object::Owned(writer),
+            reader: Mutable::Owned(reader),
+            writer: Mutable::Owned(writer),
         }
     }
 
     /// Instantiates the stream with a borrowed reader and a borrowed writer.
     pub fn with(reader: &'a mut R, writer: &'a mut W) -> Self {
         Self {
-            reader: Object::Borrowed(reader),
-            writer: Object::Borrowed(writer),
+            reader: Mutable::Borrowed(reader),
+            writer: Mutable::Borrowed(writer),
         }
     }
 

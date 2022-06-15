@@ -5,7 +5,7 @@ mod tests;
 
 mod stream;
 
-pub use crate::menu::stream::{MenuStream, Object};
+pub use crate::menu::stream::{MenuStream, Mutable};
 use crate::prelude::*;
 use crate::utils::{check_fields, select};
 
@@ -20,33 +20,46 @@ pub type In = BufReader<Stdin>;
 /// The default output stream used by a menu, using the standard output stream.
 pub type Out = Stdout;
 
-/// Used to retrieve the stream from a container.
-pub trait UsesStream<T> {
+/// Used to retrieve the object from a container.
+///
+/// The object may be either owned or mutably borrowed.
+/// See [`Mutable`] for more information.
+pub trait UsesMutable<T> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
     ///
-    /// Because the stream may not be owned by the container, this function may panic
+    /// Because the object may not be owned by the container, this function may panic
     /// at runtime, because it attempts to retrieve the ownership of the stream it does not own.
-    fn take_stream(self) -> T;
+    fn take_object(self) -> T;
 
-    /// Returns a reference to the stream the container uses.
-    fn get_stream(&self) -> &T;
+    /// Returns a reference to the object the container uses.
+    fn get_object(&self) -> &T;
 
-    /// Returns a mutable reference to the stream the container uses.
-    fn get_mut_stream(&mut self) -> &mut T;
+    /// Returns a mutable reference to the object the container uses.
+    fn get_mut_object(&mut self) -> &mut T;
 }
 
-pub trait FromStream<'a, S: 'a, Arg>: Sized {
-    #[doc(hidden)]
-    fn new(stream: Object<'a, S>, arg: Arg) -> Self;
+/// Used to instantiate a container from a mutable object,
+/// and the rest of the required arguments.
+///
+/// A mutable object in the library means a generic object (here `S`)
+/// that can be either owned by the container, or mutably borrowed.
+pub trait FromMutable<'a, S: 'a, Arg>: Sized {
+    /// Returns `Self` from the mutable object and the rest of the required arguments
+    /// for the container.
+    fn new(stream: Mutable<'a, S>, arg: Arg) -> Self;
 
+    /// Returns `Self` from a mutably borrowed object
+    /// the rest of the required arguments for the container.
     fn borrowed(stream: &'a mut S, arg: Arg) -> Self {
-        Self::new(Object::Borrowed(stream), arg)
+        Self::new(Mutable::Borrowed(stream), arg)
     }
 
+    /// Returns `Self` from an owned object and the rest of the required arguments
+    /// for the container.
     fn owned(stream: S, arg: Arg) -> Self {
-        Self::new(Object::Owned(stream), arg)
+        Self::new(Mutable::Owned(stream), arg)
     }
 }
 
@@ -111,7 +124,7 @@ pub trait FromStream<'a, S: 'a, Arg>: Sized {
 pub struct Values<'a, R = In, W = Out> {
     /// The global format of the container.
     pub fmt: Format<'a>,
-    stream: Object<'a, MenuStream<'a, R, W>>,
+    stream: Mutable<'a, MenuStream<'a, R, W>>,
 }
 
 /// Returns the default container, which corresponds to the
@@ -125,7 +138,7 @@ impl Default for Values<'_> {
     fn default() -> Self {
         Self {
             fmt: Format::default(),
-            stream: Object::default(),
+            stream: Mutable::default(),
         }
     }
 }
@@ -155,8 +168,8 @@ impl<'a> From<Format<'a>> for Values<'a> {
     }
 }
 
-impl<'a, R, W> FromStream<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
-    fn new(stream: Object<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
+impl<'a, R, W> FromMutable<'a, MenuStream<'a, R, W>, Format<'a>> for Values<'a, R, W> {
+    fn new(stream: Mutable<'a, MenuStream<'a, R, W>>, fmt: Format<'a>) -> Self {
         Self { fmt, stream }
     }
 }
@@ -173,22 +186,22 @@ impl<'a, R, W> Values<'a, R, W> {
     }
 }
 
-impl<'a, R, W> UsesStream<MenuStream<'a, R, W>> for Values<'a, R, W> {
+impl<'a, R, W> UsesMutable<MenuStream<'a, R, W>> for Values<'a, R, W> {
     /// Returns the ownership of the stream it contains, consuming `self`.
     ///
     /// # Panics
     ///
     /// If the container does not own the stream (meaning it has been constructed
     /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
-    fn take_stream(self) -> MenuStream<'a, R, W> {
+    fn take_object(self) -> MenuStream<'a, R, W> {
         self.stream.retrieve()
     }
 
-    fn get_stream(&self) -> &MenuStream<'a, R, W> {
+    fn get_object(&self) -> &MenuStream<'a, R, W> {
         self.stream.deref()
     }
 
-    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
+    fn get_mut_object(&mut self) -> &mut MenuStream<'a, R, W> {
         self.stream.deref_mut()
     }
 }
@@ -399,26 +412,26 @@ pub struct RawMenu<'a, R = In, W = Out> {
     pub fmt: Format<'a>,
     title: Option<&'a str>,
     fields: Fields<'a, R, W>,
-    stream: Object<'a, MenuStream<'a, R, W>>,
+    stream: Mutable<'a, MenuStream<'a, R, W>>,
     once: bool,
 }
 
-impl<'a, R, W> UsesStream<MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
+impl<'a, R, W> UsesMutable<MenuStream<'a, R, W>> for RawMenu<'a, R, W> {
     /// Returns the ownership of the stream the menu contains, consuming `self`.
     ///
     /// # Panics
     ///
     /// If the menu does not own the stream (meaning it has been constructed
     /// with the `From<&mut MenuStream<R, W>>` implementation), this function panics.
-    fn take_stream(self) -> MenuStream<'a, R, W> {
+    fn take_object(self) -> MenuStream<'a, R, W> {
         self.stream.retrieve()
     }
 
-    fn get_stream(&self) -> &MenuStream<'a, R, W> {
+    fn get_object(&self) -> &MenuStream<'a, R, W> {
         self.stream.deref()
     }
 
-    fn get_mut_stream(&mut self) -> &mut MenuStream<'a, R, W> {
+    fn get_mut_object(&mut self) -> &mut MenuStream<'a, R, W> {
         self.stream.deref_mut()
     }
 }
@@ -452,8 +465,8 @@ impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
     }
 }
 
-impl<'a, R, W> FromStream<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
-    fn new(stream: Object<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+impl<'a, R, W> FromMutable<'a, MenuStream<'a, R, W>, Fields<'a, R, W>> for RawMenu<'a, R, W> {
+    fn new(stream: Mutable<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
         check_fields(fields);
 
         Self {

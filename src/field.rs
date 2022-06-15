@@ -959,7 +959,7 @@ pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 ///
 /// See [`Kind::Map`] for more information.
 // pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
-type Binding<R, W> = dyn Fn(&mut MenuStream<R, W>) -> MenuResult;
+pub type Binding<R, W> = dyn Fn(&mut MenuStream<R, W>) -> MenuResult;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
