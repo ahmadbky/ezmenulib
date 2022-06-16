@@ -535,6 +535,57 @@ struct RunParams<'a, 'b: 'a, R, W> {
     once: bool,
 }
 
+/// Prints out the menu to the terminal.
+fn show_menu<R, W: Write>(
+    params: &mut RunParams<R, W>,
+    msg: Option<&str>,
+    fields: Fields<R, W>,
+) -> MenuResult {
+    // Title of current selective menu.
+    if let Some(s) = msg {
+        writeln!(params.stream, "{}{s}", params.fmt.prefix)?;
+    }
+
+    // Fields of current selective menu.
+    for (i, (field_msg, _)) in (1..=fields.len()).zip(fields.iter()) {
+        writeln!(
+            params.stream,
+            "{}{i}{}{}{field_msg}",
+            params.fmt.left_sur, params.fmt.right_sur, params.fmt.chip
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Handles the field selected by the user.
+fn handle_field<R: BufRead, W: Write>(
+    params: &mut RunParams<R, W>,
+    msg: &str,
+    kind: &Kind<R, W>,
+) -> MenuResult<Depth> {
+    use Depth::*;
+
+    Ok(match kind {
+        Kind::Map(f) => {
+            f(params.stream)?;
+            if params.once {
+                Quit
+            } else {
+                Current
+            }
+        }
+        Kind::Parent(fields) => match run_with(params, Some(msg), fields)? {
+            Current | Back(0) => Current,
+            Quit => Quit,
+            Back(i) => Back(i - 1),
+        },
+        Kind::Back(0) => Current,
+        Kind::Back(i) => Back(i - 1),
+        Kind::Quit => Quit,
+    })
+}
+
 /// Recursive function used to run the current prompt state of the menu.
 ///
 /// It prints out to the stream the fields next to their indexes, then asks the user to
@@ -547,24 +598,9 @@ fn run_with<R: BufRead, W: Write>(
     params: &mut RunParams<R, W>,
     msg: Option<&str>,
     fields: Fields<R, W>,
-) -> MenuResult<Option<usize>> {
-    let quit = Ok(None);
-    let back = |i| Ok(Some(i - 1));
-
+) -> MenuResult<Depth> {
     loop {
-        // Title of current selective menu.
-        if let Some(s) = msg {
-            writeln!(params.stream, "{}{s}", params.fmt.prefix)?;
-        }
-
-        // Fields of current selective menu.
-        for (i, (field_msg, _)) in (1..=fields.len()).zip(fields.iter()) {
-            writeln!(
-                params.stream,
-                "{}{i}{}{}{field_msg}",
-                params.fmt.left_sur, params.fmt.right_sur, params.fmt.chip
-            )?;
-        }
+        show_menu(params, msg, fields)?;
 
         // Gets the message and the field kind selected by the user.
         let (msg, kind) = loop {
@@ -576,21 +612,10 @@ fn run_with<R: BufRead, W: Write>(
             }
         };
 
-        match kind {
-            Kind::Map(f) => {
-                f(params.stream)?;
-                if params.once {
-                    return quit;
-                }
-            }
-            Kind::Parent(fields) => match run_with(params, Some(msg), fields)? {
-                None => return quit,
-                Some(0) => (),
-                Some(i) => return back(i),
-            },
-            Kind::Back(0) => (),
-            Kind::Back(i) => return back(*i),
-            Kind::Quit => return quit,
+        match handle_field(params, msg, kind)? {
+            Depth::Quit => return Ok(Depth::Quit),
+            Depth::Back(i) => return Ok(Depth::Back(i)),
+            Depth::Current => (),
         }
     }
 }

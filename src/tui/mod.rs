@@ -282,18 +282,19 @@ struct RunParams<'a, B: Backend> {
     once: bool,
 }
 
-fn run_with<B: Backend>(
+/// Prints out the menu to the terminal.
+fn show_menu<B: Backend>(
     params: &mut RunParams<B>,
     block: &Block,
     fields: TuiFields<B>,
-) -> MenuResult<Option<usize>> {
-    let mut selected = 0;
+    selected: usize,
+) -> io::Result<()> {
+    // The messages displayed
+    let msg_list: Vec<&str> = fields.iter().map(|field| field.0).collect();
 
-    loop {
-        // The messages displayed
-        let msg_list: Vec<&str> = fields.iter().map(|field| field.0).collect();
-
-        params.term.draw(|f| {
+    params
+        .term
+        .draw(|f| {
             f.render_widget(
                 MenuWidget {
                     fields: msg_list,
@@ -304,53 +305,128 @@ fn run_with<B: Backend>(
                 },
                 params.area,
             );
-        })?;
+        })
+        .map(|_| ())
+}
+
+/// Handles the field selected by the user.
+fn handle_field<B: Backend>(
+    params: &mut RunParams<B>,
+    block: &Block,
+    (msg, kind): &TuiField<B>,
+) -> MenuResult<Depth> {
+    use Depth::*;
+
+    Ok(match kind {
+        TuiKind::Map(b) => {
+            b(params.term)?;
+            if params.once {
+                Quit
+            } else {
+                params.term.clear()?;
+                Current
+            }
+        }
+        TuiKind::Parent(fields) => match run_with(params, &block.clone().title(*msg), fields)? {
+            Current | Back(0) => Current,
+            Quit => Quit,
+            Back(i) => Back(i - 1),
+        },
+        TuiKind::Back(0) => Current,
+        TuiKind::Back(i) => Back(i - 1),
+        TuiKind::Quit => Quit,
+    })
+}
+
+/// Handles the key pressed by the user.
+fn handle_key<B: Backend>(
+    params: &mut RunParams<B>,
+    block: &Block,
+    fields: TuiFields<B>,
+    selected: &mut usize,
+    k: KeyEvent,
+) -> MenuResult<Depth> {
+    use Depth::*;
+
+    Ok(match k {
+        KeyEvent::Char('q') | KeyEvent::Ctrl('c') => Quit,
+        KeyEvent::Esc => Back(0),
+        KeyEvent::Up | KeyEvent::Left if *selected == 0 => {
+            *selected = fields.len() - 1;
+            Current
+        }
+        KeyEvent::Up | KeyEvent::Left => {
+            *selected -= 1;
+            Current
+        }
+        KeyEvent::Down | KeyEvent::Right if *selected == fields.len() - 1 => {
+            *selected = 0;
+            Current
+        }
+        KeyEvent::Down | KeyEvent::Right => {
+            *selected += 1;
+            Current
+        }
+        KeyEvent::Enter | KeyEvent::Char(' ') => handle_field(params, block, &fields[*selected])?,
+        _ => Current,
+    })
+}
+
+/// Recursive function used to run the current state menu.
+///
+/// It displays the fields inside a block to the terminal
+fn run_with<B: Backend>(
+    params: &mut RunParams<B>,
+    block: &Block,
+    fields: TuiFields<B>,
+) -> MenuResult<Depth> {
+    let mut selected = 0;
+
+    loop {
+        show_menu(params, block, fields, selected)?;
 
         if let Event::Key(k) = (params.read_fn)()? {
-            match k {
-                KeyEvent::Char('q') | KeyEvent::Ctrl('c') => return Ok(None),
-                KeyEvent::Up | KeyEvent::Left if selected == 0 => selected = fields.len() - 1,
-                KeyEvent::Up | KeyEvent::Left => selected -= 1,
-                KeyEvent::Down | KeyEvent::Right if selected == fields.len() - 1 => selected = 0,
-                KeyEvent::Down | KeyEvent::Right => selected += 1,
-                KeyEvent::Enter => {
-                    let (msg, kind) = &fields[selected];
-                    match kind {
-                        TuiKind::Map(b) => {
-                            b(params.term)?;
-                            if params.once {
-                                return Ok(None);
-                            }
-                            params.term.clear()?;
-                        }
-                        TuiKind::Parent(fields) => {
-                            match run_with(params, &block.clone().title(*msg), fields)? {
-                                None => return Ok(None),
-                                Some(0) => (),
-                                Some(i) => return Ok(Some(i - 1)),
-                            }
-                        }
-                        TuiKind::Back(0) => (),
-                        TuiKind::Back(i) => return Ok(Some(i - 1)),
-                        TuiKind::Quit => return Ok(None),
-                    }
-                }
-                _ => (),
+            match handle_key(params, block, fields, &mut selected, k)? {
+                Depth::Quit => return Ok(Depth::Quit),
+                Depth::Back(i) => return Ok(Depth::Back(i)),
+                Depth::Current => (),
             }
         }
     }
 }
 
+/// A tui menu field.
+///
+/// The string slice corersponds to the message displayed in the list,
+/// and the kind corresponds to its behavior.
+///
+/// See [`TuiKind`] for more information.
 pub type TuiField<'a, B> = (&'a str, TuiKind<'a, B>);
 
+/// The tui menu fields.
+///
+/// It simply corresponds to a slice of fields.
+/// It is used for more convenience in the library.
 pub type TuiFields<'a, B> = &'a [TuiField<'a, B>];
 
+/// Corresponds to the function mapped to a field.
+///
+/// It can be viewed as a callback for a menu button.
+/// This function is called right after the user selected the corresponding field.
 pub type TuiBinding<B> = dyn Fn(&mut Terminal<B>) -> MenuResult;
 
+/// Defines the behavior of a [tui field](TuiField).
 pub enum TuiKind<'a, B: Backend> {
+    /// Maps a function to call right after the user selects the field.
     Map(&'a TuiBinding<B>),
+    /// Defines the current field as a parent menu of a sub-menu defined by its given fields.
     Parent(TuiFields<'a, B>),
+    /// Allows the user to go back to the given depth level from the current running page.
+    /// 
+    /// The depth level of the current running page is at `0`, meaning it will stay at
+    /// the current level if the index is at `0` when the user will select the field.
     Back(usize),
+    /// Closes all the nested menu pages to the top when the user selects the field.
     Quit,
 }
 

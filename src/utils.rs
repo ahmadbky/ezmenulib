@@ -7,6 +7,16 @@ use std::fmt::Display;
 use std::io::BufRead;
 use std::io::Write;
 
+/// Type to handle the depth of the running menus.
+pub(crate) enum Depth {
+    /// We go back to `n` level.
+    Back(usize),
+    /// We stay at the current page.
+    Current,
+    /// We quit all the nested pages to the top.
+    Quit,
+}
+
 /// Function used by the fields associated functions.
 ///
 /// It is useful because it always returns true no matter the output value,
