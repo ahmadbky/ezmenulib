@@ -11,10 +11,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::io;
+use std::io::{self, Write};
 use tui::{backend::CrosstermBackend, Terminal};
 
-/// Used to modelize the default backend type used with `crossterm` backend.
+/// Used to modelize the default backend type used with crossterm backend.
 pub type Crossterm<W = Out> = CrosstermBackend<W>;
 
 impl From<CTEvent> for Event {
@@ -69,7 +69,7 @@ impl From<CTEvent> for Event {
     }
 }
 
-/// Returns an [`Event`] using the `crossterm` backend.
+/// Returns an [`Event`] using the crossterm backend.
 pub fn read() -> io::Result<Event> {
     ct_read().map(Event::from)
 }
@@ -84,7 +84,7 @@ pub fn new_terminal() -> io::Result<Terminal<Crossterm>> {
 /// The setup consist in entering to alternate mode, meaning clearing the screen and
 /// hiding the cursor ; enabling the mouse events capture,
 /// and enabling the [raw mode](https://docs.rs/crossterm/latest/crossterm/terminal/index.html#raw-mode).
-pub fn setup_terminal(term: &mut Terminal<Crossterm>) -> io::Result<()> {
+pub fn setup_terminal<W: Write>(term: &mut Terminal<Crossterm<W>>) -> io::Result<()> {
     enable_raw_mode()?;
     execute!(term.backend_mut(), EnterAlternateScreen, EnableMouseCapture)?;
     term.hide_cursor()
@@ -96,7 +96,7 @@ pub fn setup_terminal(term: &mut Terminal<Crossterm>) -> io::Result<()> {
 /// returning to the previous screen before setuping the terminal and showing the cursor ;
 /// disabling the mouse events capture and
 /// disabling the [raw mode](https://docs.rs/crossterm/latest/crossterm/terminal/index.html#raw-mode)
-pub fn restore_terminal(term: &mut Terminal<Crossterm>) -> io::Result<()> {
+pub fn restore_terminal<W: Write>(term: &mut Terminal<Crossterm<W>>) -> io::Result<()> {
     disable_raw_mode()?;
     execute!(
         term.backend_mut(),

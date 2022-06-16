@@ -7,7 +7,7 @@ mod stream;
 
 pub use crate::menu::stream::{MenuStream, Mutable};
 use crate::prelude::*;
-use crate::utils::{check_fields, select};
+use crate::utils::{check_fields, select, Depth};
 
 use std::fmt::{self, Display, Formatter};
 use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
@@ -145,7 +145,7 @@ impl Default for Values<'_> {
 
 /// Creates the container from an owned stream.
 ///
-/// You can still take the stream at the end of the usage, with [`Values::take_stream`].
+/// You can still take the stream at the end of the usage, with [`Values::take_object`].
 impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
     fn from(stream: MenuStream<'a, R, W>) -> Self {
         Self::owned(stream, Format::default())

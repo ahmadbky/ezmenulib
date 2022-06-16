@@ -963,7 +963,7 @@ pub type Binding<R, W> = dyn Fn(&mut MenuStream<R, W>) -> MenuResult;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
-    /// Maps a function to call right after the user select the field.
+    /// Maps a function to call right after the user selects the field.
     Map(&'a Binding<R, W>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
     Parent(Fields<'a, R, W>),
@@ -972,7 +972,7 @@ pub enum Kind<'a, R = In, W = Out> {
     /// The depth level of the current running prompt is at `0`, meaning it will stay at
     /// the current level if the index is at `0` when the user will select the field.
     Back(usize),
-    /// Closes all the nested menus to the top when the user selected the field.
+    /// Closes all the nested menus to the top when the user selects the field.
     Quit,
 }
 

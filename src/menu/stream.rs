@@ -23,9 +23,10 @@ macro_rules! map_impl {
 ///
 /// For example, the [`RawMenu`](crate::prelude::RawMenu) struct uses a mutable
 /// [`MenuStream`], and the latter can be borrowed to the menu struct,
-/// thank to the [`FromMutable`] trait.
+/// thank to the [`FromMutable`](crate::menu::FromMutable) trait.
 ///
-/// You can also retrieve the inner object **if it is owned** with the [`UsesMutable`] trait.
+/// You can also retrieve the inner object **if it is owned**
+/// with the [`UsesMutable`](crate::menu::UsesMutable) trait.
 #[derive(Debug)]
 pub enum Mutable<'a, T> {
     /// The owned `T` object.

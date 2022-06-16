@@ -215,6 +215,7 @@ impl From<TEvent> for Event {
     }
 }
 
+/// Returns an [`Event`] using the termion backend.
 pub fn read() -> io::Result<Event> {
     for event in stdin().events() {
         return event.map(Event::from);
@@ -222,12 +223,18 @@ pub fn read() -> io::Result<Event> {
     Err(Error::last_os_error())
 }
 
+/// Returns a new tui terminal using the termion backend type.
 pub fn new_terminal() -> io::Result<Terminal<Termion>> {
     let mut term = Terminal::new(Termion::new()?)?;
     setup_terminal(&mut term)?;
     Ok(term)
 }
 
+/// Setups the terminal using the termion backend type.
+///
+/// The setup consist in entering to alternate mode, meaning clearing the screen and
+/// hiding the cursor ; enabling the mouse events capture,
+/// and enabling the [raw mode](https://docs.rs/termion/latest/termion/raw/index.html).
 pub fn setup_terminal<W: Write>(term: &mut Terminal<Termion<W>>) -> io::Result<()> {
     write!(
         term.backend_mut(),
@@ -238,12 +245,12 @@ pub fn setup_terminal<W: Write>(term: &mut Terminal<Termion<W>>) -> io::Result<(
     term.backend().activate_raw_mode()
 }
 
-fn close_term<W: Write>(term: &mut Termion<W>) -> io::Result<()> {
-    term.suspend_raw_mode()?;
-    write!(term, "{}{}", EXIT_MOUSE_SEQUENCE, ToMainScreen)?;
-    term.show_cursor()
-}
-
+/// Restores the terminal using the termion backend type.
+///
+/// The restoration of the terminal consist in leaving the alternate mode, meaning
+/// returning to the previous screen before setuping the terminal and showing the cursor ;
+/// disabling the mouse events capture and
+/// disabling the [raw mode](https://docs.rs/termion/latest/termion/raw/index.html)
 pub fn restore_terminal<W: Write>(term: &mut Terminal<Termion<W>>) -> io::Result<()> {
     close_term(term.backend_mut())
 }
