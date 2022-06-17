@@ -176,8 +176,3 @@ The format can be global and inherited by the [`Values`](https://docs.rs/ezmenul
 
 You can find all the crate documentation on [Docs.rs](https://docs.rs/ezmenulib).
 You can also check the [examples](examples) to learn with a practical way.
-
-## WIP
-
-This project is still in development.
-You can check the [EZMenu project](https://github.com/users/ahbalbk/projects/4) to take a look at my todolist :D
