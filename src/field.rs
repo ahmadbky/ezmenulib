@@ -944,7 +944,7 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
 /// The string slice corresponds to the message displayed in the list,
 /// and the kind corresponds to its behavior.
 ///
-/// See [`Kind]` for more information.
+/// See [`Kind`] for more information.
 pub type Field<'a, R = In, W = Out> = (&'a str, Kind<'a, R, W>);
 
 /// The menu fields.

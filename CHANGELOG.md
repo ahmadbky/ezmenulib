@@ -1,32 +1,98 @@
-# Changelog
+# Changelog of `ezmenulib`.
 
 ## 0.3.0 (WIP)
 
 ### Breaking changes
 
-* Moving out the field types from the value-menus.
-  * `ValueMenu` has been renamed to `Values`.
-  * `Field` enum has been removed and replaced by structs `Written` and `Selected`.
-  * `Values` does not contain any fields but uses the given field to retrieve a value from the user at a given instruction.
-  * `Values` only requires the output `T` type to implement `FromStr`.
-  * `Selected` does not require anymore any implementation from the output `T` selected type.
-* Real menus.
-  * New struct: `RawMenu` for building basic CLI menus.
+#### Retrieving values
+
+* Removed `MenuBuilder` trait.
+* `ValueMenu` renamed to `Values`.
+  * It does not contain any field anymore.
+  * It acts as a container that gives its format and stream to each field passed to retrieve a value.
+* `SelectMenu` renamed to `Selected`.
+  * `Selected` does not require the output type to implement `FromStr`.
+  * New associated function: `optional_select`.
+  * New trait: `Selectable`.
+  * `Selected` does not have an optional title anymore but a
+* `ValueField` renamed to `Written`.
+  * New associated function: `many_values`.
+  * New associated function: `many_values_until`.
+  * New associated function: `many_values_until_with`.
+  * New associated function: `many_values_with`.
+  * New associated function: `optional_value`.
+  * New associated function: `optional_value_with`.
+  * New associated function: `prompt_or_default_with`.
+  * New associated function: `prompt_until`.
+  * New associated function: `prompt_until_with`.
+  * New associated function: `prompt_with`.
+  * `Written` only requires the output type to implement `FromStr`.
+* Removed `Field` enum.
+* Removed `MenuOption` and `MenuVec` custom value types.
+* New custom value type: `MenuNumber`.
+  * Enabled with new `"expr"` feature.
+
+#### Format
+
+* Renamed `ValueFieldFormatting` to `Format`.
+* Format can now be merged, and will save the custom format specifications.
+* Reordered fields with new ones:
+  * `prefix`.
+  * `left_sur`.
+  * `right_sur`.
+  * `chip`.
+  * `show_default`.
+  * `suffix`.
+  * `line_brk`.
+
+#### Real menus
+
+##### Raw menus
+
+* New struct: `RawMenu`.
+  * New associated function: `format`.
+  * New associated function: `title`.
+  * New associated function: `run_once`.
+  * New associated function: `run`.
+* New field types.
+  * `Field` with `Fields`.
+  * `Kind`.
+  * `Binding`.
+
+##### `tui-rs` menus
+
+* Enabled with new `"tui"` feature.
+* New struct: `TuiMenu`.
+* New util functions with new `"crossterm"` and `"termion"` features.
+  * `new_terminal`.
+  * `read`.
+  * `restore_terminal`.
+  * `setup_terminal`.
+* New type definitions for backend types: `Termion` and `Crossterm`.
+* New type definition: `FieldStyle`.
+* New field types.
+  * `TuiField` with `TuiFields`.
+  * `TuiKind`.
+  * `TuiBinding`.
+* New module: `event`, merged from `termion` and `crossterm` event modules.
+  * New enum: `Event`.
+  * New enum: `KeyEvent`.
+  * New enum: `MouseButton`.
+  * New enum: `MouseEvent`.
 
 ### Other changes
 
-* `MenuError` does not handle parsing error anymore.
-* New custom value type: `MenuNumber`, with `expr` feature using `meval` crate.
-  * `MenuOption` and `MenuVec` custom value types have been removed.
-* New trait: `Selectable`.
-* `MenuBuilder` trait has been removed.
-* `ValueFieldFormatting` has been renamed to `Format`.
-  * `Format`'s fields have been renamed for more convenience.
-  * New fields: `left_sur` and `right_sur`.
-* `SelectTitle` struct has been removed.
-  * And so `TitlePos` too.
-* `GetStream` trait has been renamed to `UsesStream`.
-  * The output type is not only `MenuStream` anymore, but a generic `T` type according to the implementation on the structs.
+* `GetStream` trait renamed to `UsesMutable`.
+  * `MenuStream` output type replaced to generic `S` type.
+* New trait: `FromMutable`.
+* Removed `SelectTitle` and `TitlePos` types.
+* Changed `MenuError` variants:
+  * Replaced `Parse` variant with `Input` unit variant.
+  * Removed `Select` variant.
+  * New variant: `Format`.
+* Given `()` as default `Ok` type for `MenuResult` type definition.
+
+---
 
 ## 0.2.10 (migrated from 0.2.9)
 
