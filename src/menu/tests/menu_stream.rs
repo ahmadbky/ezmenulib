@@ -1,4 +1,4 @@
-use crate::menu::MenuStream;
+use crate::menu::prelude::*;
 use std::error::Error;
 use std::io::{BufRead, Write};
 
@@ -19,7 +19,7 @@ fn basic() -> Result<(), Box<dyn Error>> {
 fn borrow_params() -> Result<(), Box<dyn Error>> {
     let mut input = "hey\n".as_bytes();
     let mut output = Vec::<u8>::new();
-    let mut stream = MenuStream::with(&mut input, &mut output);
+    let mut stream = MenuStream::from_borrowed(&mut input, &mut output);
     let mut s = String::new();
     stream.read_line(&mut s)?;
     stream.write_all(s.as_bytes())?;

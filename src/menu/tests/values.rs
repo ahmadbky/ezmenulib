@@ -10,7 +10,7 @@ macro_rules! test_menu {
     ($name:ident, $input:expr, $($st:stmt),* $(,)?) => {{
         let mut input = $input.as_bytes();
         let mut output = Vec::<u8>::new();
-        let mut $name = Values::from(MenuStream::with(&mut input, &mut output));
+        let mut $name = Values::from(MenuStream::from_borrowed(&mut input, &mut output));
         {$($st)*}
         String::from_utf8(output)
     }};

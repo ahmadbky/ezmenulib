@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Arguments;
 use std::io::{self, stdin, stdout, BufRead, BufReader, IoSlice, IoSliceMut, Read, Write};
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 macro_rules! map_impl {
     (
@@ -28,20 +30,58 @@ macro_rules! map_impl {
 /// You can also retrieve the inner object **if it is owned**
 /// with the [`UsesMutable`](crate::menu::UsesMutable) trait.
 #[derive(Debug)]
-pub enum Mutable<'a, T> {
-    /// The owned `T` object.
+pub enum Shared<'a, T> {
     Owned(T),
-    /// The mutably borrowed `T` object, living for `'a` lifetime.
     Borrowed(&'a mut T),
 }
 
-impl<T: Default> Default for Mutable<'_, T> {
-    fn default() -> Self {
-        Self::Owned(T::default())
+impl<T> From<T> for Shared<'_, T> {
+    fn from(inner: T) -> Self {
+        owned(inner)
     }
 }
 
-impl<T> Mutable<'_, T> {
+impl<'a, T> From<&'a mut T> for Shared<'a, T> {
+    fn from(inner: &'a mut T) -> Self {
+        borrowed(inner)
+    }
+}
+
+impl<T> AsRef<T> for Shared<'_, T> {
+    #[inline]
+    fn as_ref(&self) -> &T {
+        match self {
+            Self::Borrowed(t) => t,
+            Self::Owned(t) => t,
+        }
+    }
+}
+
+impl<T> AsMut<T> for Shared<'_, T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut T {
+        match self {
+            Self::Borrowed(t) => *t,
+            Self::Owned(t) => t,
+        }
+    }
+}
+
+pub fn owned<'a, T>(inner: T) -> Shared<'a, T> {
+    Shared::Owned(inner)
+}
+
+pub fn borrowed<'a, T>(inner: &'a mut T) -> Shared<'a, T> {
+    Shared::Borrowed(inner)
+}
+
+impl<T: Default> Default for Shared<'_, T> {
+    fn default() -> Self {
+        owned(T::default())
+    }
+}
+
+impl<T> Shared<'_, T> {
     /// Returns the inner object **if it is owned**, consuming `self`.
     ///
     /// # Panics
@@ -49,29 +89,23 @@ impl<T> Mutable<'_, T> {
     /// This method panics if the inner `T` object is [borrowed](Mutable::Borrowed).
     pub fn retrieve(self) -> T {
         match self {
-            Self::Owned(t) => t,
-            Self::Borrowed(_) => panic!("the object must be owned to retrieve it"),
+            Self::Owned(out) => out,
+            Self::Borrowed(_) => unreachable!("object not owned"),
         }
     }
 }
 
-impl<T> Deref for Mutable<'_, T> {
+impl<T> Deref for Shared<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Owned(t) => t,
-            Self::Borrowed(t) => *t,
-        }
+        self.as_ref()
     }
 }
 
-impl<T> DerefMut for Mutable<'_, T> {
+impl<T> DerefMut for Shared<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Owned(t) => t,
-            Self::Borrowed(t) => *t,
-        }
+        self.as_mut()
     }
 }
 
@@ -136,40 +170,79 @@ impl<T> DerefMut for Mutable<'_, T> {
 /// ```
 #[derive(Debug)]
 pub struct MenuStream<'a, R = super::In, W = super::Out> {
-    reader: Mutable<'a, R>,
-    writer: Mutable<'a, W>,
+    pub reader: Shared<'a, R>,
+    pub writer: Shared<'a, W>,
 }
 
 impl Default for MenuStream<'_> {
     #[inline]
     fn default() -> Self {
-        Self::wrap_reader(stdin(), stdout())
+        Self::new(BufReader::new(stdin()), stdout())
     }
 }
 
-impl<R: Read, W> MenuStream<'_, BufReader<R>, W> {
-    /// Instantiate the stream by wrapping the reader with a [`BufReader`].
-    #[inline]
-    pub fn wrap_reader(reader: R, writer: W) -> Self {
-        Self::new(BufReader::new(reader), writer)
+impl<'a, W> MenuStream<'a, super::In, W> {
+    pub fn from_writer(writer: W) -> Self {
+        Self::from_shared_writer(owned(writer))
+    }
+
+    pub fn from_borrowed_writer(writer: &'a mut W) -> Self {
+        Self::from_shared_writer(borrowed(writer))
+    }
+
+    pub fn from_shared_writer(writer: Shared<'a, W>) -> Self {
+        Self::with_shared_writer(BufReader::new(stdin()), writer)
+    }
+}
+
+impl<'a, R> MenuStream<'a, R, super::Out> {
+    pub fn from_reader(reader: R) -> Self {
+        Self::from_shared_reader(owned(reader))
+    }
+
+    pub fn from_borrowed_reader(reader: &'a mut R) -> Self {
+        Self::from_shared_reader(borrowed(reader))
+    }
+
+    pub fn from_shared_reader(reader: Shared<'a, R>) -> Self {
+        Self::with_shared_reader(reader, stdout())
     }
 }
 
 impl<'a, R, W> MenuStream<'a, R, W> {
     /// Instantiates the stream with a given reader and writer.
     pub fn new(reader: R, writer: W) -> Self {
+        Self::from_shared(owned(reader), owned(writer))
+    }
+
+    pub fn with_borrowed_reader(reader: &'a mut R, writer: W) -> Self {
+        Self::with_shared_reader(borrowed(reader), writer)
+    }
+
+    pub fn with_shared_reader(reader: Shared<'a, R>, writer: W) -> Self {
         Self {
-            reader: Mutable::Owned(reader),
-            writer: Mutable::Owned(writer),
+            reader,
+            writer: owned(writer),
         }
     }
 
-    /// Instantiates the stream with a borrowed reader and a borrowed writer.
-    pub fn with(reader: &'a mut R, writer: &'a mut W) -> Self {
+    pub fn with_borrowed_writer(reader: R, writer: &'a mut W) -> Self {
+        Self::with_shared_writer(reader, borrowed(writer))
+    }
+
+    pub fn with_shared_writer(reader: R, writer: Shared<'a, W>) -> Self {
         Self {
-            reader: Mutable::Borrowed(reader),
-            writer: Mutable::Borrowed(writer),
+            reader: owned(reader),
+            writer,
         }
+    }
+
+    pub fn from_borrowed(reader: &'a mut R, writer: &'a mut W) -> Self {
+        Self::from_shared(borrowed(reader), borrowed(writer))
+    }
+
+    pub fn from_shared(reader: Shared<'a, R>, writer: Shared<'a, W>) -> Self {
+        Self { reader, writer }
     }
 
     /// Retrieves the reader and writer of the stream.
