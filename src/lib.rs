@@ -24,7 +24,7 @@
 )]
 #![cfg_attr(nightly, feature(doc_cfg))]
 
-#[cfg(all(feature = "tui", any(feature = "crossterm", feature = "termion")))]
+#[cfg(feature = "tui")]
 #[cfg_attr(nightly, doc(cfg(feature = "tui")))]
 pub mod tui;
 
@@ -34,13 +34,14 @@ pub mod menu;
 
 mod utils;
 
+pub(crate) use utils::*;
+
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
-    pub use crate::field::*;
-    pub use crate::menu::*;
+    pub use crate::field::{Field, Fields, Format, Kind, Selectable, Selected, Written};
+    pub use crate::menu::{borrowed, owned, In, MenuStream, Out, RawMenu, Values};
 
-    pub use crate::MenuError;
-    pub use crate::MenuResult;
+    pub use super::*;
 }
 
 use crate::field::Format;
@@ -51,12 +52,12 @@ use std::io;
 
 pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     prefix: "--> ",
+    left_sur: "[",
+    right_sur: "]",
     chip: " - ",
     show_default: true,
     suffix: ">> ",
     line_brk: true,
-    left_sur: "[",
-    right_sur: "]",
 };
 
 /// The error type used by the menu builder.
@@ -138,3 +139,19 @@ impl From<fmt::Error> for MenuError {
 
 /// The main result type used in the EZMenu library.
 pub type MenuResult<T = ()> = Result<T, MenuError>;
+
+pub trait IntoResult {
+    fn into_result(self) -> MenuResult;
+}
+
+impl<E: Into<MenuError>> IntoResult for Result<(), E> {
+    fn into_result(self) -> MenuResult {
+        self.map_err(E::into)
+    }
+}
+
+impl IntoResult for () {
+    fn into_result(self) -> MenuResult {
+        Ok(())
+    }
+}
