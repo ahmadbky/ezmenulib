@@ -1,41 +1,26 @@
 use std::io::Write;
 
-use ezmenulib::prelude::*;
-
-fn playing(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "now playing")?;
-    Ok(())
-}
-
-fn firstname(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "editing firstname")?;
-    Ok(())
-}
-
-fn lastname(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "editing lastname")?;
-    Ok(())
-}
+use ezmenulib::{field::*, prelude::*};
 
 fn main() {
     RawMenu::from(&[
-        ("Play", Kind::Map(&playing)),
+        ("Play", map(|s| writeln!(s, "Now playing."))),
         (
             "Settings",
-            Kind::Parent(&[
+            parent(&[
                 (
                     "Name",
                     Kind::Parent(&[
-                        ("Firstname", Kind::Map(&firstname)),
-                        ("Lastname", Kind::Map(&lastname)),
-                        ("Main menu", Kind::Back(2)),
+                        ("Firstname", map(|s| writeln!(s, "Editing firstname."))),
+                        ("Lastname", map(|s| writeln!(s, "Editing lastname."))),
+                        ("Main menu", back(2)),
                     ]),
                 ),
-                ("Main menu", Kind::Back(1)),
-                ("Quit", Kind::Quit),
+                ("Main menu", back(1)),
+                ("Quit", quit()),
             ]),
         ),
-        ("Quit", Kind::Quit),
+        ("Quit", quit()),
     ])
     .run()
     .unwrap();

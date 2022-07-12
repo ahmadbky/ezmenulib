@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = MenuStream::default();
     writeln!(stream, "Describe your project")?;
 
-    let mut lic = Values::from(&mut stream).format(Format {
+    let mut lic = Values::from(stream).format(Format {
         prefix: "==> ",
         chip: " = ",
         ..Default::default()
@@ -41,12 +41,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
     let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
     let ty: Type = lic.selected(Selected::from("Select a license type"))?;
-
-    Ok(println!(
-        "{:?} License, Copyright (C) {} {}\n{}",
-        ty,
-        date,
+    println!(
+        "{ty:?} License, Copyright (C) {date} {}\n{}",
         authors.join(", "),
         if let Some(n) = name { n } else { "".to_owned() }
-    ))
+    );
+    Ok(())
 }

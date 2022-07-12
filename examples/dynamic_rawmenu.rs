@@ -1,38 +1,43 @@
 use std::{cell::RefCell, fmt, io::Write, rc::Rc};
 
-use ezmenulib::prelude::*;
+use ezmenulib::{field::*, prelude::*};
 
-type Res<T> = Rc<RefCell<T>>;
-
-#[derive(Clone)]
-struct Data {
-    first: Res<String>,
-    last: Res<String>,
+struct App {
+    firstname: String,
+    lastname: String,
 }
 
-impl Data {
-    fn new(first: Res<String>, last: Res<String>) -> Self {
-        Self { first, last }
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            firstname: "Ahmad".to_owned(),
+            lastname: "Baalbaky".to_owned(),
+        }
     }
 }
 
-impl fmt::Display for Data {
+impl App {
+    fn change_firstname(&mut self, s: &mut MenuStream) -> MenuResult {
+        change_name(s, &mut self.firstname, "first")
+    }
+
+    fn change_lastname(&mut self, s: &mut MenuStream) -> MenuResult {
+        change_name(s, &mut self.lastname, "last")
+    }
+}
+
+impl fmt::Display for App {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.first.borrow(), self.last.borrow())
+        write!(f, "{} {}", self.firstname, self.lastname)
     }
 }
 
-fn playing(s: &mut MenuStream, data: Data) -> MenuResult {
-    writeln!(s, "Now playing with {}", data)?;
-    Ok(())
-}
-
-fn change_name(s: &mut MenuStream, name: Res<String>, span: &str) -> MenuResult {
-    writeln!(s, "Current {span}name: {}", name.borrow())?;
+fn change_name(s: &mut MenuStream, name: &mut String, span: &str) -> MenuResult {
+    writeln!(s, "Current {span}name: {}", name)?;
     let new: Option<String> =
         Written::from(format!("Enter the new {span}name").as_str()).optional_value(s)?;
     if let Some(new) = new {
-        *name.borrow_mut() = new;
+        *name = new;
     } else {
         writeln!(s, "The {span}name hasn't been modified.")?;
     }
@@ -40,35 +45,38 @@ fn change_name(s: &mut MenuStream, name: Res<String>, span: &str) -> MenuResult 
 }
 
 fn main() -> MenuResult {
-    let first = Rc::new(RefCell::new("Ahmad".to_owned()));
-    let last = Rc::new(RefCell::new("Baalbaky".to_owned()));
-
-    let data = Data::new(first.clone(), last.clone());
+    let app = Rc::new(RefCell::new(App::default()));
+    let edit_play = app.clone();
+    let edit_first = app.clone();
+    let edit_last = app.clone();
 
     RawMenu::from(&[
-        ("Play", Kind::Map(&move |s| playing(s, data.clone()))),
+        (
+            "Play",
+            map(move |s| writeln!(s, "Now playing with {}", edit_play.borrow())),
+        ),
         (
             "Settings",
-            Kind::Parent(&[
+            parent(&[
                 (
                     "Name",
-                    Kind::Parent(&[
+                    parent(&[
                         (
                             "Firstname",
-                            Kind::Map(&move |s| change_name(s, first.clone(), "first")),
+                            map(move |s| edit_first.borrow_mut().change_firstname(s)),
                         ),
                         (
                             "Lastname",
-                            Kind::Map(&move |s| change_name(s, last.clone(), "last")),
+                            map(move |s| edit_last.borrow_mut().change_lastname(s)),
                         ),
-                        ("Main menu", Kind::Back(2)),
+                        ("Main menu", back(2)),
                     ]),
                 ),
-                ("Main menu", Kind::Back(1)),
-                ("Quit", Kind::Quit),
+                ("Main menu", back(1)),
+                ("Quit", quit()),
             ]),
         ),
-        ("Quit", Kind::Quit),
+        ("Quit", quit()),
     ])
     .title("Basic menu")
     .run()

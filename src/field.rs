@@ -959,12 +959,12 @@ pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 ///
 /// See [`Kind::Map`] for more information.
 // pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
-pub type Binding<R, W> = dyn Fn(&mut MenuStream<R, W>) -> MenuResult;
+pub type Callback<R, W> = Box<dyn Fn(&mut MenuStream<R, W>) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, R = In, W = Out> {
     /// Maps a function to call right after the user selects the field.
-    Map(&'a Binding<R, W>),
+    Map(Callback<R, W>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
     Parent(Fields<'a, R, W>),
     /// Allows the user to go back to the given depth level from the current running prompt.
@@ -986,4 +986,34 @@ impl<'a, R, W> fmt::Debug for Kind<'a, R, W> {
             Self::Quit => f.write_str("Quit"),
         }
     }
+}
+
+#[macro_export]
+macro_rules! mapped {
+    ($f:expr, $($s:expr),* $(,)?) => {{
+        $crate::field::map(move |s| $f(s, $($s),*))
+    }};
+}
+
+pub fn map<'a, R, W, F, Res>(f: F) -> Kind<'a, R, W>
+where
+    Res: IntoResult,
+    F: Fn(&mut MenuStream<R, W>) -> Res + 'static,
+{
+    Kind::Map(Box::new(move |s| f(s).into_result()))
+}
+
+#[inline(always)]
+pub fn parent<R, W>(f: Fields<R, W>) -> Kind<'_, R, W> {
+    Kind::Parent(f)
+}
+
+#[inline(always)]
+pub fn back<'a, R, W>(i: usize) -> Kind<'a, R, W> {
+    Kind::Back(i)
+}
+
+#[inline(always)]
+pub fn quit<'a, R, W>() -> Kind<'a, R, W> {
+    Kind::Quit
 }
