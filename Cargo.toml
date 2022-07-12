@@ -26,7 +26,7 @@ optional = true
 default-features = false 
 
 [dependencies.crossterm]
-version = "0.23.2"
+version = "0.24.0"
 optional = true
 default-features = false
 
@@ -36,14 +36,12 @@ optional = true
 default-features = false
 
 [dependencies.termion]
-git = "https://github.com/ahbalbk/termion"
-branch = "mouse_cmds"
+version = "1.5.6"
 optional = true
 default-features = false
 
 [dependencies.tui]
-git = "https://github.com/ahbalbk/tui-rs"
-branch = "backend_deref"
+version = "0.18.0"
 optional = true
 default-features= false
 
@@ -55,12 +53,11 @@ default = []
 expr = ["dep:meval"]
 crossterm = ["dep:crossterm", "tui?/crossterm"]
 termion = ["dep:termion", "tui?/termion"]
-c-crossterm = ["cursive?/crossterm-backend"]
-c-termion = ["cursive?/termion-backend"]
-c-ncurses = ["cursive?/ncurses-backend"]
-c-pancurses = ["cursive?/pancurses-backend"]
-c-blt = ["cursive?/blt-backend"]
 
 [[example]]
-name = "tui_menu"
+name = "basic_tuimenu"
+required-features = ["tui", "crossterm"]
+
+[[example]]
+name = "dynamic_tuimenu"
 required-features = ["tui", "crossterm"]
