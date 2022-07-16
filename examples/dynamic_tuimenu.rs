@@ -17,8 +17,9 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ezmenulib::{
+    field::Promptable,
     prelude::*,
-    tui::{back, map, parent, quit, TuiMenu}, field::Promptable,
+    tui::{back, map, parent, quit, TuiMenu},
 };
 
 struct App {

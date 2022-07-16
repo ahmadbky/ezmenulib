@@ -3,13 +3,98 @@
 #[cfg(test)]
 mod tests;
 
+use crate::menu::Handle;
 use crate::prelude::*;
 use crate::utils::*;
 use crate::DEFAULT_FMT;
+use std::borrow::Cow;
 use std::env;
 use std::fmt::{self, Display, Formatter};
-use std::io::{BufRead, Write};
 use std::str::FromStr;
+
+pub trait MenuDisplay {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result;
+
+    fn fmt<W: fmt::Write>(&self, f: W, opt: bool) -> fmt::Result
+    where
+        Self: UsesFormat,
+    {
+        self.fmt_with(f, self.get_format(), opt)
+    }
+}
+
+pub trait UsesFormat {
+    fn get_format(&self) -> &Format<'_>;
+}
+
+pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
+    type Middle;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>>;
+
+    fn convert(self, mid: Self::Middle) -> T;
+
+    fn prompt_with<H: Handle>(self, mut handle: H, fmt: &Format<'_>) -> MenuResult<T> {
+        let fmt = self.get_format().merged(fmt);
+        handle.show(&self, &fmt, false)?;
+        loop {
+            match self.prompt_once(&mut handle, &fmt, false)? {
+                Some(out) => return Ok(self.convert(out)),
+                None => (),
+            }
+        }
+    }
+
+    fn prompt<H: Handle>(self, mut handle: H) -> MenuResult<T> {
+        handle.show(&self, self.get_format(), false)?;
+        loop {
+            match self.prompt_once(&mut handle, self.get_format(), false)? {
+                Some(out) => return Ok(self.convert(out)),
+                None => (),
+            }
+        }
+    }
+
+    fn optional_prompt_with<H: Handle>(
+        self,
+        mut handle: H,
+        fmt: &Format<'_>,
+    ) -> MenuResult<Option<T>> {
+        let fmt = self.get_format().merged(fmt);
+        handle.show(&self, &fmt, true)?;
+        self.prompt_once(handle, &fmt, true)
+            .map(|opt| opt.map(|m| self.convert(m)))
+    }
+
+    fn optional_prompt<H: Handle>(self, mut handle: H) -> MenuResult<Option<T>> {
+        handle.show(&self, self.get_format(), true)?;
+        self.prompt_once(handle, self.get_format(), true)
+            .map(|opt| opt.map(|m| self.convert(m)))
+    }
+
+    fn prompt_or_default_with<H: Handle>(self, handle: H, fmt: &Format<'_>) -> T
+    where
+        T: Default,
+    {
+        self.optional_prompt_with(handle, fmt)
+            .map(Option::unwrap_or_default)
+            .unwrap_or_default()
+    }
+
+    fn prompt_or_default<H: Handle>(self, handle: H) -> T
+    where
+        T: Default,
+    {
+        self.optional_prompt(handle)
+            .map(Option::unwrap_or_default)
+            .unwrap_or_default()
+    }
+}
 
 /// Builds the associated functions of the [`Format`] struct
 /// according to its fields.
@@ -121,6 +206,183 @@ impl<'a> Default for Format<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Separated<'a> {
+    inner: Written<'a>,
+    sep: &'a str,
+    env_sep: Option<&'a str>,
+}
+
+impl<'a> Separated<'a> {
+    pub fn from_written(inner: Written<'a>, sep: &'a str) -> Self {
+        Self {
+            inner,
+            sep,
+            env_sep: None,
+        }
+    }
+
+    pub fn new(msg: &'a str, sep: &'a str) -> Self {
+        Self::from_written(From::from(msg), sep)
+    }
+
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self {
+            inner: self.inner.format(fmt),
+            ..self
+        }
+    }
+
+    pub fn example(self, example: &'a str) -> Self {
+        Self {
+            inner: self.inner.example(example),
+            ..self
+        }
+    }
+
+    pub fn default_value(self, default: &'a str) -> Self {
+        Self {
+            inner: self.inner.default_value(default),
+            ..self
+        }
+    }
+
+    pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
+        Ok(Self {
+            inner: self.inner.default_env(var)?,
+            ..self
+        })
+    }
+
+    pub fn default_env_with(mut self, var: &'a str, sep: &'a str) -> MenuResult<Self> {
+        self.env_sep = Some(sep);
+        self.default_env(var)
+    }
+}
+
+impl UsesFormat for Separated<'_> {
+    fn get_format(&self) -> &Format<'_> {
+        self.inner.get_format()
+    }
+}
+
+impl MenuDisplay for Separated<'_> {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        MenuDisplay::fmt_with(&self.inner, f, fmt, opt)
+    }
+}
+
+impl Display for Separated<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as MenuDisplay>::fmt(self, f, false)
+    }
+}
+
+impl<T: FromStr> Promptable<Vec<T>> for Separated<'_> {
+    type Middle = Vec<T>;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        let s: String = match self.inner.prompt_once(handle, fmt, opt)? {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let res: Result<Vec<T>, T::Err> = s.split(self.sep).map(T::from_str).collect();
+
+        Ok(res.ok().or_else(|| {
+            let d = self.inner.default.as_ref()?;
+            let res: Result<Vec<T>, T::Err> = d.split(self.sep).map(T::from_str).collect();
+            Some(res.unwrap_or_else(|_| default_failed::<T>(d)))
+        }))
+    }
+
+    fn convert(self, mid: Self::Middle) -> Vec<T> {
+        mid
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WrittenUntil<'a, F> {
+    inner: Written<'a>,
+    til: F,
+}
+
+impl<'a, F> WrittenUntil<'a, F> {
+    pub fn from_written(inner: Written<'a>, til: F) -> Self {
+        Self { inner, til }
+    }
+
+    pub fn new(msg: &'a str, til: F) -> Self {
+        Self::from_written(From::from(msg), til)
+    }
+
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self {
+            inner: self.inner.format(fmt),
+            ..self
+        }
+    }
+
+    pub fn default_value(self, default: &'a str) -> Self {
+        Self {
+            inner: self.inner.default_value(default),
+            ..self
+        }
+    }
+
+    pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
+        Ok(Self {
+            inner: self.inner.default_env(var)?,
+            ..self
+        })
+    }
+}
+
+impl<F> UsesFormat for WrittenUntil<'_, F> {
+    fn get_format(&self) -> &Format<'_> {
+        self.inner.get_format()
+    }
+}
+
+impl<F> MenuDisplay for WrittenUntil<'_, F> {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        MenuDisplay::fmt_with(&self.inner, f, fmt, opt)
+    }
+}
+
+impl<F> Display for WrittenUntil<'_, F> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as MenuDisplay>::fmt(self, f, false)
+    }
+}
+
+impl<T, F> Promptable<T> for WrittenUntil<'_, F>
+where
+    T: FromStr,
+    F: Fn(&T) -> bool,
+{
+    type Middle = T;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        self.inner
+            .prompt_once(handle, fmt, opt)
+            .map(|opt| opt.filter(&self.til))
+    }
+
+    fn convert(self, mid: Self::Middle) -> T {
+        mid
+    }
+}
+
 /// Defines the behavior for a written value provided by the user.
 ///
 /// Like the [selected](Selected) values, it contains its own [format](Format),
@@ -144,103 +406,134 @@ impl<'a> Default for Format<'a> {
 ///     .many_values(&mut MenuStream::default(), ", ")?;
 /// # Ok(()) }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Written<'a> {
     msg: &'a str,
     /// The format of the written field value.
     pub fmt: Format<'a>,
     example: Option<&'a str>,
-    default: Option<String>,
+    default: Option<Cow<'a, str>>,
+}
+
+impl UsesFormat for Written<'_> {
+    fn get_format(&self) -> &Format<'_> {
+        &self.fmt
+    }
+}
+
+impl MenuDisplay for Written<'_> {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        if !fmt.line_brk {
+            return Ok(());
+        }
+
+        self.fmt_with_(f, fmt, opt)
+    }
+}
+
+impl<T: FromStr> Promptable<T> for Written<'_> {
+    type Middle = T;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        mut handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        #[inline(never)]
+        fn unwrap_default<T: FromStr>(s: &str) -> T {
+            s.parse()
+                .unwrap_or_else(|_| panic!("invalid default type for written value"))
+        }
+
+        if fmt.line_brk {
+            // Write only suffix on next line
+            handle.write_all(fmt.suffix.as_bytes())?;
+            handle.flush()?;
+        } else {
+            // Write the whole prompt (message + suffix)
+            let mut s = String::new();
+            self.fmt_with_(&mut s, fmt, opt)?;
+            handle.write_all(s.as_bytes())?;
+            handle.write_all(fmt.suffix.as_bytes())?;
+            handle.flush()?;
+        }
+
+        let s = handle.read_input()?;
+        if s.is_empty() {
+            return Ok(self.default.as_deref().map(unwrap_default));
+        }
+        let out = s
+            .parse()
+            .ok()
+            .or_else(|| self.default.as_deref().map(unwrap_default));
+
+        Ok(out)
+    }
+
+    fn convert(self, mid: Self::Middle) -> T {
+        mid
+    }
 }
 
 impl<'a> From<&'a str> for Written<'a> {
     fn from(msg: &'a str) -> Self {
+        Self::new(msg)
+    }
+}
+
+impl Display for Written<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as MenuDisplay>::fmt(self, f, false)
+    }
+}
+
+/// Constructor methods defining how the field behaves
+impl<'a> Written<'a> {
+    fn fmt_with_<W: fmt::Write>(&self, mut f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        f.write_str(fmt.prefix)?;
+        f.write_str(self.msg)?;
+
+        // Field details
+        if opt || self.example.is_some() || self.default.is_some() {
+            f.write_str(" (")?;
+
+            // - Example
+            if let Some(e) = self.example {
+                write!(f, "example: {}", e)?;
+                if opt || self.fmt.show_default && self.default.is_some() {
+                    f.write_str(", ")?;
+                }
+            }
+
+            // - Default
+            match &self.default {
+                Some(d) if self.fmt.show_default => write!(f, "default: {}", d)?,
+                _ => (),
+            }
+
+            // - Optional
+            if opt && self.default.is_none() {
+                f.write_str("optional")?;
+            }
+
+            f.write_str(")")?;
+        }
+
+        if fmt.line_brk {
+            f.write_char('\n')
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn new(msg: &'a str) -> Self {
         Self {
             msg,
             fmt: Format::default(),
             example: None,
             default: None,
         }
-    }
-}
-
-impl Display for Written<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.fmt_with(f, &self.fmt, false)?;
-        f.write_str(match self.fmt.line_brk {
-            true => "\n",
-            false => self.fmt.suffix,
-        })
-    }
-}
-
-/// Constructor methods defining how the field behaves
-impl<'a> Written<'a> {
-    /// Displays the message of the written field with a given prefix.
-    ///
-    /// This is used to prompt the written field with a given [`Format`]
-    /// (see [`Written::prompt_with`] function for example).
-    fn fmt_with<S: fmt::Write>(&self, s: &mut S, fmt: &Format<'_>, opt: bool) -> fmt::Result {
-        s.write_str(fmt.prefix)?;
-        s.write_str(self.msg)?;
-
-        // Field details
-        if opt || self.example.is_some() || self.default.is_some() {
-            s.write_str(" (")?;
-
-            // - Example
-            if let Some(e) = self.example {
-                write!(s, "example: {}", e)?;
-                if opt || self.fmt.show_default && self.default.is_some() {
-                    s.write_str(", ")?;
-                }
-            }
-
-            // - Default
-            match self.default {
-                Some(ref d) if self.fmt.show_default => write!(s, "default: {}", d)?,
-                _ => (),
-            }
-
-            // - Optional
-            if opt && self.default.is_none() {
-                s.write_str("optional")?;
-            }
-
-            s.write_str(")")?;
-        }
-
-        match fmt.line_brk {
-            true => s.write_char('\n'),
-            false => Ok(()),
-        }
-    }
-
-    fn first_line<R, W: Write>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-        opt: bool,
-    ) -> MenuResult {
-        if fmt.line_brk {
-            self.fmt_with(stream, fmt, opt)?;
-        }
-        Ok(())
-    }
-
-    /// Displays the second line according to the format, and returns the output
-    /// of the prompt.
-    fn prompt_line<R: BufRead, W: Write>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-        opt: bool,
-    ) -> MenuResult<String> {
-        if !fmt.line_brk {
-            self.fmt_with(stream, fmt, opt)?;
-        }
-
-        prompt(fmt.suffix, stream)
     }
 
     /// Gives a custom formatting for the written field.
@@ -265,7 +558,7 @@ impl<'a> Written<'a> {
     /// will be displayed inside parenthesis according to its formatting (see [`Format`]
     /// for more information).
     pub fn default_value(mut self, default: &'a str) -> Self {
-        self.default = Some(default.to_owned());
+        self.default = Some(Cow::Borrowed(default));
         self
     }
 
@@ -290,7 +583,9 @@ impl<'a> Written<'a> {
     /// # }
     /// ```
     pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
-        self.default = Some(env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?);
+        self.default = Some(Cow::Owned(
+            env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?,
+        ));
         Ok(self)
     }
 
@@ -306,354 +601,6 @@ impl<'a> Written<'a> {
     pub fn example(mut self, example: &'a str) -> Self {
         self.example = Some(example);
         self
-    }
-
-    /// Prompts the field once, using the given prefix.
-    ///
-    /// It checks the `line_brk` specification. If it is on `true`, the suffix is displayed
-    /// on a separate line, thus it will only display the suffix. Otherwise, it prints out
-    /// the whole message with the suffix.
-    fn prompt_once<R: BufRead, W: Write, T: FromStr>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-        opt: bool,
-    ) -> MenuResult<Option<T>> {
-        fn default_output<T: FromStr>(d: &str) -> T {
-            d.parse().unwrap_or_else(|_| default_failed::<T>(d))
-        }
-
-        let s = self.prompt_line(stream, fmt, opt)?;
-
-        if s.is_empty() {
-            return Ok(self.default.as_deref().map(default_output));
-        }
-
-        let out = s
-            .parse()
-            .ok()
-            .or_else(|| self.default.as_deref().map(default_output));
-
-        Ok(out)
-    }
-
-    /// Prompts the field and returns the input, or `None` if the input is incorrect,
-    /// using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    ///
-    /// It prompts the field once, and if the user entered a correct input,
-    /// it returns `Some(value)`, otherwise, it attempts to return the default value
-    /// (see [`Written::default_value`] or [`Written::default_env`]), and if there is no
-    /// default value, it returns `None`.
-    ///
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]).
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn optional_value_with<R, W, T>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-    ) -> MenuResult<Option<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-    {
-        let fmt = self.fmt.merged(fmt);
-        self.first_line(stream, &fmt, true)?;
-        self.prompt_once(stream, &fmt, true)
-    }
-
-    /// Prompts the field and returns the input, or `None` if the input is incorrect.
-    ///
-    /// It prompts the field once, and if the user entered a correct input,
-    /// it returns `Some(value)`, otherwise, it attempts to return the default value
-    /// (see [`Written::default_value`] or [`Written::default_env`]), and if there is no
-    /// default value, it returns `None`.
-    ///
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]).
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn optional_value<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-    {
-        self.optional_value_with(stream, &self.fmt)
-    }
-
-    /// Prompts the field and returns the inputs as a `Vec<T>` until the given
-    /// constraint is applied to all the values, using `sep` to split the input
-    /// into the output values, and using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    ///
-    /// After checking and parsing the values provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn many_values_until_with<R, W, T, S, F>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        sep: S,
-        til: F,
-        fmt: &Format<'_>,
-    ) -> MenuResult<Vec<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        S: AsRef<str>,
-        F: Fn(&T) -> bool,
-    {
-        fn inner_prompt_once<R: BufRead, W: Write, T: FromStr>(
-            w: &Written<'_>,
-            stream: &mut MenuStream<R, W>,
-            sep: &str,
-            fmt: &Format<'_>,
-        ) -> MenuResult<Option<Vec<T>>> {
-            let s = w.prompt_line(stream, fmt, false)?;
-            let res: Result<Vec<T>, T::Err> = s.split(sep).map(T::from_str).collect();
-
-            Ok(res.ok().or_else(|| {
-                let default = w.default.as_ref()?;
-                let res: Result<Vec<T>, T::Err> = default.split(sep).map(T::from_str).collect();
-                Some(res.unwrap_or_else(|_| default_failed::<T>(default)))
-            }))
-        }
-
-        let fmt = self.fmt.merged(fmt);
-        self.first_line(stream, &fmt, false)?;
-        let s = sep.as_ref();
-
-        // Loops while incorrect input.
-        loop {
-            match inner_prompt_once(self, stream, s, &fmt)? {
-                Some(v) if v.iter().all(&til) => return Ok(v),
-                _ => continue,
-            }
-        }
-    }
-
-    /// Prompts the field and returns the inputs as a `Vec<T>` until the given
-    /// constraint is applied to all the values, using `sep` to split the input
-    /// into the output values.
-    ///
-    /// After checking and parsing the values provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn many_values_until<R, W, T, S, F>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        sep: S,
-        til: F,
-    ) -> MenuResult<Vec<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        S: AsRef<str>,
-        F: Fn(&T) -> bool,
-    {
-        self.many_values_until_with(stream, sep, til, &self.fmt)
-    }
-
-    /// Prompts the field and returns the inputs as a `Vec<T>` using `sep` to split the input
-    /// into the output values, and using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    ///
-    /// After checking and parsing the values provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn many_values_with<R, W, T, S>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        sep: S,
-        fmt: &Format<'_>,
-    ) -> MenuResult<Vec<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        S: AsRef<str>,
-    {
-        self.many_values_until_with(stream, sep, keep, fmt)
-    }
-
-    /// Prompts the field and returns the inputs as a `Vec<T>` using `sep` to split the input
-    /// into the output values.
-    ///
-    /// After checking and parsing the values provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn many_values<R, W, T, S>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        sep: S,
-    ) -> MenuResult<Vec<T>>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        S: AsRef<str>,
-    {
-        self.many_values_with(stream, sep, &self.fmt)
-    }
-
-    /// Prompts the field until the constraint is applied, using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    /// After checking and parsing the value provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panic
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt_until_with<R, W, T, F>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        til: F,
-        fmt: &Format<'a>,
-    ) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        F: Fn(&T) -> bool,
-    {
-        let fmt = self.fmt.merged(fmt);
-        self.first_line(stream, &fmt, false)?;
-
-        // Loops while incorrect input.
-        loop {
-            match self.prompt_once(stream, &fmt, false)? {
-                Some(out) if til(&out) => return Ok(out),
-                _ => continue,
-            }
-        }
-    }
-
-    /// Prompts the field until the constraint is applied.
-    ///
-    /// After checking and parsing the value provided by the user, it calls the `til` function.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panic
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt_until<R, W, T, F>(&self, stream: &mut MenuStream<R, W>, til: F) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-        F: Fn(&T) -> bool,
-    {
-        self.prompt_until_with(stream, til, &self.fmt)
-    }
-
-    /// Prompts the field, using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    /// It prompts the field until the value provided by the user is correct, then parses it.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panic
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt_with<R, W, T>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'a>,
-    ) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-    {
-        self.prompt_until_with(stream, keep, fmt)
-    }
-
-    /// Prompts the field.
-    ///
-    /// It prompts the field until the value provided by the user is correct, then parses it.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// # Panic
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr,
-    {
-        self.prompt_with(stream, &self.fmt)
-    }
-
-    /// Prompts the field and returns the input value, or the default value of the type
-    /// if the input is incorrect, using the given format.
-    ///
-    /// It uses the merged version between the format of the written field and the given format.
-    ///
-    /// It prompts the value once, and if the user entered a correct input, it returns the value,
-    /// otherwise, it attempts to return the default value (see [`Written::default_value`]
-    /// or [`Written::default_env`]), and if there is no default value, it returns
-    /// the [default](Default) implementation of `T`.
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt_or_default_with<R, W, T>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-        fmt: &Format<'_>,
-    ) -> T
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr + Default,
-    {
-        self.optional_value_with(stream, fmt)
-            .map(Option::unwrap_or_default)
-            .unwrap_or_default()
-    }
-
-    /// Prompts the field and returns the input value, or the default value of the type
-    /// if the input is incorrect.
-    ///
-    /// It prompts the value once, and if the user entered a correct input, it returns the value,
-    /// otherwise, it attempts to return the default value (see [`Written::default_value`]
-    /// or [`Written::default_env`]), and if there is no default value, it returns
-    /// the [default](Default) implementation of `T`.
-    ///
-    /// # Panics
-    ///
-    /// If the default value has an incorrect type, this function will panic.
-    pub fn prompt_or_default<R, W, T>(&self, stream: &mut MenuStream<R, W>) -> T
-    where
-        R: BufRead,
-        W: Write,
-        T: FromStr + Default,
-    {
-        self.prompt_or_default_with(stream, &self.fmt)
     }
 }
 
@@ -745,17 +692,76 @@ pub struct Selected<'a, T, const N: usize> {
     default: Option<usize>,
 }
 
+impl<T, const N: usize> UsesFormat for Selected<'_, T, N> {
+    fn get_format(&self) -> &Format<'_> {
+        &self.fmt
+    }
+}
+
+impl<T, const N: usize> MenuDisplay for Selected<'_, T, N> {
+    fn fmt_with<W: fmt::Write>(&self, mut f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        write!(f, "{}{}", fmt.prefix, self.msg)?;
+        if opt && self.default.is_none() || self.default.is_some() && !fmt.show_default {
+            f.write_str(" (optional)")?;
+        }
+        f.write_str("\n")?;
+
+        for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
+            write!(f, "{}{i}{}{}{msg}", fmt.left_sur, fmt.right_sur, fmt.chip)?;
+            match self.default {
+                Some(x) if x == i && fmt.show_default => f.write_str(" (default)")?,
+                _ => (),
+            }
+            f.write_str("\n")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T, const N: usize> Promptable<T> for Selected<'_, T, N> {
+    type Middle = usize;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        handle: H,
+        fmt: &Format<'_>,
+        _opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        select(handle, fmt.suffix, N)
+            .map(|o| o.or_else(|| self.default.map(|i| i.saturating_sub(1))))
+    }
+
+    fn convert(self, mid: Self::Middle) -> T {
+        self.fields
+            .into_iter()
+            .nth(mid)
+            .expect("index out of bound for selected prompt")
+            .1
+    }
+}
+
 impl<'a, T, const N: usize> From<&'a str> for Selected<'a, T, N>
 where
     T: Selectable<N>,
 {
+    #[inline]
     fn from(msg: &'a str) -> Self {
-        Self::inner_new(msg, T::values(), T::default().map(|i| i + 1))
+        Self::from_selectable(msg)
+    }
+}
+
+impl<'a, T, const N: usize> Selected<'a, T, N>
+where
+    T: Selectable<N>,
+{
+    pub fn from_selectable(msg: &'a str) -> Self {
+        Self::new_(msg, T::values(), T::default().map(|i| i + 1))
     }
 }
 
 impl<'a, T, const N: usize> Selected<'a, T, N> {
-    fn inner_new(msg: &'a str, fields: [(&'a str, T); N], default: Option<usize>) -> Self {
+    fn new_(msg: &'a str, fields: [(&'a str, T); N], default: Option<usize>) -> Self {
         check_fields(fields.as_ref());
 
         Self {
@@ -780,7 +786,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     /// when prompting the index to the user to select with an empty list, it will generate an
     /// infinite loop.
     pub fn new(msg: &'a str, fields: [(&'a str, T); N]) -> Self {
-        Self::inner_new(msg, fields, None)
+        Self::new_(msg, fields, None)
     }
 
     /// Gives a custom formatting for the selected value.
@@ -823,119 +829,11 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         self.default = Some(default + 1);
         self
     }
-
-    /// Prompts the selectable fields once.
-    ///
-    /// In fact, it only displays the suffix, and gets the user input, then returns
-    /// the correct index wrapped in a `Query`.
-    fn prompt_once<R: BufRead, W: Write>(
-        &self,
-        stream: &mut MenuStream<R, W>,
-    ) -> MenuResult<Option<usize>> {
-        select(stream, self.fmt.suffix, N).map(|o| o.or(self.default))
-    }
-
-    /// Prompts the selectable fields and returns the value at the input index,
-    /// or `None` if the index is incorrect.
-    ///
-    /// It prompts the selectable fields once, and if the user entered a correct index,
-    /// it returns `Some(value)` where `value` corresponds to the value mapped to this index,
-    /// otherwise, it attempts to return the value mapped by the default index
-    /// (see `Selected::default`), and if there is no default index, it returns `None`.
-    ///
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]).
-    pub fn optional_select<R, W>(self, stream: &mut MenuStream<R, W>) -> MenuResult<Option<T>>
-    where
-        R: BufRead,
-        W: Write,
-    {
-        // Uses the alternate form of selection field display
-        // to display the "(optional)" string slice message.
-        show(&format!("{:#}", self), stream)?;
-
-        Ok(self.prompt_once(stream)?.map(|i| {
-            // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
-            unsafe { self.take(i) }
-        }))
-    }
-
-    /// Gives the value stored at index `i`, consuming `self`.
-    ///
-    /// The index must be in bounds, or this will cause an undefined behavior.
-    ///
-    /// # Safety
-    ///
-    /// The `i` index must be in bounds, meaning `i < N`.
-    /// Otherwise, this function results in an undefined behavior.
-    unsafe fn take(self, i: usize) -> T {
-        self.fields.into_iter().nth(i).unwrap_unchecked().1
-    }
-
-    /// Prompts the selectable values to the user.
-    ///
-    /// It prompts the fields once and the suffix until the index provided, then returns the selected value.
-    /// The output is wrapped in a [`MenuResult`] to prevent from any error (see [`MenuError`]);
-    ///
-    /// This function consumes `self` because it returns the ownership of a contained value
-    /// (`T`) defined earlier in the [`Selected::new`] function.
-    pub fn select<R, W>(self, stream: &mut MenuStream<R, W>) -> MenuResult<T>
-    where
-        R: BufRead,
-        W: Write,
-    {
-        show(&self, stream)?;
-        loop {
-            match self.prompt_once(stream)? {
-                // SAFETY: the `Selected::prompt_once` guarantees that the index is in bounds.
-                Some(out) => return Ok(unsafe { self.take(out) }),
-                None => continue,
-            }
-        }
-    }
-
-    /// Prompts the selectable values to the user, and returns the value at the input index,
-    /// or the default index if the input is incorrect.
-    ///
-    /// It prompts the selectable values once, and if the user entered a correct index,
-    /// it returns the value mapped to this index, otherwise, it attempts to return the value
-    /// mapped to the default index (see [`Selected::default`]), and if there is no default value,
-    /// it returns the [default](Default) implementation of `T`.
-    pub fn select_or_default<R, W>(self, stream: &mut MenuStream<R, W>) -> T
-    where
-        R: BufRead,
-        W: Write,
-        T: Default,
-    {
-        self.optional_select(stream)
-            .map(Option::unwrap_or_default)
-            .unwrap_or_default()
-    }
 }
 
-impl<T, const N: usize> Display for Selected<'_, T, N> {
+impl<'a, T, const N: usize> Display for Selected<'a, T, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.fmt.prefix, self.msg)?;
-        if f.alternate() && self.default.is_none()
-            || self.default.is_some() && !self.fmt.show_default
-        {
-            f.write_str(" (optional)")?;
-        }
-        f.write_str("\n")?;
-
-        for (i, (msg, _)) in (1..=N).zip(self.fields.iter()) {
-            write!(
-                f,
-                "{}{i}{}{}{msg}",
-                self.fmt.left_sur, self.fmt.right_sur, self.fmt.chip
-            )?;
-            match self.default {
-                Some(x) if x == i && self.fmt.show_default => f.write_str(" (default)")?,
-                _ => (),
-            }
-            f.write_str("\n")?;
-        }
-
-        Ok(())
+        <Self as MenuDisplay>::fmt(self, f, false)
     }
 }
 
@@ -945,13 +843,13 @@ impl<T, const N: usize> Display for Selected<'_, T, N> {
 /// and the kind corresponds to its behavior.
 ///
 /// See [`Kind`] for more information.
-pub type Field<'a, R = In, W = Out> = (&'a str, Kind<'a, R, W>);
+pub type Field<'a, H = MenuHandle> = (&'a str, Kind<'a, H>);
 
 /// The menu fields.
 ///
 /// It simply corresponds to a slice of fields.
 /// It is used for more convenience in the library.
-pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
+pub type Fields<'a, H = MenuHandle> = &'a [Field<'a, H>];
 
 /// Corresponds to the function mapped to a field.
 ///
@@ -959,14 +857,14 @@ pub type Fields<'a, R = In, W = Out> = &'a [Field<'a, R, W>];
 ///
 /// See [`Kind::Map`] for more information.
 // pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
-pub type Callback<R, W> = Box<dyn Fn(&mut MenuStream<R, W>) -> MenuResult>;
+pub type Callback<H = MenuHandle> = Box<dyn Fn(D<H>) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
-pub enum Kind<'a, R = In, W = Out> {
+pub enum Kind<'a, H = MenuHandle> {
     /// Maps a function to call right after the user selects the field.
-    Map(Callback<R, W>),
+    Map(Callback<H>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
-    Parent(Fields<'a, R, W>),
+    Parent(Fields<'a, H>),
     /// Allows the user to go back to the given depth level from the current running prompt.
     ///
     /// The depth level of the current running prompt is at `0`, meaning it will stay at
@@ -976,7 +874,7 @@ pub enum Kind<'a, R = In, W = Out> {
     Quit,
 }
 
-impl<'a, R, W> fmt::Debug for Kind<'a, R, W> {
+impl<'a, H> fmt::Debug for Kind<'a, H> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str("Field::")?;
         match self {
@@ -995,25 +893,25 @@ macro_rules! mapped {
     }};
 }
 
-pub fn map<'a, R, W, F, Res>(f: F) -> Kind<'a, R, W>
+pub fn map<'a, F, R, H>(f: F) -> Kind<'a, H>
 where
-    Res: IntoResult,
-    F: Fn(&mut MenuStream<R, W>) -> Res + 'static,
+    F: Fn(D<H>) -> R + 'static,
+    R: IntoResult,
 {
-    Kind::Map(Box::new(move |s| f(s).into_result()))
+    Kind::Map(Box::new(move |d| f(d).into_result()))
 }
 
 #[inline(always)]
-pub fn parent<R, W>(f: Fields<R, W>) -> Kind<'_, R, W> {
+pub fn parent<H>(f: Fields<'_, H>) -> Kind<'_, H> {
     Kind::Parent(f)
 }
 
 #[inline(always)]
-pub fn back<'a, R, W>(i: usize) -> Kind<'a, R, W> {
+pub fn back<'a, H>(i: usize) -> Kind<'a, H> {
     Kind::Back(i)
 }
 
 #[inline(always)]
-pub fn quit<'a, R, W>() -> Kind<'a, R, W> {
+pub fn quit<'a, H>() -> Kind<'a, H> {
     Kind::Quit
 }

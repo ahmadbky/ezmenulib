@@ -3,20 +3,19 @@
 #[cfg(test)]
 mod tests;
 
-mod stream;
+mod handle;
 
-pub use crate::menu::stream::{borrowed, owned, MenuStream, Shared};
+use crate::field::Promptable;
+pub use crate::menu::handle::{Handle, MenuHandle};
 
 use crate::prelude::*;
 use crate::utils::{check_fields, select, Depth};
 
 use std::fmt::{self, Display, Formatter};
-use std::io::{BufRead, BufReader, Stdin, Stdout, Write};
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
+use std::io::{Stdin, Stdout};
 
 /// The default input stream used by a menu, using the standard input stream.
-pub type In = BufReader<Stdin>;
+pub type In = Stdin;
 
 /// The default output stream used by a menu, using the standard output stream.
 pub type Out = Stdout;
@@ -79,19 +78,13 @@ pub type Out = Stdout;
 /// // let mut menu = Values::from(my_stream);
 /// ```
 #[derive(Debug)]
-pub struct Values<'a, R = In, W = Out> {
+pub struct Values<'a, H = MenuHandle> {
     /// The global format of the container.
     pub fmt: Format<'a>,
-    stream: Shared<'a, MenuStream<'a, R, W>>,
+    /// The global handle of the container.
+    pub handle: H,
 }
 
-/// Returns the default container, which corresponds to the
-/// [default format](Format::default) and the [owned default stream](MenuStream::default).
-// Cannot use the derivable implementation of `Default`
-// because generic parameters R and W need to implement `Default`.
-// Here, we use the `Default` implementation of `MenuStream`, which
-// uses `BufReader<Stdin>` as `R` and `Stdout` as `W`.
-#[allow(clippy::derivable_impls)]
 impl Default for Values<'_> {
     #[inline]
     fn default() -> Self {
@@ -102,53 +95,34 @@ impl Default for Values<'_> {
 impl<'a> From<Format<'a>> for Values<'a> {
     #[inline]
     fn from(fmt: Format<'a>) -> Self {
-        Self::default().format(fmt)
+        Self::from_format(fmt)
     }
 }
 
-/// Creates the container from an owned stream.
-///
-/// You can still take the stream at the end of the usage, with [`Values::take_object`].
-impl<'a, R, W> From<MenuStream<'a, R, W>> for Values<'a, R, W> {
-    #[inline]
-    fn from(stream: MenuStream<'a, R, W>) -> Self {
-        Self::from_stream(stream)
-    }
-}
-
-impl<'a, R, W> From<&'a mut MenuStream<'a, R, W>> for Values<'a, R, W> {
-    fn from(stream: &'a mut MenuStream<'a, R, W>) -> Self {
-        Self::from_borrowed_stream(stream)
-    }
-}
-
-impl<'a, R, W> From<Shared<'a, MenuStream<'a, R, W>>> for Values<'a, R, W> {
-    fn from(stream: Shared<'a, MenuStream<'a, R, W>>) -> Self {
-        Self::from_shared_stream(stream)
+impl<'a, H> From<H> for Values<'a, H> {
+    fn from(handle: H) -> Self {
+        Self::from_handle(handle)
     }
 }
 
 impl<'a> Values<'a> {
     #[inline]
     pub fn new() -> Self {
-        Self::from_stream(MenuStream::default())
+        Self::from_format(Format::default())
+    }
+
+    pub fn from_format(fmt: Format<'a>) -> Self {
+        Self {
+            handle: Default::default(),
+            fmt,
+        }
     }
 }
 
-impl<'a, R, W> Values<'a, R, W> {
-    #[inline]
-    pub fn from_stream(stream: MenuStream<'a, R, W>) -> Self {
-        Self::from_shared_stream(owned(stream))
-    }
-
-    #[inline]
-    pub fn from_borrowed_stream(stream: &'a mut MenuStream<'a, R, W>) -> Self {
-        Self::from_shared_stream(borrowed(stream))
-    }
-
-    pub fn from_shared_stream(stream: Shared<'a, MenuStream<'a, R, W>>) -> Self {
+impl<'a, H> Values<'a, H> {
+    pub fn from_handle(handle: H) -> Self {
         Self {
-            stream,
+            handle,
             fmt: Format::default(),
         }
     }
@@ -162,188 +136,31 @@ impl<'a, R, W> Values<'a, R, W> {
         self.fmt = fmt;
         self
     }
-
-    pub fn retrieve(self) -> MenuStream<'a, R, W> {
-        self.stream.retrieve()
-    }
-
-    pub fn get_stream(&self) -> &MenuStream<'a, R, W> {
-        &self.stream
-    }
-
-    pub fn get_stream_mut(&mut self) -> &mut MenuStream<'a, R, W> {
-        &mut self.stream
-    }
 }
 
 /// Associated functions that concerns retrieving values from the user,
 /// thus using the reader and writer stream.
-impl<R, W> Values<'_, R, W>
-where
-    R: BufRead,
-    W: Write,
-{
-    /// Returns the next value selected by the user.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the selectable fields.
-    ///
-    /// See [`Selected::select`] function fore more information.
-    pub fn selected<T, const N: usize>(&mut self, sel: Selected<'_, T, N>) -> MenuResult<T> {
-        let fmt = sel.fmt.merged(&self.fmt);
-        sel.format(fmt).select(self.stream.deref_mut())
+impl<H: Handle> Values<'_, H> {
+    pub fn next<T, P>(&mut self, p: P) -> MenuResult<T>
+    where
+        P: Promptable<T>,
+    {
+        p.prompt_with(&mut self.handle, &self.fmt)
     }
 
-    /// Returns the next value selected by the user wrapped as `Some(value)`,
-    /// else `None`.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the selectable fields.
-    ///
-    /// See [`Selected::optional_select`] function fore more information.
-    pub fn optional_selected<T, const N: usize>(
-        &mut self,
-        sel: Selected<'_, T, N>,
-    ) -> MenuResult<Option<T>> {
-        let fmt = sel.fmt.merged(&self.fmt);
-        sel.format(fmt).optional_select(self.stream.deref_mut())
-    }
-
-    /// Returns the next value selected by the user, or the default value of the output type
-    /// if any error occurred.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the selectable fields.
-    ///
-    /// See [`Selected::select_or_default`] function for more information.
-    pub fn selected_or_default<T, const N: usize>(&mut self, sel: Selected<'_, T, N>) -> T
+    pub fn next_or_default<T, P>(&mut self, p: P) -> T
     where
         T: Default,
+        P: Promptable<T>,
     {
-        let fmt = self.fmt.merged(&self.fmt);
-        sel.format(fmt).select_or_default(self.stream.deref_mut())
+        p.prompt_or_default_with(&mut self.handle, &self.fmt)
     }
 
-    /// Returns the next value written by the user.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::prompt`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn written<T>(&mut self, written: &Written<'_>) -> MenuResult<T>
+    pub fn next_optional<T, P>(&mut self, p: P) -> MenuResult<Option<T>>
     where
-        T: FromStr,
+        P: Promptable<T>,
     {
-        written.prompt_with(self.stream.deref_mut(), &self.fmt)
-    }
-
-    /// Returns the next value written by the user by prompting him the field
-    /// until the given constraint is applied.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::prompt_until`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn written_until<T, F>(&mut self, written: &Written<'_>, til: F) -> MenuResult<T>
-    where
-        T: FromStr,
-        F: Fn(&T) -> bool,
-    {
-        written.prompt_until_with(self.stream.deref_mut(), til, &self.fmt)
-    }
-
-    /// Returns the next value written by the user wrapped as `Some(value)`
-    /// if the input is correct, else `None`.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::optional_value`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn optional_written<T>(&mut self, written: &Written<'_>) -> MenuResult<Option<T>>
-    where
-        T: FromStr,
-    {
-        written.optional_value_with(self.stream.deref_mut(), &self.fmt)
-    }
-
-    /// Returns the next many values written by the user wrapped as a `Vec<T>`, separated by
-    /// `sep`, until the given constraint is applied to all the values.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::many_values_until`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn many_written_until<T, S, F>(
-        &mut self,
-        written: &Written<'_>,
-        sep: S,
-        til: F,
-    ) -> MenuResult<Vec<T>>
-    where
-        T: FromStr,
-        S: AsRef<str>,
-        F: Fn(&T) -> bool,
-    {
-        written.many_values_until_with(self.stream.deref_mut(), sep, til, &self.fmt)
-    }
-
-    /// Returns the next many values written by the user wrapped as a `Vec<T>`,
-    /// separated by `sep`.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::many_values`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn many_written<T, S>(&mut self, written: &Written<'_>, sep: S) -> MenuResult<Vec<T>>
-    where
-        T: FromStr,
-        S: AsRef<str>,
-    {
-        written.many_values_with(self.stream.deref_mut(), sep, &self.fmt)
-    }
-
-    /// Returns the next value written by the user, or the default value of the
-    /// output type if any error occurred.
-    ///
-    /// It merges the [format](Format) of the field with the global format of the container.
-    /// The merge saves the custom formatting specification of the written field.
-    ///
-    /// See [`Written::prompt_or_default`] for more information.
-    ///
-    /// # Panic
-    ///
-    /// If the given written field has an incorrect default value,
-    /// this function will panic at runtime.
-    pub fn written_or_default<T>(&mut self, written: &Written<'_>) -> T
-    where
-        T: FromStr + Default,
-    {
-        written.prompt_or_default_with(self.stream.deref_mut(), &self.fmt)
+        p.optional_prompt_with(&mut self.handle, &self.fmt)
     }
 }
 
@@ -377,16 +194,17 @@ where
 /// # Ok(()) }
 /// ```
 #[derive(Debug)]
-pub struct RawMenu<'a, R = In, W = Out> {
+pub struct RawMenu<'a, H = MenuHandle> {
     /// The global format of the menu.
     pub fmt: Format<'a>,
+    /// The global handle of the menu.
+    pub handle: H,
     title: Option<&'a str>,
-    fields: Fields<'a, R, W>,
-    stream: Shared<'a, MenuStream<'a, R, W>>,
+    fields: Fields<'a, H>,
     once: bool,
 }
 
-impl<R, W> Display for RawMenu<'_, R, W> {
+impl<H> Display for RawMenu<'_, H> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Title
         if let Some(title) = self.title {
@@ -406,7 +224,7 @@ impl<R, W> Display for RawMenu<'_, R, W> {
 impl<'a> RawMenu<'a> {
     pub fn new(fields: Fields<'a>) -> Self {
         check_fields(fields);
-        Self::with_stream(MenuStream::default(), fields)
+        Self::with_handle(MenuHandle::default(), fields)
     }
 }
 
@@ -424,24 +242,13 @@ impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
     }
 }
 
-impl<'a, R, W> RawMenu<'a, R, W> {
-    pub fn with_stream(stream: MenuStream<'a, R, W>, fields: Fields<'a, R, W>) -> Self {
-        Self::with_shared(owned(stream), fields)
-    }
-
-    pub fn with_borrowed_stream(
-        stream: &'a mut MenuStream<'a, R, W>,
-        fields: Fields<'a, R, W>,
-    ) -> Self {
-        Self::with_shared(borrowed(stream), fields)
-    }
-
-    pub fn with_shared(stream: Shared<'a, MenuStream<'a, R, W>>, fields: Fields<'a, R, W>) -> Self {
+impl<'a, H> RawMenu<'a, H> {
+    pub fn with_handle(handle: H, fields: Fields<'a, H>) -> Self {
         Self {
             fmt: Format::default(),
             title: None,
             fields,
-            stream,
+            handle,
             once: false,
         }
     }
@@ -465,25 +272,9 @@ impl<'a, R, W> RawMenu<'a, R, W> {
         self.once = once;
         self
     }
-
-    pub fn retrieve(self) -> MenuStream<'a, R, W> {
-        self.stream.retrieve()
-    }
-
-    pub fn get_stream(&self) -> &MenuStream<'a, R, W> {
-        &self.stream
-    }
-
-    pub fn get_stream_mut(&mut self) -> &mut MenuStream<'a, R, W> {
-        &mut self.stream
-    }
 }
 
-impl<R, W> RawMenu<'_, R, W>
-where
-    R: BufRead,
-    W: Write,
-{
+impl<H: Handle> RawMenu<'_, H> {
     /// Runs the menu.
     ///
     /// The mutability is from the operations done with the stream.
@@ -494,7 +285,7 @@ where
     pub fn run(&mut self) -> MenuResult {
         run_with(
             &mut RunParams {
-                stream: &mut *self.stream,
+                handle: &mut self.handle,
                 fmt: &self.fmt,
                 once: self.once,
             },
@@ -507,27 +298,27 @@ where
 
 /// Represents the parameters of the menu currently running, which are the same
 /// at any state of the menu (any depth of the `run_with` recursive function).
-struct RunParams<'a, 'b: 'a, R, W> {
-    stream: &'a mut MenuStream<'b, R, W>,
+struct RunParams<'a, 'b: 'a, H> {
+    handle: &'a mut H,
     fmt: &'a Format<'b>,
     once: bool,
 }
 
 /// Prints out the menu to the terminal.
-fn show_menu<R, W: Write>(
-    params: &mut RunParams<R, W>,
+fn show_menu<H: Handle>(
+    params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: Fields<R, W>,
+    fields: Fields<H>,
 ) -> MenuResult {
     // Title of current selective menu.
     if let Some(s) = msg {
-        writeln!(params.stream, "{}{s}", params.fmt.prefix)?;
+        writeln!(params.handle, "{}{s}", params.fmt.prefix)?;
     }
 
     // Fields of current selective menu.
     for (i, (field_msg, _)) in (1..=fields.len()).zip(fields.iter()) {
         writeln!(
-            params.stream,
+            params.handle,
             "{}{i}{}{}{field_msg}",
             params.fmt.left_sur, params.fmt.right_sur, params.fmt.chip
         )?;
@@ -537,16 +328,16 @@ fn show_menu<R, W: Write>(
 }
 
 /// Handles the field selected by the user.
-fn handle_field<R: BufRead, W: Write>(
-    params: &mut RunParams<R, W>,
+fn handle_field<H: Handle>(
+    params: &mut RunParams<H>,
     msg: &str,
-    kind: &Kind<R, W>,
+    kind: &Kind<H>,
 ) -> MenuResult<Depth> {
     use Depth::*;
 
     Ok(match kind {
         Kind::Map(f) => {
-            f(params.stream)?;
+            f(D::new(params.handle))?;
             if params.once {
                 Quit
             } else {
@@ -572,17 +363,17 @@ fn handle_field<R: BufRead, W: Write>(
 /// The function returns a wrapped `Option<usize>`. The index inside corresponds to the current
 /// level of depth of the menu. With recursion, it allows to go back to the indexed depth
 /// level from the current running prompt.
-fn run_with<R: BufRead, W: Write>(
-    params: &mut RunParams<R, W>,
+fn run_with<H: Handle>(
+    params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: Fields<R, W>,
+    fields: Fields<H>,
 ) -> MenuResult<Depth> {
     loop {
         show_menu(params, msg, fields)?;
 
         // Gets the message and the field kind selected by the user.
         let (msg, kind) = loop {
-            match select(params.stream, params.fmt.suffix, fields.len())?
+            match select(&mut params.handle, params.fmt.suffix, fields.len())?
                 .and_then(|i| fields.get(i))
             {
                 Some(field) => break field,
