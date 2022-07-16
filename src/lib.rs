@@ -38,8 +38,11 @@ pub(crate) use utils::*;
 
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
-    pub use crate::field::{Field, Fields, Format, Kind, Selectable, Selected, Written};
-    pub use crate::menu::{borrowed, owned, In, MenuStream, Out, RawMenu, Values};
+    pub use crate::field::{
+        Field, Fields, Format, Kind, MenuDisplay, Promptable, Selectable, Selected, Separated,
+        UsesFormat, Written, WrittenUntil,
+    };
+    pub use crate::menu::{In, MenuHandle, Out, RawMenu, Values};
 
     pub use super::*;
 }
@@ -48,7 +51,65 @@ use crate::field::Format;
 use std::env::VarError;
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io;
+use std::io::{self, BufRead, Read, Write};
+use std::ops::{Deref, DerefMut};
+
+#[derive(Debug)]
+pub struct D<'a, T> {
+    pub val: &'a mut T,
+}
+
+impl<T: Write> Write for D<'_, T> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.val.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.val.flush()
+    }
+}
+
+impl<T: Read> Read for D<'_, T> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.val.read(buf)
+    }
+}
+
+impl<T: BufRead> BufRead for D<'_, T> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.val.fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.val.consume(amt)
+    }
+}
+
+impl<'a, T> D<'a, T> {
+    pub fn new(val: &'a mut T) -> Self {
+        Self { val }
+    }
+}
+
+impl<'a, T> From<&'a mut T> for D<'a, T> {
+    fn from(val: &'a mut T) -> Self {
+        Self::new(val)
+    }
+}
+
+impl<T> Deref for D<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.val
+    }
+}
+
+impl<T> DerefMut for D<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.val
+    }
+}
 
 pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     prefix: "--> ",
