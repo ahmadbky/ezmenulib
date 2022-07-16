@@ -27,7 +27,7 @@ impl Selectable<3> for Type {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut stream = MenuStream::default();
+    let mut stream = MenuHandle::default();
     writeln!(stream, "Describe your project")?;
 
     let mut lic = Values::from(stream).format(Format {
@@ -36,14 +36,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     });
 
-    let authors: Vec<String> =
-        lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
-    let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
-    let date: u16 = lic.written(&Written::from("License date").default_value("2022"))?;
-    let ty: Type = lic.selected(Selected::from("Select a license type"))?;
+    let authors: Vec<String> = lic.next(Separated::new("Authors", ", "))?;
+    let name: Option<String> = lic.next_optional(Written::from("Project name"))?;
+    let date: u16 = lic.next(Written::from("License date").default_value("2022"))?;
+    let ty: Type = lic.next(Selected::from("Select a license type"))?;
     println!(
         "{ty:?} License, Copyright (C) {date} {}\n{}",
-        authors.join(", "),
+        authors.join("; "),
         if let Some(n) = name { n } else { "".to_owned() }
     );
     Ok(())

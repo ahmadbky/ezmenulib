@@ -6,11 +6,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .format(Format {
             suffix: "> ",
             line_brk: false,
-            show_default: false,
+            show_default: true,
             ..Default::default()
         })
-        .default(1)
-        .select(&mut MenuStream::default())?;
+        .default(4)
+        .prompt(MenuHandle::default())?;
 
     Ok(println!("you selected {}", amount))
 }

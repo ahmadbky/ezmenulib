@@ -1,6 +1,6 @@
-use std::{cell::RefCell, fmt, io::Write, rc::Rc};
+use std::{cell::RefCell, fmt, io, rc::Rc};
 
-use ezmenulib::{field::*, prelude::*};
+use ezmenulib::{field::*, menu::Handle, prelude::*};
 
 struct App {
     firstname: String,
@@ -17,11 +17,11 @@ impl Default for App {
 }
 
 impl App {
-    fn change_firstname(&mut self, s: &mut MenuStream) -> MenuResult {
+    fn change_firstname<H: Handle>(&mut self, s: D<H>) -> MenuResult {
         change_name(s, &mut self.firstname, "first")
     }
 
-    fn change_lastname(&mut self, s: &mut MenuStream) -> MenuResult {
+    fn change_lastname<H: Handle>(&mut self, s: D<H>) -> MenuResult {
         change_name(s, &mut self.lastname, "last")
     }
 }
@@ -32,16 +32,25 @@ impl fmt::Display for App {
     }
 }
 
-fn change_name(s: &mut MenuStream, name: &mut String, span: &str) -> MenuResult {
+fn change_name<H: Handle>(mut s: H, name: &mut String, span: &str) -> MenuResult {
     writeln!(s, "Current {span}name: {}", name)?;
-    let new: Option<String> =
-        Written::from(format!("Enter the new {span}name").as_str()).optional_value(s)?;
-    if let Some(new) = new {
+    if let Some(new) = Written::from(format!("Enter the new {span}name").as_str())
+        .format(Format {
+            line_brk: false,
+            suffix: ": ",
+            ..Default::default()
+        })
+        .optional_prompt(&mut s)?
+    {
         *name = new;
     } else {
         writeln!(s, "The {span}name hasn't been modified.")?;
     }
     Ok(())
+}
+
+fn play<H: Handle>(mut s: D<H>, play: &App) -> io::Result<()> {
+    writeln!(s, "Now playing with {play}")
 }
 
 fn main() -> MenuResult {
@@ -51,10 +60,7 @@ fn main() -> MenuResult {
     let edit_last = app.clone();
 
     RawMenu::from(&[
-        (
-            "Play",
-            map(move |s| writeln!(s, "Now playing with {}", edit_play.borrow())),
-        ),
+        ("Play", mapped!(play, &*edit_play.borrow())),
         (
             "Settings",
             parent(&[

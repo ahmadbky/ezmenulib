@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     io::{self, stdout, Write},
-    marker::PhantomData,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -19,7 +18,7 @@ use crossterm::{
 };
 use ezmenulib::{
     prelude::*,
-    tui::{back, map, parent, quit, EventResult, TuiMenu},
+    tui::{back, map, parent, quit, TuiMenu}, field::Promptable,
 };
 
 struct App {
@@ -75,9 +74,9 @@ fn change_name<B: Backend + Write>(
 ) -> MenuResult {
     restore_terminal(term)?;
     writeln!(term.backend_mut(), "Current {span}name: {}", name)?;
-    let new: Option<String> = Written::from(format!("Enter the new {span}name").as_str())
-        .optional_value(&mut MenuStream::from_writer(term.backend_mut()))?;
-    if let Some(new) = new {
+    if let Some(new) = Written::from(format!("Enter the new {span}name").as_str())
+        .optional_prompt(MenuHandle::from_writer(term.backend_mut()))?
+    {
         *name = new;
     }
     setup_terminal(term)?;

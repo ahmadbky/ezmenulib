@@ -1,18 +1,26 @@
-use std::io::Write;
+use std::io::{self, Write};
 
-use ezmenulib::{field::*, prelude::*};
+use ezmenulib::{field::*, menu::Handle, prelude::*};
+
+fn play<H: Handle>(mut s: D<H>) -> io::Result<()> {
+    writeln!(s, "Now playing.")
+}
+
+fn edit_name<H: Handle>(mut s: D<H>, span: &str) -> io::Result<()> {
+    writeln!(s, "Editing {span}stname")
+}
 
 fn main() {
     RawMenu::from(&[
-        ("Play", map(|s| writeln!(s, "Now playing."))),
+        ("Play", map(play)),
         (
             "Settings",
             parent(&[
                 (
                     "Name",
-                    Kind::Parent(&[
-                        ("Firstname", map(|s| writeln!(s, "Editing firstname."))),
-                        ("Lastname", map(|s| writeln!(s, "Editing lastname."))),
+                    parent(&[
+                        ("Firstname", mapped!(edit_name, "fir")),
+                        ("Lastname", mapped!(edit_name, "la")),
                         ("Main menu", back(2)),
                     ]),
                 ),
