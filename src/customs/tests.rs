@@ -1,4 +1,5 @@
 use crate::customs::*;
+use crate::field::Promptable;
 use crate::prelude::*;
 
 #[test]
@@ -6,13 +7,9 @@ fn bool_parse() {
     let input = "yeppppp".parse::<MenuBool>();
     assert!(input.is_err());
 
-    let input: MenuResult<Vec<MenuBool>> = Written::from("").many_values(
-        &mut MenuStream::new(
-            "yes yep y no ye nop nan nah\n".as_bytes(),
-            std::io::stdout(),
-        ),
-        " ",
-    );
+    let input: MenuResult<Vec<MenuBool>> = Separated::new("", " ").prompt(MenuHandle::from_reader(
+        "yes yep y no ye nop nan nah\n".as_bytes(),
+    ));
 
     assert_eq!(
         input.map(|v| v.into_iter().map(bool::from).collect()),
