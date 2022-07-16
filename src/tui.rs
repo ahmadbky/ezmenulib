@@ -254,6 +254,17 @@ pub enum EventResult<'a, B: Backend> {
     Callback(&'a dyn Fn(&mut Terminal<B>) -> MenuResult),
 }
 
+impl<B: Backend> fmt::Debug for EventResult<'_, B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Quit => write!(f, "Quit"),
+            Self::Consumed => write!(f, "Consumed"),
+            Self::Ignored => write!(f, "Ignored"),
+            Self::Callback(_) => write!(f, "Callback"),
+        }
+    }
+}
+
 impl<'a, B: Backend> Widget for &TuiMenu<'a, B> {
     fn render(self, area @ Rect { x, y, width, .. }: Rect, buf: &mut Buffer) {
         let (fields, selected) = self.levels.last().unwrap();
