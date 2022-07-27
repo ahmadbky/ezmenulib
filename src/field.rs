@@ -633,12 +633,7 @@ impl<'a> Written<'a> {
 /// ```
 pub trait Selectable<const N: usize>: Sized {
     /// Provides the fields, corresponding to a message and the return value.
-    fn values() -> [(&'static str, Self); N];
-
-    /// Provides the default fields, by its index, if it is available.
-    fn default() -> Option<usize> {
-        None
-    }
+    fn select() -> Selected<'static, Self, N>;
 }
 
 /// Defines the behavior for a selected value provided by the user.
@@ -738,25 +733,6 @@ impl<T, const N: usize> Promptable<T> for Selected<'_, T, N> {
             .nth(mid)
             .expect("index out of bound for selected prompt")
             .1
-    }
-}
-
-impl<'a, T, const N: usize> From<&'a str> for Selected<'a, T, N>
-where
-    T: Selectable<N>,
-{
-    #[inline]
-    fn from(msg: &'a str) -> Self {
-        Self::from_selectable(msg)
-    }
-}
-
-impl<'a, T, const N: usize> Selected<'a, T, N>
-where
-    T: Selectable<N>,
-{
-    pub fn from_selectable(msg: &'a str) -> Self {
-        Self::new_(msg, T::values(), T::default().map(|i| i + 1))
     }
 }
 
