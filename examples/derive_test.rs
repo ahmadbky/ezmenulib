@@ -1,21 +1,19 @@
-use std::error::Error;
+#![allow(dead_code)]
 
 use ezmenulib::{prelude::*, Select};
 
+/// How many?!
 #[derive(Select, Debug)]
-#[select("oui", fmt = Format::show_default(false))]
+#[select(case = up, fmt(suf: "> ", no_default))]
 enum Amount {
-    #[select(("One", true), default("Two", false))]
-    OneTwo(bool),
-    #[select(("Three", _is_three: true), ("Four", _is_three: false))]
-    ThreeFour {
-        _is_three: bool,
-    },
-    More,
+    #[select(("ZERO", 0), ("ONE", 1), default("TWO", 2))]
+    N(u8),
+    /// The users selects more than `2`.
+    #[select(nodoc)]
+    MoreThanTwo,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let amount = Amount::select().prompt(MenuHandle::default())?;
+fn main() {
+    let amount = Amount::select().get();
     println!("{amount:?}");
-    Ok(())
 }

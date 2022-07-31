@@ -1,123 +1,117 @@
 use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site};
 use quote::{quote, ToTokens, TokenStreamExt};
-use regex::Regex;
 use syn::{
     ext::IdentExt,
     parenthesized,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     Attribute, Data, DataEnum, DeriveInput, Expr, Field, Fields, FieldsNamed, FieldsUnnamed, Ident,
-    Index, Lit, LitStr, Meta, MetaNameValue, Token, Variant,
+    Index, LitStr, Token, Variant,
 };
 
-use crate::utils::{get_attr, get_attr_with_args, get_lib_root};
-
-fn abort_invalid_ident<const N: usize>(id: Ident, valids: [&str; N]) -> ! {
-    abort!(id, "expected one of: {}, got: `{}`", valids.join(", "), id);
-}
+use crate::{
+    format::Format,
+    utils::{
+        abort_invalid_ident, get_attr_with_args, get_first_doc, get_lib_root,
+        split_ident_camel_case, to_str, Case,
+    },
+};
 
 /// Represents the kind of an identifier for an unit variant.
 enum UnitKind {
     /// The `default` identifier.
     Default,
     /// The `msg` optional identifier with the provided string literal.
-    Lit(LitStr),
+    Msg(LitStr),
+    /// The `case` optional identifier with the provided case specification.
+    Case(Case),
+    /// The `nodoc` identifier.
+    NoDoc,
+    /// The `raw` identifier.
+    RawIdent,
 }
 
 /// Represents an identifier with its span for error handling for an unit variant.
-struct Unit {
+struct UnitArg {
     span: Span,
     kind: UnitKind,
 }
 
-impl Parse for Unit {
+impl Parse for UnitArg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(Ident::peek_any) {
-            // The provided identifier must be either `default` alone
-            // or `msg` in `msg = "..."`.
             let id = input.parse::<Ident>()?;
-            if id == "default" {
-                Ok(Self {
-                    span: id.span(),
-                    kind: UnitKind::Default,
-                })
-            } else if id == "msg" {
-                input.parse::<Token![=]>()?;
-                let msg = input.parse::<LitStr>()?;
-                Ok(Self {
-                    span: msg.span(),
-                    kind: UnitKind::Lit(msg),
-                })
-            } else {
-                abort_invalid_ident(id, ["default", "msg"]);
-            }
+            let span = id.span();
+            let kind = match to_str!(id) {
+                "default" => UnitKind::Default,
+                "msg" => {
+                    input.parse::<Token![=]>()?;
+                    UnitKind::Msg(input.parse()?)
+                }
+                "case" => {
+                    input.parse::<Token![=]>()?;
+                    UnitKind::Case(input.parse()?)
+                }
+                "nodoc" => UnitKind::NoDoc,
+                "raw" => UnitKind::RawIdent,
+                _ => abort_invalid_ident(id, &["default", "msg", "case", "nodoc", "raw"]),
+            };
+
+            Ok(Self { span, kind })
         } else {
             // Else, the next token must be a string literal to represent the given message.
             let msg = input.parse::<LitStr>()?;
             Ok(Self {
                 span: msg.span(),
-                kind: UnitKind::Lit(msg),
+                kind: UnitKind::Msg(msg),
             })
         }
     }
 }
 
-fn abort_already_defined(span: Span) -> ! {
-    abort!(span, "attribute already defined");
-}
-
 /// Represents the attribute of an unit variant, with its optional string literal and the
 /// span of the `default` identifier if provided for error handling.
+// FIXME: Pretty same attribute as the root attribute
 struct UnitAttr {
     lit: Option<LitStr>,
     default: Option<Span>,
+    case: Option<Case>,
+    nodoc: bool,
+    raw_ident: bool,
 }
 
 impl Parse for UnitAttr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Here, we iterate over `Unit`s thrice
-        // to check that there is maximum 2 distinct values provided.
         let mut lit = None;
         let mut default = None;
+        let mut case = None;
+        let mut nodoc = false;
+        let mut raw_ident = false;
 
-        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
+        let mut vals = Punctuated::<UnitArg, Token![,]>::parse_terminated(input)?.into_iter();
+        let n = vals.len();
 
-        // First iteration, we initialize the given value.
-        match vals.next() {
-            Some(Unit {
-                kind: UnitKind::Default,
-                span,
-                ..
-            }) => default = Some(span),
-            Some(Unit {
-                kind: UnitKind::Lit(l),
-                ..
-            }) => lit = Some(l),
-            None => (),
+        for _ in 0..5.min(n) {
+            match vals.next() {
+                Some(arg) => match arg.kind {
+                    UnitKind::Case(c) => case = Some(c),
+                    UnitKind::Msg(m) => lit = Some(m),
+                    UnitKind::NoDoc => nodoc = true,
+                    UnitKind::Default => default = Some(arg.span),
+                    UnitKind::RawIdent => raw_ident = true,
+                },
+                None => (),
+            }
         }
 
-        // Second iteration, we check if the provided value hasn't already been initialized.
-        match vals.next() {
-            Some(Unit {
-                kind: UnitKind::Default,
-                span,
-                ..
-            }) if default.is_none() => default = Some(span),
-            Some(Unit {
-                kind: UnitKind::Lit(l),
-                ..
-            }) if lit.is_none() => lit = Some(l),
-            Some(u) => abort_already_defined(u.span),
-            None => (),
-        }
-
-        // Third iteration, we abort because there is maximum 2 values that can be provided.
-        if let Some(u) = vals.next() {
-            abort_already_defined(u.span);
-        }
-
-        Ok(Self { lit, default })
+        Ok(Self {
+            lit,
+            default,
+            case,
+            nodoc,
+            raw_ident,
+        })
     }
 }
 
@@ -270,6 +264,16 @@ impl Entry {
             default: f.default,
         }
     }
+
+    fn from_var(id: Ident, lit: String, default: Option<Span>) -> Self {
+        Self {
+            id,
+            lit,
+            named: false,
+            bounds: Punctuated::new(),
+            default,
+        }
+    }
 }
 
 impl ToTokens for Entry {
@@ -296,41 +300,37 @@ impl ToTokens for Entry {
     }
 }
 
-impl From<Ident> for Entry {
-    /// We use this implementation to get an entry only from an unit variant.
-    ///
-    /// It uses the identifier of the variant as string literal, by splitting the words.
-    fn from(id: Ident) -> Self {
-        let lit = Regex::new("([a-z])([A-Z])")
-            .unwrap_or_else(|e| {
-                abort!(
-                    id,
-                    "unexpected error while splitting ident words with space as delimiter: {}",
-                    e
-                )
-            })
-            .replace_all(id.to_string().as_str(), "$1 $2")
-            .into_owned();
-
-        Self {
-            id,
-            lit,
-            named: false,
-            bounds: Punctuated::new(),
-            default: None,
-        }
-    }
-}
-
 /// Util function used to abort on variants that have fields but without a `select` attribute.
-fn abort_unbounds_fields(fields: &Punctuated<Field, Token![,]>) -> ! {
+fn abort_unbounds_fields(named: bool, fields: &Punctuated<Field, Token![,]>) -> ! {
+    let values_sample = if fields.len() == 1 {
+        let field = &fields[0];
+        if named {
+            format!("{}: value", field.ident.as_ref().unwrap())
+        } else {
+            "value".to_owned()
+        }
+    } else if named {
+        fields
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!("{}: value{i}", v.ident.as_ref().unwrap()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    } else {
+        (0..fields.len())
+            .map(|i| format!("value{i}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
     abort!(
         fields,
         "expected variant to have bound values in select attribute";
         note = "this variant has fields, thus needs a `#[select(...)]` attribute \
         to map at least one value to it";
-        help = "you might want to add an attribute to this variant with `#[select((\"...\", ...), ...)]`"
-    )
+        help = "you might want to add an attribute to this variant \
+        with `#[select((\"field message\", {}), ...)]`", values_sample
+    );
 }
 
 /// Represents the `select` metadata of the `Select`-derived enum variant.
@@ -349,101 +349,121 @@ impl Select {
 
         Self { entries }
     }
-}
 
-impl From<Variant> for Select {
-    fn from(var: Variant) -> Self {
-        let mut entries = vec![Entry::from(var.ident.clone())];
-
-        // We check the first doc comment for field name.
-        match get_attr(&var.attrs, "doc").and_then(|attr| attr.parse_meta().ok()) {
-            Some(Meta::NameValue(MetaNameValue {
-                lit: Lit::Str(lit), ..
-            })) if matches!(var.fields, Fields::Unit) => {
-                entries[0].lit = lit.value().trim_start_matches(' ').to_owned();
-            }
-            _ => (),
-        }
-
+    fn from_variant_with(var: Variant, global_case: Option<Case>) -> Self {
         // We build the entries according to the fields type of the variant.
         match &var.fields {
             // If it is a unit variant, we return the previous vector of entries with only one entry.
             Fields::Unit => {
-                match get_attr_with_args(&var.attrs, "select") {
-                    Some(UnitAttr { lit, default }) => {
-                        match lit {
-                            Some(lit) => entries[0].lit = lit.value(),
-                            None => (),
-                        }
-                        entries[0].default = default;
+                let (lit, default) = match get_attr_with_args(&var.attrs, "select") {
+                    Some(UnitAttr {
+                        lit,
+                        default,
+                        case,
+                        nodoc,
+                        raw_ident,
+                    }) => {
+                        let lit = lit
+                            .map(|l| l.value())
+                            .or_else(|| {
+                                if nodoc {
+                                    None
+                                } else {
+                                    get_first_doc(&var.attrs)
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                if raw_ident {
+                                    var.ident.to_string()
+                                } else {
+                                    split_ident_camel_case(&var.ident)
+                                }
+                            });
+                        (case.or(global_case).unwrap_or_default().map(lit), default)
                     }
-                    None => (),
-                }
+                    None => (
+                        global_case.unwrap_or_default().map(
+                            get_first_doc(&var.attrs)
+                                .unwrap_or_else(|| split_ident_camel_case(&var.ident)),
+                        ),
+                        None,
+                    ),
+                };
+                let entries = vec![Entry::from_var(var.ident, lit, default)];
                 Self { entries }
             }
             // Otherwise, we create a new vector with the entries from the fields of the variant.
             Fields::Named(FieldsNamed { named, .. }) => {
                 match get_attr_with_args(&var.attrs, "select") {
                     Some(NamedAttr { fields }) => Self::new(fields, var.ident, true),
-                    None => abort_unbounds_fields(named),
+                    None => abort_unbounds_fields(true, named),
                 }
             }
             Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
                 match get_attr_with_args(&var.attrs, "select") {
                     Some(UnnamedAttr { fields }) => Self::new(fields, var.ident, false),
-                    None => abort_unbounds_fields(unnamed),
+                    None => abort_unbounds_fields(false, unnamed),
                 }
             }
         }
     }
 }
 
-/// Represents the kind of an identifier for the root attribute.
-enum RootKind {
+/// Represents a parameter in the root `select` attribute.
+enum RootParam {
     /// The `msg` identifier, with the provided string literal.
     Msg(LitStr),
-    /// The `fmt` identifier, with the provided `Format` instanciation.
-    Fmt(Expr),
+    /// The `fmt` identifier, with the provided `Format` instantiation.
+    Fmt(Format),
+    /// The `nodoc` identifier.
+    NoDoc,
+    /// The `case` identifier with the provided case specification.
+    Case(Case),
+    /// The `raw` identifier.
+    RawIdent,
 }
 
-/// Represents an identifier with its span for error handling for the root attribute.
-struct RootArg {
-    span: Span,
-    kind: RootKind,
-}
-
-impl Parse for RootArg {
+impl Parse for RootParam {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(Ident) {
             // The provided identifier must be either `msg` or `fmt`.
             let id = input.parse::<Ident>()?;
-            let span = id.span();
-            input.parse::<Token![=]>()?;
-            let kind = if id == "msg" {
-                RootKind::Msg(input.parse()?)
-            } else if id == "fmt" {
-                RootKind::Fmt(input.parse()?)
-            } else {
-                abort_invalid_ident(id, ["msg", "fmt"]);
-            };
-            Ok(Self { kind, span })
+
+            Ok(match to_str!(id) {
+                "msg" => {
+                    input.parse::<Token![=]>()?;
+                    Self::Msg(input.parse()?)
+                }
+                "fmt" => {
+                    let content;
+                    parenthesized!(content in input);
+                    Self::Fmt(content.parse()?)
+                }
+                "nodoc" => Self::NoDoc,
+                "case" => {
+                    input.parse::<Token![=]>()?;
+                    Self::Case(input.parse()?)
+                }
+                "raw" => Self::RawIdent,
+                _ => abort_invalid_ident(id, &["msg", "fmt", "nodoc", "case"]),
+            })
         } else {
             // Else, the next token must be a string literal to represent the given message.
             let msg = input.parse::<LitStr>()?;
-            let span = msg.span();
-            Ok(Self {
-                kind: RootKind::Msg(msg),
-                span,
-            })
+            Ok(Self::Msg(msg))
         }
     }
 }
 
-/// Represents the attribute of the enum, with its optional string literal for the message
+/// Represents the `select` attribute of the enum, with its optional string literal for the message
 /// and its optional format specification.
+// FIXME: Pretty same attribute as the unit attribute
 struct RootAttr {
     msg: Option<LitStr>,
-    fmt: Option<Expr>,
+    fmt: Option<Format>,
+    case: Option<Case>,
+    nodoc: bool,
+    raw_ident: bool,
 }
 
 impl Parse for RootAttr {
@@ -452,64 +472,75 @@ impl Parse for RootAttr {
         // to check that there is maximum 2 distinct values provided.
         let mut msg = None;
         let mut fmt = None;
+        let mut nodoc = false;
+        let mut case = None;
+        let mut raw_ident = false;
 
-        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
+        let vals = Punctuated::<RootParam, Token![,]>::parse_terminated(input)?;
+        let n = vals.len();
+        let mut vals = vals.into_iter();
 
-        // First iteration, we initialize the given value.
-        match vals.next() {
-            Some(RootArg {
-                kind: RootKind::Fmt(f),
-                ..
-            }) => fmt = Some(f),
-            Some(RootArg {
-                kind: RootKind::Msg(m),
-                ..
-            }) => msg = Some(m),
-            None => (),
+        for _ in 0..5.min(n) {
+            match vals.next() {
+                Some(arg) => match arg {
+                    RootParam::Msg(m) => msg = Some(m),
+                    RootParam::Fmt(f) => fmt = Some(f),
+                    RootParam::NoDoc => nodoc = true,
+                    RootParam::Case(c) => case = Some(c),
+                    RootParam::RawIdent => raw_ident = true,
+                },
+                None => (),
+            }
         }
 
-        // Second iteration, we check if the provided value hasn't already been initialized.
-        match vals.next() {
-            Some(RootArg {
-                kind: RootKind::Fmt(f),
-                ..
-            }) if fmt.is_none() => fmt = Some(f),
-            Some(RootArg {
-                kind: RootKind::Msg(m),
-                ..
-            }) if msg.is_none() => msg = Some(m),
-            Some(r) => abort_already_defined(r.span),
-            None => (),
-        }
-
-        // Third iteration, we abort because there is maximum 2 values that can be provided.
-        if let Some(r) = vals.next() {
-            abort_already_defined(r.span);
-        }
-
-        Ok(Self { msg, fmt })
+        Ok(Self {
+            msg,
+            fmt,
+            nodoc,
+            case,
+            raw_ident,
+        })
     }
 }
 
 /// Represents the global data of the enum, meaning the message displayed,
 /// which can is its identifier name by default, and its optional specific format.
 struct RootData {
+    case: Option<Case>,
     msg: String,
-    fmt: Option<Expr>,
+    fmt: Option<Format>,
 }
 
 impl RootData {
     fn new(name: Ident, attrs: &[Attribute]) -> Self {
-        match get_attr_with_args(attrs, "select") {
-            Some(RootAttr { msg, fmt }) => Self {
-                msg: msg.map(|l| l.value()).unwrap_or_else(|| name.to_string()),
+        let (case, msg, fmt) = match get_attr_with_args(attrs, "select") {
+            Some(RootAttr {
+                msg,
                 fmt,
-            },
-            None => Self {
-                msg: name.to_string(),
-                fmt: None,
-            },
-        }
+                nodoc,
+                case,
+                raw_ident,
+            }) => {
+                let msg = msg
+                    .map(|l| l.value())
+                    .or_else(|| if nodoc { None } else { get_first_doc(attrs) })
+                    .unwrap_or_else(|| {
+                        if raw_ident {
+                            name.to_string()
+                        } else {
+                            split_ident_camel_case(&name)
+                        }
+                    });
+                (case, case.unwrap_or_default().map(msg), fmt)
+            }
+            None => (
+                None,
+                get_first_doc(attrs).unwrap_or_else(|| split_ident_camel_case(&name)),
+                None,
+            ),
+        };
+
+        Self { case, msg, fmt }
     }
 }
 
@@ -533,14 +564,6 @@ fn get_default_fn<I: Iterator<Item = Entry>>(input: I) -> Option<TokenStream> {
     default.map(|i| quote!(.default(#i)))
 }
 
-/// Returns the message of the `Selected` instanciation
-/// and the optional token stream of the `Selected::format` method call.
-fn get_data(name: Ident, attrs: &[Attribute]) -> (String, Option<TokenStream>) {
-    let data = RootData::new(name, attrs);
-    let fmt_fn = data.fmt.map(|e| quote!(.format(#e)));
-    (data.msg, fmt_fn)
-}
-
 /// Expands the `derive(Select)` macro.
 ///
 /// The expansion consists of the implementation of the `Selectable` trait for the given enum,
@@ -549,21 +572,22 @@ pub fn build_select(input: DeriveInput) -> TokenStream {
     let name = input.ident;
     let variants = match input.data {
         Data::Enum(DataEnum { variants, .. }) => variants,
-        _ => abort_call_site!("derive(Select) only supports unit enums."),
+        _ => abort_call_site!("derive(Select) only supports enums."),
     };
+
+    let data = RootData::new(name.clone(), &input.attrs);
 
     // The message and optional `Selected::format` method call, retrieved from
     // the optional attribute and the name of the enum.
-    let (msg, fmt_fn) = get_data(name.clone(), &input.attrs);
+    let (msg, fmt_fn) = (data.msg, data.fmt.map(|e| quote!(.format(#e))));
 
     // The name of the library.
     let root = get_lib_root();
-    // We map the variants into an iterator of entries.
+    // We map the variants into an iterator of selectable entries.
     // A variant can have multiple entries if it has fields.
     let entries = variants
         .into_iter()
-        .map(|v| Select::from(v).entries.into_iter())
-        .flatten();
+        .flat_map(|v| Select::from_variant_with(v, data.case).entries.into_iter());
     // We count the amount of entries to specify in the const generic argument
     // of the `Selectable` trait.
     let n = Index::from(entries.clone().count());

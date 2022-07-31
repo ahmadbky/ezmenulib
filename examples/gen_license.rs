@@ -16,13 +16,13 @@ impl Default for Type {
 }
 
 impl Selectable<3> for Type {
-    fn values() -> [(&'static str, Self); 3] {
+    fn select() -> Selected<'static, Self, 3> {
         use Type::*;
-        [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)]
-    }
-
-    fn default() -> Option<usize> {
-        Some(0)
+        Selected::new(
+            "Select a license type",
+            [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)],
+        )
+        .default(0)
     }
 }
 
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let authors: Vec<String> = lic.next(Separated::new("Authors", ", "))?;
     let name: Option<String> = lic.next_optional(Written::from("Project name"))?;
     let date: u16 = lic.next(Written::from("License date").default_value("2022"))?;
-    let ty: Type = lic.next(Selected::from("Select a license type"))?;
+    let ty: Type = lic.next(Type::select())?;
     println!(
         "{ty:?} License, Copyright (C) {date} {}\n{}",
         authors.join("; "),

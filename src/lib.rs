@@ -28,6 +28,10 @@
 #[cfg_attr(nightly, doc(cfg(feature = "tui")))]
 pub mod tui;
 
+#[cfg(feature = "derive")]
+#[cfg_attr(nightly, doc(cfg(feature = "derive")))]
+pub use ezmenu_macros::*;
+
 pub mod customs;
 pub mod field;
 pub mod menu;
@@ -53,6 +57,8 @@ use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::io::{self, BufRead, Read, Write};
 use std::ops::{Deref, DerefMut};
+
+use self::prelude::{MenuHandle, Values};
 
 #[derive(Debug)]
 pub struct D<'a, T> {

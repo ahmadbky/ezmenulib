@@ -1,21 +1,15 @@
 use proc_macro2::TokenStream;
-use proc_macro_error::{abort, abort_call_site, proc_macro_error};
-use quote::{quote, ToTokens};
+use proc_macro_error::{abort_call_site, proc_macro_error};
 use syn::{
-    parse::{Parse, ParseStream},
-    parse_macro_input,
-    punctuated::Punctuated,
-    token::Paren,
-    Attribute, Data, DataEnum, DataStruct, DeriveInput, Error, Fields, Ident, Index, Lit, LitStr,
-    Meta, MetaList, MetaNameValue, NestedMeta, Path, Token, Variant,
+    parse_macro_input, punctuated::Punctuated, Attribute, Data, DataEnum, DataStruct, DeriveInput,
+    Fields, Ident, Token, Variant,
 };
 
 extern crate proc_macro as pm;
 
 mod select;
 mod utils;
-
-pub(crate) use utils::*;
+mod format;
 
 use self::select::build_select;
 
