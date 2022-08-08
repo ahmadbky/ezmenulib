@@ -3,16 +3,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::customs::MenuBool;
-use crate::menu::Handle;
-use crate::prelude::*;
-use crate::utils::*;
-use crate::DEFAULT_FMT;
-use std::borrow::Cow;
-use std::env;
-use std::fmt::{self, Display, Formatter};
-use std::marker::PhantomData;
-use std::str::FromStr;
+use crate::{customs::MenuBool, menu::Handle, prelude::*, utils::*, DEFAULT_FMT};
+use std::{
+    borrow::Cow,
+    env,
+    fmt::{self, Display, Formatter},
+    marker::PhantomData,
+    str::FromStr,
+};
 
 pub trait MenuDisplay {
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result;

@@ -13,7 +13,7 @@ use tui::{
     Terminal,
 };
 
-use crate::{check_fields, IntoResult, MenuResult};
+use crate::{utils::check_fields, IntoResult, MenuResult};
 
 /// Represents the style of a field in the printed menu.
 ///

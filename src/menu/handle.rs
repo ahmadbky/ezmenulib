@@ -1,11 +1,15 @@
-use std::fmt::{self, Arguments};
-use std::io::{
-    self, empty, sink, stdin, stdout, BufRead, BufReader, Empty, IoSlice, IoSliceMut, Read, Sink,
-    Write,
+use std::{
+    fmt::{self, Arguments},
+    io::{
+        self, empty, sink, stdin, stdout, BufRead, BufReader, Empty, IoSlice, IoSliceMut, Read,
+        Sink, Write,
+    },
 };
 
-use crate::field::{Format, MenuDisplay};
-use crate::MenuResult;
+use crate::{
+    field::{Format, MenuDisplay},
+    MenuResult,
+};
 
 pub trait Handle: Read + Write {
     fn show<T: ?Sized + MenuDisplay>(

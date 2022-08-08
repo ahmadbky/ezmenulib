@@ -1,8 +1,6 @@
 //! This module contains many utils functions used by the library.
 
-use crate::menu::Handle;
-use crate::prelude::*;
-
+use crate::{menu::Handle, prelude::*};
 use std::any::type_name;
 
 /// Type to handle the depth of the running menus.

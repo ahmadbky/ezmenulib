@@ -26,9 +26,11 @@
 mod tests;
 
 use crate::MenuError;
-use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
+use std::{
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 macro_rules! impl_inner {
     ($name:ident$(<$($generic:ident),*>)?: $ty:ty$(, $meta:meta)*) => {

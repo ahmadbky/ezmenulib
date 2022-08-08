@@ -1,20 +1,21 @@
 //! Module that defines several types to handle menus, streams and values retrieving.
 
+mod handle;
 #[cfg(test)]
 mod tests;
 
-mod handle;
+pub use self::handle::{Handle, MenuHandle};
 
-use crate::customs::MenuBool;
-use crate::field::Promptable;
-pub use crate::menu::handle::{Handle, MenuHandle};
+use crate::{
+    field::Promptable,
+    prelude::*,
+    utils::{check_fields, select, Depth},
+};
 
-use crate::prelude::*;
-use crate::utils::{check_fields, select, Depth};
-
-use std::collections::{LinkedList, VecDeque};
-use std::fmt::{self, Display, Formatter};
-use std::io::{Stdin, Stdout};
+use std::{
+    fmt::{self, Display, Formatter},
+    io::{Stdin, Stdout},
+};
 
 /// The default input stream used by a menu, using the standard input stream.
 pub type In = Stdin;
@@ -182,7 +183,7 @@ pub trait Prompted: Sized {
     }
 
     fn try_prompt_with<H: Handle>(handle: H) -> MenuResult<Self> {
-        Self::from_values(&mut Default::default())
+        Self::from_values(&mut Values::from_handle(handle))
     }
 
     fn from_values<H: Handle>(vals: &mut Values<H>) -> MenuResult<Self>;
