@@ -152,11 +152,10 @@ fn main() -> MenuResult {
             let app = app.borrow();
 
             let list = List::new([
-                ListItem::new(app.firstname.as_str()),
-                ListItem::new(app.lastname.as_str()),
+                ListItem::new(format!("Firstname:   {}", app.firstname)),
+                ListItem::new(format!("Lastname:    {}", app.lastname)),
             ])
-            .block(Block::default().title("Names").borders(Borders::all()))
-            .highlight_symbol(">>");
+            .block(Block::default().title("Names").borders(Borders::all()));
 
             f.render_widget(list, info[0]);
 
