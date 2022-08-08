@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::prelude::*;
+use crate::{field::Selectable, prelude::*};
 
 type Res = Result<(), Box<dyn Error>>;
 
@@ -222,8 +222,11 @@ impl Default for Type2 {
 }
 
 impl Selectable<3> for Type2 {
-    fn values() -> [(&'static str, Self); 3] {
-        [("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)]
+    fn select() -> Selected<'static, Self, 3> {
+        Selected::new(
+            "select the type",
+            [("MIT", Self::MIT), ("GPL", Self::GPL), ("BSD", Self::BSD)],
+        )
     }
 }
 
@@ -232,7 +235,7 @@ fn selectable() -> Res {
     let output = test_values! {
         menu,
         "2",
-        let name: Type2 = menu.next(Selected::from("select the type"))?,
+        let name = menu.next(Type2::select())?,
         assert_eq!(name, Type2::GPL),
     }?;
 
@@ -251,7 +254,7 @@ fn select_default() -> Res {
     let output = test_values! {
         menu,
         "zmrlkgjzmklj\n",
-        let name: Type2 = menu.next_or_default(Selected::from("select the type")),
+        let name = menu.next_or_default(Type2::select()),
         assert_eq!(name, Type2::MIT),
     }?;
 

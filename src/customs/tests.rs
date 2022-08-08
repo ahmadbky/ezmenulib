@@ -7,9 +7,9 @@ fn bool_parse() {
     let input = "yeppppp".parse::<MenuBool>();
     assert!(input.is_err());
 
-    let input: MenuResult<Vec<MenuBool>> = Separated::new("", " ").prompt(MenuHandle::from_reader(
-        "yes yep y no ye nop nan nah\n".as_bytes(),
-    ));
+    let input: MenuResult<Vec<MenuBool>> = Separated::new("", " ").prompt(
+        MenuHandle::empty_writer_with("yes yep y no ye nop nan nah\n".as_bytes()),
+    );
 
     assert_eq!(
         input.map(|v| v.into_iter().map(bool::from).collect()),
