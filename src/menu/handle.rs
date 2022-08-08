@@ -1,5 +1,8 @@
 use std::fmt::{self, Arguments};
-use std::io::{self, stdin, stdout, BufRead, BufReader, IoSlice, IoSliceMut, Read, Write};
+use std::io::{
+    self, empty, sink, stdin, stdout, BufRead, BufReader, Empty, IoSlice, IoSliceMut, Read, Sink,
+    Write,
+};
 
 use crate::field::{Format, MenuDisplay};
 use crate::MenuResult;
@@ -149,6 +152,30 @@ impl<W> MenuHandle<super::In, W> {
 impl<R> MenuHandle<R, super::Out> {
     pub fn from_reader(reader: R) -> Self {
         Self(reader, stdout())
+    }
+}
+
+impl MenuHandle<Empty, super::Out> {
+    pub fn empty_reader() -> Self {
+        Self::empty_reader_with(stdout())
+    }
+}
+
+impl<W> MenuHandle<Empty, W> {
+    pub fn empty_reader_with(writer: W) -> Self {
+        Self(empty(), writer)
+    }
+}
+
+impl MenuHandle<super::In, Sink> {
+    pub fn empty_writer() -> Self {
+        Self::empty_writer_with(stdin())
+    }
+}
+
+impl<R> MenuHandle<R, Sink> {
+    pub fn empty_writer_with(reader: R) -> Self {
+        Self(reader, sink())
     }
 }
 
