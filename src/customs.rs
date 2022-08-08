@@ -102,8 +102,8 @@ impl FromStr for MenuBool {
     /// than only `"true"` or `"false"`, like `"yes"` or `"no"`..
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" => Ok(Self(true)),
-            "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" => Ok(Self(false)),
+            "y" | "yes" | "ye" | "yep" | "yeah" | "yea" | "yup" | "true" | "1" => Ok(Self(true)),
+            "n" | "no" | "non" | "nop" | "nah" | "nan" | "nani" | "false" | "0" => Ok(Self(false)),
             _ => Err(MenuError::Input),
         }
     }
