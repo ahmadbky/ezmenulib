@@ -1,17 +1,13 @@
-use proc_macro2::TokenStream;
-use proc_macro_error::{abort_call_site, proc_macro_error};
-use syn::{
-    parse_macro_input, punctuated::Punctuated, Attribute, Data, DataEnum, DataStruct, DeriveInput,
-    Fields, Ident, Token, Variant,
-};
+use proc_macro_error::proc_macro_error;
+use syn::{parse_macro_input, DeriveInput};
 
 extern crate proc_macro as pm;
 
-mod select;
-mod utils;
 mod format;
+mod prompted;
+mod utils;
 
-use self::select::build_select;
+use self::prompted::build_prompted;
 
 #[proc_macro_attribute]
 #[doc(hidden)]
@@ -31,36 +27,8 @@ pub fn __debug_derive(item: pm::TokenStream) -> pm::TokenStream {
 }
 
 #[proc_macro_error]
-#[proc_macro_derive(Select, attributes(select))]
-pub fn derive_selectable(item: pm::TokenStream) -> pm::TokenStream {
+#[proc_macro_derive(Prompted, attributes(prompt))]
+pub fn derive_prompted(item: pm::TokenStream) -> pm::TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    build_select(input).into()
-}
-
-#[proc_macro_error]
-#[proc_macro_derive(Menu, attributes(menu))]
-pub fn derive_menu(item: pm::TokenStream) -> pm::TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    match input.data {
-        Data::Struct(DataStruct { fields, .. }) => {
-            build_menu_struct(input.ident, input.attrs, fields)
-        }
-        Data::Enum(DataEnum { variants, .. }) => {
-            build_menu_enum(input.ident, input.attrs, variants)
-        }
-        _ => abort_call_site!("derive(Menu) only supports `enum` and non-unit `struct` types."),
-    }
-    .into()
-}
-
-fn build_menu_struct(name: Ident, attrs: Vec<Attribute>, fields: Fields) -> TokenStream {
-    TokenStream::new()
-}
-
-fn build_menu_enum(
-    name: Ident,
-    attrs: Vec<Attribute>,
-    variants: Punctuated<Variant, Token![,]>,
-) -> TokenStream {
-    TokenStream::new()
+    build_prompted(input).into()
 }
