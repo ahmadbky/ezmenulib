@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::customs::MenuBool;
 use crate::menu::Handle;
 use crate::prelude::*;
 use crate::utils::*;
@@ -10,6 +11,7 @@ use crate::DEFAULT_FMT;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::{self, Display, Formatter};
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 pub trait MenuDisplay {
@@ -38,6 +40,22 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
     ) -> MenuResult<Option<Self::Middle>>;
 
     fn convert(self, mid: Self::Middle) -> T;
+
+    fn get(self) -> T {
+        self.try_get().expect("error while prompting field")
+    }
+
+    fn get_with(self, fmt: &Format<'_>) -> T {
+        self.try_get_with(fmt).expect("error while prompting field")
+    }
+
+    fn try_get(self) -> MenuResult<T> {
+        self.prompt(MenuHandle::default())
+    }
+
+    fn try_get_with(self, fmt: &Format<'_>) -> MenuResult<T> {
+        self.prompt_with(MenuHandle::default(), fmt)
+    }
 
     fn prompt_with<H: Handle>(self, mut handle: H, fmt: &Format<'_>) -> MenuResult<T> {
         let fmt = self.get_format().merged(fmt);
@@ -207,18 +225,106 @@ impl<'a> Default for Format<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Separated<'a> {
+pub struct Bool<'a> {
+    inner: Written<'a>,
+}
+
+impl<'a> From<&'a str> for Bool<'a> {
+    fn from(msg: &'a str) -> Self {
+        Self::new(msg)
+    }
+}
+
+impl<'a> Bool<'a> {
+    pub fn from_written(inner: Written<'a>) -> Self {
+        Self { inner }
+    }
+
+    pub fn new(msg: &'a str) -> Self {
+        Self::from_written(From::from(msg))
+    }
+
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self {
+            inner: self.inner.format(fmt),
+        }
+    }
+
+    pub fn example(self, example: &'a str) -> Self {
+        Self {
+            inner: self.inner.example(example),
+        }
+    }
+
+    pub fn with_basic_example(self) -> Self {
+        self.example("yes/no")
+    }
+
+    pub fn default_value(self, default: bool) -> Self {
+        let val = if default { "yes" } else { "no" };
+        Self {
+            inner: self.inner.default_value(val),
+        }
+    }
+
+    pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
+        Ok(Self {
+            inner: self.inner.default_env(var)?,
+        })
+    }
+}
+
+impl UsesFormat for Bool<'_> {
+    fn get_format(&self) -> &Format<'_> {
+        self.inner.get_format()
+    }
+}
+
+impl MenuDisplay for Bool<'_> {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        MenuDisplay::fmt_with(&self.inner, f, fmt, opt)
+    }
+}
+
+impl Display for Bool<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as MenuDisplay>::fmt(self, f, false)
+    }
+}
+
+impl Promptable<bool> for Bool<'_> {
+    type Middle = bool;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        let res: Option<MenuBool> = self.inner.prompt_once(handle, fmt, opt)?;
+        Ok(res.map(Into::into))
+    }
+
+    fn convert(self, mid: Self::Middle) -> bool {
+        mid
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Separated<'a, I, T> {
     inner: Written<'a>,
     sep: &'a str,
     env_sep: Option<&'a str>,
+    _marker: PhantomData<&'a (I, T)>,
 }
 
-impl<'a> Separated<'a> {
+impl<'a, I, T> Separated<'a, I, T> {
     pub fn from_written(inner: Written<'a>, sep: &'a str) -> Self {
         Self {
             inner,
             sep,
             env_sep: None,
+            _marker: PhantomData,
         }
     }
 
@@ -260,26 +366,29 @@ impl<'a> Separated<'a> {
     }
 }
 
-impl UsesFormat for Separated<'_> {
+impl<I, T> UsesFormat for Separated<'_, I, T> {
     fn get_format(&self) -> &Format<'_> {
         self.inner.get_format()
     }
 }
 
-impl MenuDisplay for Separated<'_> {
+impl<I, T> MenuDisplay for Separated<'_, I, T> {
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
         MenuDisplay::fmt_with(&self.inner, f, fmt, opt)
     }
 }
 
-impl Display for Separated<'_> {
+impl<I, T> Display for Separated<'_, I, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         <Self as MenuDisplay>::fmt(self, f, false)
     }
 }
 
-impl<T: FromStr> Promptable<Vec<T>> for Separated<'_> {
-    type Middle = Vec<T>;
+impl<I, T: FromStr> Promptable<I> for Separated<'_, I, T>
+where
+    I: FromIterator<T>,
+{
+    type Middle = I;
 
     fn prompt_once<H: Handle>(
         &self,
@@ -291,16 +400,26 @@ impl<T: FromStr> Promptable<Vec<T>> for Separated<'_> {
             Some(s) => s,
             None => return Ok(None),
         };
-        let res: Result<Vec<T>, T::Err> = s.split(self.sep).map(T::from_str).collect();
-
-        Ok(res.ok().or_else(|| {
+        let res: Result<I, T::Err> = s.split(self.sep).map(T::from_str).collect();
+        let res = res.ok().or_else(|| {
+            // Default value
             let d = self.inner.default.as_ref()?;
-            let res: Result<Vec<T>, T::Err> = d.split(self.sep).map(T::from_str).collect();
+            let res: Result<I, T::Err> = d
+                .split(match d {
+                    // Default value provided directly
+                    Cow::Borrowed(_) => self.sep,
+                    // Default value provided from env var
+                    Cow::Owned(_) => self.env_sep.unwrap_or(self.sep),
+                })
+                .map(T::from_str)
+                .collect();
             Some(res.unwrap_or_else(|_| default_failed::<T>(d)))
-        }))
+        });
+
+        Ok(res)
     }
 
-    fn convert(self, mid: Self::Middle) -> Vec<T> {
+    fn convert(self, mid: Self::Middle) -> I {
         mid
     }
 }
