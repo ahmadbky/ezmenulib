@@ -120,20 +120,17 @@ impl Parse for Format {
         let mut suffix = None;
         let mut line_brk = None;
 
-        let mut vals = Punctuated::<Param, Token![,]>::parse_terminated(input)?.into_iter();
-        let n = vals.len();
+        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
 
-        for _ in 0..7.min(n) {
+        for _ in 0..7.min(vals.len()) {
             match vals.next() {
-                Some(p) => match p {
-                    Param::Prefix(l) => prefix = Some(l),
-                    Param::LeftSur(l) => left_sur = Some(l),
-                    Param::Chip(l) => chip = Some(l),
-                    Param::RightSur(l) => right_sur = Some(l),
-                    Param::ShowDefault(b) => show_default = Some(b),
-                    Param::Suffix(l) => suffix = Some(l),
-                    Param::LineBrk(b) => line_brk = Some(b),
-                },
+                Some(Param::LineBrk(b)) => line_brk = Some(b),
+                Some(Param::Suffix(l)) => suffix = Some(l),
+                Some(Param::ShowDefault(b)) => show_default = Some(b),
+                Some(Param::RightSur(l)) => right_sur = Some(l),
+                Some(Param::Chip(l)) => chip = Some(l),
+                Some(Param::LeftSur(l)) => left_sur = Some(l),
+                Some(Param::Prefix(l)) => prefix = Some(l),
                 None => (),
             }
         }
