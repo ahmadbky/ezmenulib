@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_error::abort;
-use quote::{quote, ToTokens, TokenStreamExt};
+use quote::{quote, ToTokens};
 use syn::{
     ext::IdentExt,
     parenthesized,
@@ -11,7 +11,7 @@ use syn::{
 
 use crate::{
     format::Format,
-    utils::{abort_invalid_ident, get_lib_root, method_call, to_str, MethodCall},
+    utils::{abort_invalid_ident, get_lib_root, method_call, MethodCall},
 };
 
 use super::FunctionExpr;

@@ -14,12 +14,12 @@ use crate::{
     format::Format,
     utils::{
         abort_invalid_ident, get_attr_with_args, get_first_doc, get_lib_root, method_call,
-        split_ident_camel_case, take_val, to_str, Case, MethodCall, Sp,
+        split_ident_camel_case, take_val, to_str, Case, MethodCall,
     },
 };
 
-/// Represents the kind of an identifier for an unit variant.
-enum UnitKind {
+/// Represents a parameter in the prompt attribute of an unit variant.
+enum UnitParam {
     /// The `default` identifier.
     Default,
     /// The `msg` optional identifier with the provided string literal.
@@ -35,7 +35,7 @@ enum UnitKind {
 /// Represents an identifier with its span for error handling for an unit variant.
 struct UnitArg {
     span: Span,
-    kind: UnitKind,
+    kind: UnitParam,
 }
 
 impl Parse for UnitArg {
@@ -44,17 +44,17 @@ impl Parse for UnitArg {
             let id = input.parse::<Ident>()?;
             let span = id.span();
             let kind = match to_str!(id) {
-                "default" => UnitKind::Default,
+                "default" => UnitParam::Default,
                 "msg" => {
                     input.parse::<Token![=]>()?;
-                    UnitKind::Msg(input.parse()?)
+                    UnitParam::Msg(input.parse()?)
                 }
                 "case" => {
                     input.parse::<Token![=]>()?;
-                    UnitKind::Case(input.parse()?)
+                    UnitParam::Case(input.parse()?)
                 }
-                "nodoc" => UnitKind::NoDoc,
-                "raw" => UnitKind::RawIdent,
+                "nodoc" => UnitParam::NoDoc,
+                "raw" => UnitParam::RawIdent,
                 _ => abort_invalid_ident(id, &["default", "msg", "case", "nodoc", "raw"]),
             };
 
@@ -64,15 +64,15 @@ impl Parse for UnitArg {
             let msg = input.parse::<LitStr>()?;
             Ok(Self {
                 span: msg.span(),
-                kind: UnitKind::Msg(msg),
+                kind: UnitParam::Msg(msg),
             })
         }
     }
 }
 
-/// Represents the attribute of an unit variant, with its optional string literal and the
-/// span of the `default` identifier if provided for error handling.
-// FIXME: Pretty same attribute as the root attribute
+/// Represents the attribute of an unit variant.
+///
+/// It saves the span of the `default` identifier for error handling later in the code.
 struct UnitAttr {
     lit: Option<LitStr>,
     default: Option<Span>,
@@ -94,11 +94,11 @@ impl Parse for UnitAttr {
         for _ in 0..5.min(vals.len()) {
             match vals.next() {
                 Some(arg) => match arg.kind {
-                    UnitKind::Case(c) => case = Some(c),
-                    UnitKind::Msg(m) => lit = Some(m),
-                    UnitKind::NoDoc => nodoc = true,
-                    UnitKind::Default => default = Some(arg.span),
-                    UnitKind::RawIdent => raw_ident = true,
+                    UnitParam::Case(c) => case = Some(c),
+                    UnitParam::Msg(m) => lit = Some(m),
+                    UnitParam::NoDoc => nodoc = true,
+                    UnitParam::Default => default = Some(arg.span),
+                    UnitParam::RawIdent => raw_ident = true,
                 },
                 None => (),
             }
@@ -568,10 +568,10 @@ fn get_default_fn<I: Iterator<Item = Entry>>(input: I) -> Option<MethodCall<Inde
     default.map(|i| method_call("default", i))
 }
 
-/// Expands the `derive(Select)` macro.
+/// Expands the `derive(Prompted)` macro for an enum.
 ///
 /// The expansion consists of the implementation of the `Selectable` trait for the given enum,
-/// with the given variants.
+/// with the given variants, and the `Prompted` trait.
 pub fn build_select(
     attrs: Vec<Attribute>,
     name: Ident,
@@ -629,8 +629,8 @@ pub fn build_select(
         }
 
         impl #root::menu::Prompted for #name {
-            fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
-                #fn_get_select().prompt(handle)
+            fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                vals.next(#fn_get_select())
             }
         }
 

@@ -1,11 +1,8 @@
-use std::{
-    fmt::Display,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Display;
 
-use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream};
+use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
-use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
+use quote::{quote, quote_spanned, ToTokens};
 use spelling_corrector::corrector::SimpleCorrector;
 use syn::{
     parse::{Parse, ParseStream},
@@ -51,10 +48,6 @@ pub fn take_val<T>(sp: Sp<T>) -> T {
 impl<T> Sp<T> {
     pub fn new(span: Span, val: T) -> Self {
         Self { span, val }
-    }
-
-    pub fn call_site(val: T) -> Self {
-        Self::new(Span::call_site(), val)
     }
 }
 
