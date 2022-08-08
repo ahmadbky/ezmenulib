@@ -5,12 +5,14 @@ mod tests;
 
 mod handle;
 
+use crate::customs::MenuBool;
 use crate::field::Promptable;
 pub use crate::menu::handle::{Handle, MenuHandle};
 
 use crate::prelude::*;
 use crate::utils::{check_fields, select, Depth};
 
+use std::collections::{LinkedList, VecDeque};
 use std::fmt::{self, Display, Formatter};
 use std::io::{Stdin, Stdout};
 
@@ -162,6 +164,28 @@ impl<H: Handle> Values<'_, H> {
     {
         p.optional_prompt_with(&mut self.handle, &self.fmt)
     }
+}
+
+const ERR_MSG: &str = "an error occurred while retrieving values";
+
+pub trait Prompted: Sized {
+    fn prompt() -> Self {
+        Self::try_prompt().expect(ERR_MSG)
+    }
+
+    fn try_prompt() -> MenuResult<Self> {
+        Self::try_prompt_with(MenuHandle::default())
+    }
+
+    fn prompt_with<H: Handle>(handle: H) -> Self {
+        Self::try_prompt_with(handle).expect(ERR_MSG)
+    }
+
+    fn try_prompt_with<H: Handle>(handle: H) -> MenuResult<Self> {
+        Self::from_values(&mut Default::default())
+    }
+
+    fn from_values<H: Handle>(vals: &mut Values<H>) -> MenuResult<Self>;
 }
 
 /// Defines a menu, with a title, the fields, and the reader and writer types.

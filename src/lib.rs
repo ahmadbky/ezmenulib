@@ -46,7 +46,7 @@ pub mod prelude {
         Field, Fields, Format, Kind, MenuDisplay, Promptable, Selectable, Selected, Separated,
         UsesFormat, Written, WrittenUntil,
     };
-    pub use crate::menu::{In, MenuHandle, Out, RawMenu, Values};
+    pub use crate::menu::{In, MenuHandle, Out, Prompted, RawMenu, Values};
 
     pub use super::*;
 }
