@@ -362,7 +362,7 @@ fn handle_field<H: Handle>(
 
     Ok(match kind {
         Kind::Map(f) => {
-            f(D::new(params.handle))?;
+            f(params.handle)?;
             if params.once {
                 Quit
             } else {

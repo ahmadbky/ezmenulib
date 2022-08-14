@@ -1,12 +1,11 @@
-use std::io::{self, Write};
+use ezmenulib::{field::kinds::*, menu::Handle, prelude::*};
+use std::io;
 
-use ezmenulib::{field::*, menu::Handle, prelude::*};
-
-fn play<H: Handle>(mut s: D<H>) -> io::Result<()> {
+fn play<H: Handle>(s: &mut H) -> io::Result<()> {
     writeln!(s, "Now playing.")
 }
 
-fn edit_name<H: Handle>(mut s: D<H>, span: &str) -> io::Result<()> {
+fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
     writeln!(s, "Editing {span}stname")
 }
 

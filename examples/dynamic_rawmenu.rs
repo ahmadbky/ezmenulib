@@ -1,6 +1,10 @@
 use std::{cell::RefCell, fmt, io, rc::Rc};
 
-use ezmenulib::{field::*, menu::Handle, prelude::*};
+use ezmenulib::{
+    field::{kinds::*, *},
+    menu::Handle,
+    prelude::*,
+};
 
 struct App {
     firstname: String,
@@ -17,11 +21,11 @@ impl Default for App {
 }
 
 impl App {
-    fn change_firstname<H: Handle>(&mut self, s: D<H>) -> MenuResult {
+    fn change_firstname<H: Handle>(&mut self, s: H) -> MenuResult {
         change_name(s, &mut self.firstname, "first")
     }
 
-    fn change_lastname<H: Handle>(&mut self, s: D<H>) -> MenuResult {
+    fn change_lastname<H: Handle>(&mut self, s: H) -> MenuResult {
         change_name(s, &mut self.lastname, "last")
     }
 }
@@ -49,7 +53,7 @@ fn change_name<H: Handle>(mut s: H, name: &mut String, span: &str) -> MenuResult
     Ok(())
 }
 
-fn play<H: Handle>(mut s: D<H>, play: &App) -> io::Result<()> {
+fn play<H: Handle>(mut s: H, play: &App) -> io::Result<()> {
     writeln!(s, "Now playing with {play}")
 }
 

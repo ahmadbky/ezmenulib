@@ -950,7 +950,7 @@ pub type Fields<'a, H = MenuHandle> = &'a [Field<'a, H>];
 ///
 /// See [`Kind::Map`] for more information.
 // pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
-pub type Callback<H = MenuHandle> = Box<dyn Fn(D<H>) -> MenuResult>;
+pub type Callback<H = MenuHandle> = Box<dyn Fn(&mut H) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, H = MenuHandle> {
@@ -979,32 +979,36 @@ impl<'a, H> fmt::Debug for Kind<'a, H> {
     }
 }
 
-#[macro_export]
-macro_rules! mapped {
-    ($f:expr, $($s:expr),* $(,)?) => {{
-        $crate::field::map(move |s| $f(s, $($s),*))
-    }};
-}
+pub mod kinds {
+    use super::*;
 
-pub fn map<'a, F, R, H>(f: F) -> Kind<'a, H>
-where
-    F: Fn(D<H>) -> R + 'static,
-    R: IntoResult,
-{
-    Kind::Map(Box::new(move |d| f(d).into_result()))
-}
+    #[macro_export]
+    macro_rules! mapped {
+        ($f:expr, $($s:expr),* $(,)?) => {{
+            $crate::field::kinds::map(move |s| $f(s, $($s),*))
+        }};
+    }
 
-#[inline(always)]
-pub fn parent<H>(f: Fields<'_, H>) -> Kind<'_, H> {
-    Kind::Parent(f)
-}
+    pub fn map<'a, F, R, H>(f: F) -> Kind<'a, H>
+    where
+        F: Fn(&mut H) -> R + 'static,
+        R: IntoResult,
+    {
+        Kind::Map(Box::new(move |d| f(d).into_result()))
+    }
 
-#[inline(always)]
-pub fn back<'a, H>(i: usize) -> Kind<'a, H> {
-    Kind::Back(i)
-}
+    #[inline(always)]
+    pub fn parent<H>(f: Fields<'_, H>) -> Kind<'_, H> {
+        Kind::Parent(f)
+    }
 
-#[inline(always)]
-pub fn quit<'a, H>() -> Kind<'a, H> {
-    Kind::Quit
+    #[inline(always)]
+    pub fn back<'a, H>(i: usize) -> Kind<'a, H> {
+        Kind::Back(i)
+    }
+
+    #[inline(always)]
+    pub fn quit<'a, H>() -> Kind<'a, H> {
+        Kind::Quit
+    }
 }
