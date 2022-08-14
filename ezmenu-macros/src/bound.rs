@@ -90,7 +90,7 @@ fn needs_insert(tui: bool, id: &Ident, args: &Punctuated<FnArg, Token![,]>) -> b
                     elem,
                     ..
                 }),
-            ) if matches!(&**elem, Type::Path(TypePath { path, .. }) if get_last_seg_of_path(&path).filter(|seg| cmp(id, seg)).is_some())
+            ) if matches!(&**elem, Type::Path(TypePath { path, .. }) if get_last_seg_of_path(path).filter(|seg| cmp(id, seg)).is_some())
         ),
         _ => true,
     }

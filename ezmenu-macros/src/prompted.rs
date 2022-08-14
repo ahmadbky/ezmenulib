@@ -439,7 +439,7 @@ enum FieldPrompt {
     /// so we can construct it from the `Prompted::from_values` method.
     Flatten,
     /// The basic prompt, expanded to `vals.next(Promptable)` for example.
-    Basic(MethodCall<Promptable>),
+    Basic(Box<MethodCall<Promptable>>),
 }
 
 impl FieldPrompt {
@@ -468,7 +468,7 @@ impl FieldPrompt {
         if let Some(entries) = attr.val.select {
             // Selected promptable
             let prompt = Promptable::Selected(Selected::new(msg, fmt, entries).unwrap_or_abort());
-            Self::Basic(kind.call_for(&field.ty, prompt))
+            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
         } else if attr.val.flatten {
             // Flattened prompt, we call `Prompted::from_values` method for this field
             if let Some(id) = get_ty_ident(&field.ty) {
@@ -511,7 +511,7 @@ impl FieldPrompt {
                 Promptable::Written(w)
             };
 
-            Self::Basic(kind.call_for(&field.ty, prompt))
+            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
         }
     }
 }
