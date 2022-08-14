@@ -8,8 +8,48 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Ident, Lit, Meta, MetaNameValue, Path, PathSegment, Token, Type, TypePath,
+    AngleBracketedGenericArguments, Attribute, GenericArgument, Ident, Lit, Meta, MetaNameValue,
+    Path, PathArguments, PathSegment, Token, Type, TypePath,
 };
+
+pub(crate) fn abort_conflict_param(span: Span) -> ! {
+    abort!(
+        span,
+        "cannot provide this parameter because an other one is in conflict with it"
+    );
+}
+
+macro_rules! define_attr {
+    {
+        $(#[$attr:meta])*
+        $Param:ident($sp:ident) -> $Attr:ident {$(
+            $Var:pat => $field:ident: $ty:ty = $from:expr; if $cond:expr => $val:expr
+        ),*}
+    } => {
+        $(#[$attr])*
+        struct $Attr {$(
+            $field: $ty
+        ),*}
+
+        impl Parse for $Attr {
+            fn parse(input: ParseStream) -> syn::Result<Self> {
+                use $Param::*;
+
+                $(let mut $field = $from;)*
+
+                let vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
+                for Sp { span: $sp, val } in vals {
+                    match val {
+                        $($Var if $cond => $field = $val,)*
+                        _ => $crate::utils::abort_conflict_param($sp),
+                    }
+                }
+
+                Ok(Self {$( $field ),*})
+            }
+        }
+    };
+}
 
 /// Internal macro used convert an object to a string slice
 macro_rules! to_str {

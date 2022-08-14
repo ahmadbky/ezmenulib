@@ -152,7 +152,7 @@ impl Parse for RootUnitAttr {
 }
 
 /// Represents a function expression.
-pub enum FunctionExpr {
+pub(crate) enum FunctionExpr {
     /// Provided as a closure `|x| expr`.
     Closure(ExprClosure),
     /// Provided as a path to the function.
@@ -221,46 +221,49 @@ enum FieldAttrParam {
     OrEnvWithSep(LitStr, LitStr),
 }
 
-impl Parse for FieldAttrParam {
+impl Parse for Sp<FieldAttrParam> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        use FieldAttrParam::*;
+
         Ok(if input.peek(Ident::peek_any) {
             let id = input.parse::<Ident>()?;
-            match to_str!(id) {
+            let span = id.span();
+            let val = match to_str!(id) {
                 "msg" => {
                     input.parse::<Token![=]>()?;
-                    Self::Example(input.parse()?)
+                    Msg(input.parse()?)
                 }
-                "optional" | "opt" => Self::Optional,
-                "or_default" => Self::OrDefault,
+                "optional" | "opt" => Optional,
+                "or_default" => OrDefault,
                 "case" => {
                     input.parse::<Token![=]>()?;
-                    Self::Case(input.parse()?)
+                    Case(input.parse()?)
                 }
-                "nodoc" => Self::NoDoc,
-                "raw" => Self::Raw,
-                "flatten" => Self::Flatten,
+                "nodoc" => NoDoc,
+                "raw" => Raw,
+                "flatten" => Flatten,
                 "example" => {
                     input.parse::<Token![=]>()?;
-                    Self::Example(input.parse()?)
+                    Example(input.parse()?)
                 }
                 "sep" => {
                     input.parse::<Token![=]>()?;
-                    Self::Sep(input.parse()?)
+                    Sep(input.parse()?)
                 }
                 other => {
                     let content;
                     parenthesized!(content in input);
                     match other {
-                        "fmt" => Self::Fmt(content.parse()?),
-                        "select" => Self::Select(content.parse_terminated(Parse::parse)?),
-                        "or" | "or_val" => Self::OrVal(content.parse()?),
-                        "or_env" => Self::OrEnv(content.parse()?),
+                        "fmt" => Fmt(content.parse()?),
+                        "select" => Select(content.parse_terminated(Parse::parse)?),
+                        "or" | "or_val" => OrVal(content.parse()?),
+                        "or_env" => OrEnv(content.parse()?),
                         "or_env_with" | "env_sep" => {
                             let var = content.parse()?;
                             content.parse::<Token![,]>()?;
-                            Self::OrEnvWithSep(var, content.parse()?)
+                            OrEnvWithSep(var, content.parse()?)
                         }
-                        "until" => Self::Until(content.parse()?),
+                        "until" => Until(content.parse()?),
                         _ => abort_invalid_ident(
                             id,
                             &[
@@ -281,113 +284,68 @@ impl Parse for FieldAttrParam {
                         ),
                     }
                 }
-            }
+            };
+
+            Self { span, val }
         } else {
-            Self::Msg(input.parse()?)
+            let val = input.parse::<LitStr>()?;
+            Self {
+                span: val.span(),
+                val: Msg(val),
+            }
         })
     }
 }
 
-/// Represents the prompt attribute of a struct field.
-#[derive(Default)]
-struct RawFieldAttr {
-    msg: Option<LitStr>,
-    fmt: Option<Format>,
-    opt: bool,
-    or_default: bool,
-    nodoc: bool,
-    case: Option<Case>,
-    raw: bool,
-    flatten: bool,
+define_attr! {
+    #[derive(Default)]
+    FieldAttrParam(sp) -> RawFieldAttr {
+        Msg(m) => msg: Option<LitStr> = None; if msg.is_none() => Some(m),
+        Fmt(f) => fmt: Option<Format> = None; if fmt.is_none() => Some(f),
+        Optional => opt: bool = false; if !opt && !or_default => true,
+        OrDefault => or_default: bool = false; if !or_default && !opt => true,
+        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
+        NoDoc => nodoc: bool = false; if !nodoc => true,
+        Raw => raw: bool = false; if !raw && msg.is_none() => true,
+        Flatten => flatten: bool = false;
+            if !flatten
+                && msg.is_none()
+                && fmt.is_none()
+                && !opt
+                && !or_default
+                && case.is_none()
+                && !nodoc
+                && !raw
+                && select.is_none()
+                && example.is_none()
+                && default_env.is_none()
+                && until.is_none()
+                && sep.is_none()
+                && default_env_with_sep.is_none()
+            => true,
 
-    select: Option<Punctuated<RawSelectedField, Token![,]>>,
+        Select(fields) => select: Option<Punctuated<RawSelectedField, Token![,]>> = None;
+            if select.is_none()
+                && msg.is_none()
+                && !nodoc
+                && !raw
+                && example.is_none()
+                && default_env.is_none()
+                && until.is_none()
+                && sep.is_none()
+                && default_env_with_sep.is_none()
+            => Some(fields),
 
-    example: Option<LitStr>,
-    default_val: Option<LitStr>,
-    default_env: Option<LitStr>,
+        Example(e) => example: Option<LitStr> = None; if example.is_none() => Some(e),
+        OrVal(v) => default_val: Option<LitStr> = None; if default_val.is_none() => Some(v),
+        OrEnv(v) => default_env: Option<LitStr> = None; if default_env.is_none() => Some(v),
 
-    until: Option<FunctionExpr>,
+        Until(f) => until: Option<FunctionExpr> = None;
+            if until.is_none() && sep.is_none() && default_env_with_sep.is_none() => Some(f),
 
-    sep: Option<LitStr>,
-    // (environment variable, separator)
-    default_env_with_sep: Option<(LitStr, LitStr)>,
-}
-
-impl Parse for RawFieldAttr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        use FieldAttrParam::*;
-
-        let mut msg = None;
-        let mut fmt = None;
-        let mut opt = false;
-        let mut or_default = false;
-        let mut case = None;
-        let mut nodoc = false;
-        let mut raw = false;
-        let mut flatten = false;
-
-        let mut select = None;
-
-        let mut example = None;
-        let mut default_val = None;
-        let mut default_env = None;
-
-        let mut until = None;
-
-        let mut sep = None;
-        let mut default_env_with_sep = None;
-
-        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
-
-        // The attribute can have maximum 9 values if provided as "many"
-        // msg ; fmt ; optional ; or_default ; example ;
-        // default_val ; default_env ; sep ; default_env_with_sep
-        for _ in 0..9.min(vals.len()) {
-            match vals.next() {
-                Some(Msg(m)) => msg = Some(m),
-                Some(Fmt(f)) => fmt = Some(f),
-                Some(Optional) => opt = true,
-                Some(OrDefault) => or_default = true,
-                Some(Case(c)) => case = Some(c),
-                Some(NoDoc) => nodoc = true,
-                Some(Raw) => raw = true,
-                Some(Flatten) => flatten = true,
-
-                Some(Select(sel)) => select = Some(sel),
-
-                Some(Example(e)) => example = Some(e),
-                Some(OrVal(v)) => default_val = Some(v),
-                Some(OrEnv(v)) => default_env = Some(v),
-
-                Some(Until(f)) => until = Some(f),
-
-                Some(Sep(s)) => sep = Some(s),
-                Some(OrEnvWithSep(v, s)) => default_env_with_sep = Some((v, s)),
-
-                None => (),
-            }
-        }
-
-        Ok(Self {
-            msg,
-            fmt,
-            opt,
-            or_default,
-            case,
-            nodoc,
-            raw,
-            flatten,
-
-            select,
-
-            example,
-            default_val,
-            default_env,
-
-            until,
-            sep,
-            default_env_with_sep,
-        })
+        Sep(s) => sep: Option<LitStr> = None; if sep.is_none() => Some(s),
+        OrEnvWithSep(v, s) => default_env_with_sep: Option<(LitStr, LitStr)> = None;
+            if default_env_with_sep.is_none() => Some((v, s))
     }
 }
 
@@ -497,7 +455,7 @@ impl FieldPrompt {
     fn new(attr: Sp<RawFieldAttr>, field: Field, msg: String) -> Self {
         let fmt = attr.val.fmt.map(|f| method_call("format", f));
         let kind = match (attr.val.opt, attr.val.or_default) {
-            (true, true) => abort_opt_or_default(attr.span),
+            (true, true) => unreachable!("assert !(opt && or_default)"),
             (true, false) => PromptKind::NextOptional,
             (false, true) if is_ty(&field.ty, "Option") => abort_opt_or_default(attr.span),
             (false, true) => PromptKind::NextOrDefault,
@@ -510,20 +468,6 @@ impl FieldPrompt {
 
         if let Some(entries) = attr.val.select {
             // Selected promptable
-
-            if example.is_some()
-                || default_val.is_some()
-                || default_env.is_some()
-                || attr.val.until.is_some()
-                || attr.val.sep.is_some()
-                || attr.val.default_env_with_sep.is_some()
-            {
-                abort!(
-                    attr.span,
-                    "cannot define field as selectable and provide attributes as a written field"
-                );
-            }
-
             let prompt = Promptable::Selected(Selected::new(msg, fmt, entries).unwrap_or_abort());
             Self::Basic(kind.call_for(&field.ty, prompt))
         } else if attr.val.flatten {
@@ -542,13 +486,6 @@ impl FieldPrompt {
 
             let prompt = if let Some(til) = attr.val.until {
                 // WrittenUntil promptable
-
-                if attr.val.default_env_with_sep.is_some() {
-                    abort!(
-                        attr.span,
-                        "cannot provide a separator for environment variable and an `until` function"
-                    )
-                }
                 Promptable::WrittenUntil(WrittenUntil { w, til })
             } else if let Some(sep) = attr.val.sep {
                 // Separated promptable

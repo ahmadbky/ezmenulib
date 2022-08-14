@@ -13,8 +13,8 @@ use syn::{
 use crate::{
     format::Format,
     utils::{
-        abort_invalid_ident, get_attr_with_args, get_first_doc, get_lib_root, method_call,
-        split_ident_camel_case, take_val, to_str, Case, MethodCall,
+        abort_invalid_ident, define_attr, get_attr_with_args, get_first_doc, get_lib_root,
+        method_call, split_ident_camel_case, take_val, to_str, Case, MethodCall, Sp,
     },
 };
 
@@ -32,18 +32,12 @@ enum UnitParam {
     RawIdent,
 }
 
-/// Represents an identifier with its span for error handling for an unit variant.
-struct UnitArg {
-    span: Span,
-    kind: UnitParam,
-}
-
-impl Parse for UnitArg {
+impl Parse for Sp<UnitParam> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(Ident::peek_any) {
+        Ok(if input.peek(Ident::peek_any) {
             let id = input.parse::<Ident>()?;
             let span = id.span();
-            let kind = match to_str!(id) {
+            let val = match to_str!(id) {
                 "default" => UnitParam::Default,
                 "msg" => {
                     input.parse::<Token![=]>()?;
@@ -58,59 +52,25 @@ impl Parse for UnitArg {
                 _ => abort_invalid_ident(id, &["default", "msg", "case", "nodoc", "raw"]),
             };
 
-            Ok(Self { span, kind })
+            Self { span, val }
         } else {
             // Else, the next token must be a string literal to represent the given message.
             let msg = input.parse::<LitStr>()?;
-            Ok(Self {
+            Self {
                 span: msg.span(),
-                kind: UnitParam::Msg(msg),
-            })
-        }
+                val: UnitParam::Msg(msg),
+            }
+        })
     }
 }
 
-/// Represents the attribute of an unit variant.
-///
-/// It saves the span of the `default` identifier for error handling later in the code.
-struct UnitAttr {
-    lit: Option<LitStr>,
-    default: Option<Span>,
-    case: Option<Case>,
-    nodoc: bool,
-    raw_ident: bool,
-}
-
-impl Parse for UnitAttr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut lit = None;
-        let mut default = None;
-        let mut case = None;
-        let mut nodoc = false;
-        let mut raw_ident = false;
-
-        let mut vals = Punctuated::<UnitArg, Token![,]>::parse_terminated(input)?.into_iter();
-
-        for _ in 0..5.min(vals.len()) {
-            match vals.next() {
-                Some(arg) => match arg.kind {
-                    UnitParam::Case(c) => case = Some(c),
-                    UnitParam::Msg(m) => lit = Some(m),
-                    UnitParam::NoDoc => nodoc = true,
-                    UnitParam::Default => default = Some(arg.span),
-                    UnitParam::RawIdent => raw_ident = true,
-                },
-                None => (),
-            }
-        }
-
-        Ok(Self {
-            lit,
-            default,
-            case,
-            nodoc,
-            raw_ident,
-        })
+define_attr! {
+    UnitParam(sp) -> UnitAttr {
+        Msg(m) => lit: Option<LitStr> = None; if lit.is_none() => Some(m),
+        Default => default: Option<Span> = None; if default.is_none() => Some(sp),
+        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
+        NoDoc => nodoc: bool = false; if !nodoc && lit.is_none() => true,
+        RawIdent => raw_ident: bool = false; if !raw_ident && lit.is_none() => true
     }
 }
 
@@ -431,79 +391,50 @@ enum RootParam {
     RawIdent,
 }
 
-impl Parse for RootParam {
+impl Parse for Sp<RootParam> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(Ident) {
+        Ok(if input.peek(Ident) {
             // The provided identifier must be either `msg` or `fmt`.
             let id = input.parse::<Ident>()?;
+            let span = id.span();
 
-            Ok(match to_str!(id) {
+            let val = match to_str!(id) {
                 "msg" => {
                     input.parse::<Token![=]>()?;
-                    Self::Msg(input.parse()?)
+                    RootParam::Msg(input.parse()?)
                 }
                 "fmt" => {
                     let content;
                     parenthesized!(content in input);
-                    Self::Fmt(content.parse()?)
+                    RootParam::Fmt(content.parse()?)
                 }
-                "nodoc" => Self::NoDoc,
+                "nodoc" => RootParam::NoDoc,
                 "case" => {
                     input.parse::<Token![=]>()?;
-                    Self::Case(input.parse()?)
+                    RootParam::Case(input.parse()?)
                 }
-                "raw" => Self::RawIdent,
+                "raw" => RootParam::RawIdent,
                 _ => abort_invalid_ident(id, &["msg", "fmt", "nodoc", "case"]),
-            })
+            };
+
+            Self { span, val }
         } else {
             // Else, the next token must be a string literal to represent the given message.
-            let msg = input.parse::<LitStr>()?;
-            Ok(Self::Msg(msg))
-        }
+            let lit = input.parse::<LitStr>()?;
+            let span = lit.span();
+            let val = RootParam::Msg(lit);
+            Self { span, val }
+        })
     }
 }
 
-/// Represents the `select` attribute of the enum, with its optional string literal for the message
-/// and its optional format specification.
-// FIXME: Pretty same attribute as the unit attribute
-struct RootAttr {
-    msg: Option<LitStr>,
-    fmt: Option<Format>,
-    case: Option<Case>,
-    nodoc: bool,
-    raw_ident: bool,
-}
-
-impl Parse for RootAttr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Here, we iterate over `Unit`s thrice
-        // to check that there is maximum 2 distinct values provided.
-        let mut msg = None;
-        let mut fmt = None;
-        let mut nodoc = false;
-        let mut case = None;
-        let mut raw_ident = false;
-
-        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
-
-        for _ in 0..5.min(vals.len()) {
-            match vals.next() {
-                Some(RootParam::Msg(m)) => msg = Some(m),
-                Some(RootParam::Fmt(f)) => fmt = Some(f),
-                Some(RootParam::NoDoc) => nodoc = true,
-                Some(RootParam::Case(c)) => case = Some(c),
-                Some(RootParam::RawIdent) => raw_ident = true,
-                None => (),
-            }
-        }
-
-        Ok(Self {
-            msg,
-            fmt,
-            nodoc,
-            case,
-            raw_ident,
-        })
+define_attr! {
+    RootParam(sp) -> RootAttr {
+        Msg(m) => msg: Option<LitStr> = None; if msg.is_none() => Some(m),
+        Fmt(f) => fmt: Option<Format> = None; if fmt.is_none() => Some(f),
+        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
+        NoDoc => nodoc: bool = false; if !nodoc && msg.is_none() => true,
+        RawIdent => raw_ident: bool = false; if !raw_ident && msg.is_none() => true
     }
 }
 
@@ -587,7 +518,7 @@ pub(crate) fn build_select(
 
     set_dummy(quote! {
         impl #root::menu::Prompted for #name {
-            fn try_prompt_with<H: #root::menu::Handle>(_handle: H) -> #root::MenuResult<Self> {
+            fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
                 unimplemented!()
             }
         }
