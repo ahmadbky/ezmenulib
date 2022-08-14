@@ -6,21 +6,22 @@ use proc_macro_error::{abort, abort_call_site, set_dummy, ResultExt};
 use quote::{quote, ToTokens};
 use syn::{
     ext::IdentExt,
-    parenthesized, parse,
+    parenthesized,
     parse::{Parse, ParseStream},
+    parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    AngleBracketedGenericArguments, Attribute, Data, DataEnum, DataStruct, DeriveInput,
-    ExprClosure, Field, Fields, FieldsNamed, FieldsUnnamed, GenericArgument, Generics, Ident,
-    LitStr, Path, PathArguments, Token, Type,
+    Attribute, Data, DataEnum, DataStruct, DeriveInput, ExprClosure, Field, Fields, FieldsNamed,
+    FieldsUnnamed, GenericArgument, Generics, Ident, LitStr, Path, Token, Type,
 };
 
 use crate::{
     format::Format,
+    generics::AugmentedGenerics,
     utils::{
-        abort_invalid_ident, get_attr_with_args, get_first_doc, get_last_seg_of, get_lib_root,
-        is_ty, method_call, split_ident_camel_case, split_ident_snake_case, take_val, to_str, Case,
-        MethodCall, Sp,
+        abort_invalid_ident, define_attr, get_attr_with_args, get_first_doc, get_last_seg_of_ty,
+        get_lib_root, get_nested_args, get_ty_ident, is_ty, method_call, split_ident_camel_case,
+        split_ident_snake_case, take_val, to_str, Case, MethodCall, Sp,
     },
 };
 
@@ -353,17 +354,10 @@ define_attr! {
 ///
 /// &`Option<T>` --> Some(&`T`)
 fn get_nested_type(ty: &Type) -> Option<&Type> {
-    let nested = get_last_seg_of(ty)
+    let nested = get_last_seg_of_ty(ty)
         .filter(|s| s.ident == "Option")
-        .and_then(|s| {
-            if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) =
-                &s.arguments
-            {
-                Some(args.first()).flatten()
-            } else {
-                None
-            }
-        });
+        .and_then(get_nested_args)
+        .and_then(Punctuated::first);
 
     match nested {
         Some(GenericArgument::Type(ty)) => Some(ty),
@@ -401,7 +395,7 @@ impl PromptKind {
 
         let out = method_call(s, val)
             .with_span(ty.span())
-            .with_generics(vec![ty.clone(), parse("_".parse().unwrap()).unwrap()]);
+            .with_generics(vec![ty.clone(), parse_quote!(_)]);
 
         if let Self::NextOrDefault = self {
             out
@@ -452,7 +446,12 @@ impl FieldPrompt {
     /// Returns the prompt call of the field from its prompt attribute and the message of the prompt.
     ///
     /// The message retrieval depends on the field type (named/unnamed).
-    fn new(attr: Sp<RawFieldAttr>, field: Field, msg: String) -> Self {
+    fn new(
+        attr: Sp<RawFieldAttr>,
+        field: Field,
+        msg: String,
+        gens: &mut AugmentedGenerics,
+    ) -> Self {
         let fmt = attr.val.fmt.map(|f| method_call("format", f));
         let kind = match (attr.val.opt, attr.val.or_default) {
             (true, true) => unreachable!("assert !(opt && or_default)"),
@@ -472,9 +471,17 @@ impl FieldPrompt {
             Self::Basic(kind.call_for(&field.ty, prompt))
         } else if attr.val.flatten {
             // Flattened prompt, we call `Prompted::from_values` method for this field
+            if let Some(id) = get_ty_ident(&field.ty) {
+                let root = get_lib_root();
+                gens.check_for_bound(id, quote!(#root::menu::Prompted));
+            }
             Self::Flatten
         } else {
             // "Writtens" promptable
+
+            if let Some(id) = get_ty_ident(&field.ty) {
+                gens.check_for_bound(id, quote!(::std::str::FromStr));
+            }
 
             let w = Written {
                 msg,
@@ -531,7 +538,11 @@ fn abort_opt_or_default(span: Span) -> ! {
 }
 
 /// Returns the field prompt from the field itself and the global case of the struct if provided.
-fn get_field_prompt(field: Field, case: Option<&Case>) -> FieldPrompt {
+fn get_field_prompt(
+    field: Field,
+    case: Option<&Case>,
+    gens: &mut AugmentedGenerics,
+) -> FieldPrompt {
     let attr: Sp<RawFieldAttr> = get_attr_with_args(&field.attrs, "prompt").unwrap_or_default();
 
     let msg = attr
@@ -566,7 +577,7 @@ fn get_field_prompt(field: Field, case: Option<&Case>) -> FieldPrompt {
         None => msg,
     };
 
-    FieldPrompt::new(attr, field, msg)
+    FieldPrompt::new(attr, field, msg, gens)
 }
 
 /// Represents an unnamed field of a struct.
@@ -576,8 +587,8 @@ struct UnnamedField {
 
 impl UnnamedField {
     /// Returns the unnamed field with the optional case of the struct attribute if provided.
-    fn new(field: Field, case: Option<&Case>) -> Self {
-        let prompt = get_field_prompt(field, case);
+    fn new(field: Field, case: Option<&Case>, gens: &mut AugmentedGenerics) -> Self {
+        let prompt = get_field_prompt(field, case, gens);
         Self { prompt }
     }
 }
@@ -594,10 +605,14 @@ struct UnnamedInit {
 }
 
 impl UnnamedInit {
-    fn new(unnamed: Punctuated<Field, Token![,]>, case: Option<&Case>) -> Self {
+    fn new(
+        unnamed: Punctuated<Field, Token![,]>,
+        case: Option<&Case>,
+        gens: &mut AugmentedGenerics,
+    ) -> Self {
         let values = unnamed
             .into_iter()
-            .map(|f| UnnamedField::new(f, case))
+            .map(|f| UnnamedField::new(f, case, gens))
             .collect();
         Self { values }
     }
@@ -618,9 +633,12 @@ struct NamedField {
 
 impl NamedField {
     /// Returns the named field with the optional case of the struct attribute if provided.
-    fn new(field: Field, case: Option<&Case>) -> Self {
-        let name = field.ident.clone().unwrap();
-        let prompt = get_field_prompt(field, case);
+    fn new(field: Field, case: Option<&Case>, gens: &mut AugmentedGenerics) -> Self {
+        let name = field
+            .ident
+            .clone()
+            .expect("called NamedField::new on an unnamed field");
+        let prompt = get_field_prompt(field, case, gens);
         Self { name, prompt }
     }
 }
@@ -639,10 +657,14 @@ struct NamedInit {
 }
 
 impl NamedInit {
-    fn new(fields: Punctuated<Field, Token![,]>, case: Option<&Case>) -> Self {
+    fn new(
+        fields: Punctuated<Field, Token![,]>,
+        case: Option<&Case>,
+        gens: &mut AugmentedGenerics,
+    ) -> Self {
         let fields = fields
             .into_iter()
-            .map(|f| NamedField::new(f, case))
+            .map(|f| NamedField::new(f, case, gens))
             .collect();
         Self { fields }
     }
@@ -670,12 +692,14 @@ fn map_unit_ident(attrs: &[Attribute], name: &Ident) -> String {
 /// Expands the `derive(Prompted)` macro for an unit struct.
 ///
 /// This expansion consists of the implementation of the FromStr trait on this struct.
-fn build_unit_struct(attrs: Vec<Attribute>, name: Ident) -> TokenStream {
+fn build_unit_struct(attrs: Vec<Attribute>, name: Ident, gens: AugmentedGenerics) -> TokenStream {
     let low_name = map_unit_ident(&attrs, &name);
     let err_msg = format!("failed to parse to {name} struct");
 
-    quote! {
-        impl ::std::str::FromStr for #name {
+    gens.impl_for(
+        quote!(::std::str::FromStr),
+        &name,
+        quote! {
             type Err = String;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s.to_lowercase().as_str() {
@@ -683,8 +707,8 @@ fn build_unit_struct(attrs: Vec<Attribute>, name: Ident) -> TokenStream {
                     _ => Err(#err_msg.to_owned()),
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 /// Returns the TokenStream of the `writeln!(...)` instruction to display a message
@@ -726,11 +750,13 @@ fn disp_title_ts(data: &RootFieldsAttr, attrs: &[Attribute], name: &Ident) -> To
 /// Returns the TokenStream of the struct construction.
 ///
 /// This function is called after checking that the struct isn't an unit struct.
-fn construct_ts(case: Option<&Case>, fields: Fields) -> TokenStream {
+fn construct_ts(case: Option<&Case>, fields: Fields, gens: &mut AugmentedGenerics) -> TokenStream {
     match fields {
-        Fields::Named(FieldsNamed { named, .. }) => NamedInit::new(named, case).into_token_stream(),
+        Fields::Named(FieldsNamed { named, .. }) => {
+            NamedInit::new(named, case, gens).into_token_stream()
+        }
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
-            UnnamedInit::new(unnamed, case).into_token_stream()
+            UnnamedInit::new(unnamed, case, gens).into_token_stream()
         }
         _ => unreachable!(),
     }
@@ -740,20 +766,17 @@ fn construct_ts(case: Option<&Case>, fields: Fields) -> TokenStream {
 fn build_fields_struct(
     attrs: Vec<Attribute>,
     name: Ident,
-    gens: Generics,
+    mut gens: AugmentedGenerics,
     fields: Fields,
 ) -> TokenStream {
-    let where_clause = gens.where_clause.as_ref();
     // The name of the library.
     let root = get_lib_root();
 
-    set_dummy(quote! {
-        impl #gens #root::menu::Prompted for #name #where_clause {
-            fn from_values<H: #root::menu::Handle>(_vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-                unimplemented!()
-            }
+    set_dummy(gens.impl_for(quote!(#root::menu::Prompted), &name, quote! {
+        fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+            unimplemented!()
         }
-    });
+    }));
 
     let data = RootFieldsAttr::from(attrs.as_ref());
 
@@ -768,26 +791,25 @@ fn build_fields_struct(
         Some(disp_title_ts(&data, &attrs, &name))
     };
 
-    let init = construct_ts(data.case.as_ref(), fields);
+    let init = construct_ts(data.case.as_ref(), fields, &mut gens);
 
-    quote! {
-        impl #gens #root::menu::Prompted for #name #where_clause {
-            fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
-                Self::from_values(&mut #root::menu::Values::from_handle(handle) #fmt_fn)
-            }
-
-            fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-                #disp_title
-                Ok(#init)
-            }
+    gens.impl_for(quote!(#root::menu::Prompted), &name, quote! {
+        fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
+            Self::from_values(&mut #root::menu::Values::from_handle(handle) #fmt_fn)
         }
-    }
+
+        fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+            #disp_title
+            Ok(#init)
+        }
+    })
 }
 
 /// Expands the `derive(Prompted)` macro for a struct.
 fn build_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics, fields: Fields) -> TokenStream {
+    let gens = AugmentedGenerics::from(gens);
     match fields {
-        Fields::Unit => build_unit_struct(attrs, name),
+        Fields::Unit => build_unit_struct(attrs, name, gens),
         other => build_fields_struct(attrs, name, gens, other),
     }
 }

@@ -36,6 +36,11 @@ enum Amount {
     MoreThanTwo,
 }
 
+#[derive(Prompted, Debug)]
+struct WithGenerics<T> {
+    prompt: T,
+}
+
 fn main() {
     // let amount = Amount::prompt();
     // println!("Amount = {amount:?}");
@@ -43,6 +48,9 @@ fn main() {
     // let hehe = HeheHello::prompt();
     // println!("HeheHello = {hehe:?}");
 
-    let foo = Foo::prompt();
-    println!("Foo = {foo:#?}");
+    // let gens = WithGenerics::<i32>::prompt();
+    // println!("WithGenerics = {gens:?}");
+
+    // let foo = Foo::prompt();
+    // println!("Foo = {foo:#?}");
 }

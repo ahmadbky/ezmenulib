@@ -17,6 +17,7 @@ use syn::{parse_macro_input, DeriveInput};
 extern crate proc_macro as pm;
 
 mod format;
+mod generics;
 mod prompted;
 mod utils;
 
