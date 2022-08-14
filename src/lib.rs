@@ -20,7 +20,8 @@
     missing_debug_implementations,
     missing_copy_implementations,
     unreachable_pub,
-    unused_lifetimes
+    unused_lifetimes,
+    future_incompatible
 )]
 #![cfg_attr(nightly, feature(doc_cfg))]
 
@@ -29,8 +30,16 @@
 pub mod tui;
 
 #[cfg(feature = "derive")]
+#[doc(hidden)]
+pub use ezmenu_macros::Menu;
+
+#[cfg(feature = "derive")]
+#[doc(hidden)]
+pub use ezmenu_macros::Prompted;
+
+#[cfg(feature = "derive")]
 #[cfg_attr(nightly, doc(cfg(feature = "derive")))]
-pub use ezmenu_macros::*;
+pub use ezmenu_macros::bound;
 
 pub mod customs;
 pub mod field;
@@ -40,13 +49,9 @@ pub(crate) mod utils;
 
 /// Module used to import common structs, to build menus with their fields.
 pub mod prelude {
-    pub use crate::field::{
-        Field, Fields, Format, Kind, MenuDisplay, Promptable, Selectable, Selected, Separated,
-        UsesFormat, Written, WrittenUntil,
-    };
-    pub use crate::menu::{In, MenuHandle, Out, Prompted, RawMenu, Values};
-
     pub use super::*;
+    #[doc(inline)]
+    pub use crate::{field::*, menu::*};
 }
 
 use crate::field::Format;
