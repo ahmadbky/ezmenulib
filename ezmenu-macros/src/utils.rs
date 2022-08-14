@@ -324,22 +324,42 @@ pub(crate) fn abort_invalid_ident(id: Ident, valids: &[&str]) -> ! {
     );
 }
 
-pub fn get_last_seg_of(ty: &Type) -> Option<&PathSegment> {
-    match ty {
-        Type::Path(TypePath {
-            qself: None,
-            path:
-                Path {
-                    leading_colon: None,
-                    segments,
-                },
-        }) => Some(segments.last()?),
+pub(crate) fn get_last_seg_of_path(path: &Path) -> Option<&PathSegment> {
+    path.segments.last()
+}
+
+pub(crate) fn get_nested_args(
+    seg: &PathSegment,
+) -> Option<&Punctuated<GenericArgument, Token![,]>> {
+    match &seg.arguments {
+        PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => Some(args),
         _ => None,
     }
 }
 
-pub fn is_ty(ty: &Type, name: &str) -> bool {
-    get_last_seg_of(ty)
+pub(crate) fn is_path(path: &Path, name: &str) -> bool {
+    get_last_seg_of_path(path)
+        .filter(|seg| seg.ident == name)
+        .is_some()
+}
+
+pub(crate) fn get_last_seg_of_ty(ty: &Type) -> Option<&PathSegment> {
+    match ty {
+        Type::Path(TypePath { qself: None, path }) => Some(get_last_seg_of_path(path)?),
+        _ => None,
+    }
+}
+
+pub(crate) fn get_ty_ident(ty: &Type) -> Option<&Ident> {
+    if let Type::Path(TypePath { path, .. }) = ty {
+        path.get_ident()
+    } else {
+        None
+    }
+}
+
+pub(crate) fn is_ty(ty: &Type, name: &str) -> bool {
+    get_last_seg_of_ty(ty)
         .filter(|seg| seg.ident == name)
         .is_some()
 }
