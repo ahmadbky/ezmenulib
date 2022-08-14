@@ -10,9 +10,6 @@ categories = ["command-line-interface"]
 keywords = ["cli", "menu", "interface"]
 license = "MIT"
 readme = "README.md"
-exclude = [
-    "tests/*"
-]
 
 [lib]
 name = "ezmenulib"
@@ -49,7 +46,7 @@ path = "ezmenu-macros"
 rustc_version = "0.4.0"
 
 [features]
-default = []
+default = ["derive"]
 derive = ["dep:ezmenu-macros"]
 expr = ["dep:meval"]
 crossterm = ["dep:crossterm", "tui?/crossterm"]
