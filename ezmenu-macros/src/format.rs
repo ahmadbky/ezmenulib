@@ -96,7 +96,7 @@ impl Parse for Param {
 
 /// Represents the `fmt(...)` meta attribute, with its custom parameters,
 /// used to represent it as a `Format` struct construct.
-pub struct Format {
+pub(crate) struct Format {
     prefix: Option<LitStr>,
     left_sur: Option<LitStr>,
     right_sur: Option<LitStr>,

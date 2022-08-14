@@ -572,7 +572,7 @@ fn get_default_fn<I: Iterator<Item = Entry>>(input: I) -> Option<MethodCall<Inde
 ///
 /// The expansion consists of the implementation of the `Selectable` trait for the given enum,
 /// with the given variants, and the `Prompted` trait.
-pub fn build_select(
+pub(crate) fn build_select(
     attrs: Vec<Attribute>,
     name: Ident,
     gens: Generics,

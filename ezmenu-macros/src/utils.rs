@@ -18,18 +18,18 @@ macro_rules! to_str {
     };
 }
 
-pub(crate) use to_str;
+pub(crate) use {define_attr, to_str};
 
 /// Util function used to return the token stream of the path of the library name.
 ///
 /// This function exists because the library name might change in the future.
-pub fn get_lib_root() -> TokenStream {
+pub(crate) fn get_lib_root() -> TokenStream {
     quote!(::ezmenulib)
 }
 
-pub struct Sp<T> {
-    pub span: Span,
-    pub val: T,
+pub(crate) struct Sp<T> {
+    pub(crate) span: Span,
+    pub(crate) val: T,
 }
 
 impl<T: Default> Default for Sp<T> {
@@ -41,12 +41,12 @@ impl<T: Default> Default for Sp<T> {
     }
 }
 
-pub fn take_val<T>(sp: Sp<T>) -> T {
+pub(crate) fn take_val<T>(sp: Sp<T>) -> T {
     sp.val
 }
 
 impl<T> Sp<T> {
-    pub fn new(span: Span, val: T) -> Self {
+    pub(crate) fn new(span: Span, val: T) -> Self {
         Self { span, val }
     }
 }
@@ -60,13 +60,13 @@ impl<T: ToTokens> ToTokens for Sp<T> {
 
 /// Util function used to return the attribute marked with the given identifier among
 /// the given attributes.
-pub fn get_attr<'a>(attrs: &'a [Attribute], ident: &str) -> Option<&'a Attribute> {
+pub(crate) fn get_attr<'a>(attrs: &'a [Attribute], ident: &str) -> Option<&'a Attribute> {
     attrs.iter().find(|attr| attr.path.is_ident(ident))
 }
 
 /// Util function used to parse the arguments of the attribute marked with the given identifier,
 /// among the given attributes, to the output type.
-pub fn get_attr_with_args<A: Parse>(attrs: &[Attribute], ident: &str) -> Option<Sp<A>> {
+pub(crate) fn get_attr_with_args<A: Parse>(attrs: &[Attribute], ident: &str) -> Option<Sp<A>> {
     get_attr(attrs, ident).map(|attr| {
         let val = attr
             .parse_args()
@@ -77,7 +77,7 @@ pub fn get_attr_with_args<A: Parse>(attrs: &[Attribute], ident: &str) -> Option<
 
 /// Util function used to get the first documentation line among the given attributes
 /// of the concerned object.
-pub fn get_first_doc(attrs: &[Attribute]) -> Option<String> {
+pub(crate) fn get_first_doc(attrs: &[Attribute]) -> Option<String> {
     get_attr(attrs, "doc").and_then(|attr| match attr.parse_meta() {
         Ok(Meta::NameValue(MetaNameValue {
             lit: Lit::Str(lit), ..
@@ -86,7 +86,7 @@ pub fn get_first_doc(attrs: &[Attribute]) -> Option<String> {
     })
 }
 
-pub struct MethodCall<T> {
+pub(crate) struct MethodCall<T> {
     name: Ident,
     gens: Punctuated<Type, Token![,]>,
     arg: T,
@@ -94,7 +94,7 @@ pub struct MethodCall<T> {
 }
 
 impl<T> MethodCall<T> {
-    pub fn new(name: Ident, arg: T) -> Self {
+    pub(crate) fn new(name: Ident, arg: T) -> Self {
         Self {
             name,
             gens: Punctuated::new(),
@@ -103,19 +103,19 @@ impl<T> MethodCall<T> {
         }
     }
 
-    pub fn with_span(mut self, span: Span) -> Self {
+    pub(crate) fn with_span(mut self, span: Span) -> Self {
         self.name.set_span(span);
         self
     }
 
-    pub fn with_generics(self, gens: Vec<Type>) -> Self {
+    pub(crate) fn with_generics(self, gens: Vec<Type>) -> Self {
         Self {
             gens: gens.into_iter().collect(),
             ..self
         }
     }
 
-    pub fn with_question(self) -> Self {
+    pub(crate) fn with_question(self) -> Self {
         Self {
             q: Some(Token![?](Span::call_site())),
             ..self
@@ -123,7 +123,7 @@ impl<T> MethodCall<T> {
     }
 }
 
-pub fn method_call<T>(name: &str, arg: T) -> MethodCall<T> {
+pub(crate) fn method_call<T>(name: &str, arg: T) -> MethodCall<T> {
     let name = Ident::new(name, Span::call_site());
     MethodCall::new(name, arg)
 }
@@ -140,7 +140,7 @@ impl<T: ToTokens> ToTokens for MethodCall<T> {
 
 /// Represents the type of case used to transform
 #[derive(Debug, Clone, Copy, Default)]
-pub enum Case {
+pub(crate) enum Case {
     /// The identifier is changed to uppercase.
     Upper,
     /// The identifier is changed to lowercase.
@@ -152,7 +152,7 @@ pub enum Case {
 
 impl Case {
     /// Method used to map a given string to its representation according to the case.
-    pub fn map(&self, s: String) -> String {
+    pub(crate) fn map(&self, s: String) -> String {
         match self {
             Case::Upper => s.to_uppercase(),
             Case::Lower => s.to_lowercase(),
@@ -182,7 +182,7 @@ fn replace_char<S: Display>(idx: usize, new: S, buf: &mut String) {
     buf.replace_range(idx..idx + 1, format!("{new}").as_str());
 }
 
-pub fn split_ident_snake_case(id: &Ident) -> String {
+pub(crate) fn split_ident_snake_case(id: &Ident) -> String {
     let mut out = id.to_string();
     let mut prev_up = false;
     let mut i = 0;
@@ -218,7 +218,7 @@ pub fn split_ident_snake_case(id: &Ident) -> String {
 /// Util function used to get the splitted version of an identifier written in the camel case.
 ///
 /// It turns to lowercase the "tail" of the words inside.
-pub fn split_ident_camel_case(id: &Ident) -> String {
+pub(crate) fn split_ident_camel_case(id: &Ident) -> String {
     let mut out = id.to_string();
     let mut prev_up = false;
     let mut i = 0;
@@ -272,7 +272,7 @@ fn prettify(args: &[&str]) -> String {
 }
 
 /// Util function used to abort when an invalid identifier has been provided.
-pub fn abort_invalid_ident(id: Ident, valids: &[&str]) -> ! {
+pub(crate) fn abort_invalid_ident(id: Ident, valids: &[&str]) -> ! {
     let corrector = SimpleCorrector::from_iter(valids.iter().copied());
     let opt_help = corrector
         .correct(to_str!(id))

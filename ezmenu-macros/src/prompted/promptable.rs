@@ -41,7 +41,7 @@ impl Parse for SelectedField {
 }
 
 #[derive(Clone)]
-pub struct RawSelectedField {
+pub(crate) struct RawSelectedField {
     raw: SelectedField,
     default: Option<Span>,
 }
@@ -82,7 +82,7 @@ fn get_default_fn<I: Iterator<Item = RawSelectedField>>(input: I) -> Option<Meth
     default.map(|i| method_call("default", i))
 }
 
-pub struct Selected {
+pub(crate) struct Selected {
     msg: String,
     entries: Punctuated<SelectedField, Token![,]>,
     fmt: Option<MethodCall<Format>>,
@@ -90,7 +90,7 @@ pub struct Selected {
 }
 
 impl Selected {
-    pub fn new(
+    pub(crate) fn new(
         msg: String,
         fmt: Option<MethodCall<Format>>,
         entries: Punctuated<RawSelectedField, Token![,]>,
@@ -122,12 +122,12 @@ impl ToTokens for Selected {
     }
 }
 
-pub struct Written {
-    pub msg: String,
-    pub fmt: Option<MethodCall<Format>>,
-    pub example: Option<MethodCall<LitStr>>,
-    pub default_val: Option<MethodCall<LitStr>>,
-    pub default_env: Option<MethodCall<LitStr>>,
+pub(crate) struct Written {
+    pub(crate) msg: String,
+    pub(crate) fmt: Option<MethodCall<Format>>,
+    pub(crate) example: Option<MethodCall<LitStr>>,
+    pub(crate) default_val: Option<MethodCall<LitStr>>,
+    pub(crate) default_env: Option<MethodCall<LitStr>>,
 }
 
 impl ToTokens for Written {
@@ -145,9 +145,9 @@ impl ToTokens for Written {
     }
 }
 
-pub struct WrittenUntil {
-    pub w: Written,
-    pub til: FunctionExpr,
+pub(crate) struct WrittenUntil {
+    pub(crate) w: Written,
+    pub(crate) til: FunctionExpr,
 }
 
 impl ToTokens for WrittenUntil {
@@ -159,10 +159,10 @@ impl ToTokens for WrittenUntil {
     }
 }
 
-pub struct Separated {
-    pub w: Written,
-    pub sep: LitStr,
-    pub env_sep: Option<MethodCall<TokenStream>>,
+pub(crate) struct Separated {
+    pub(crate) w: Written,
+    pub(crate) sep: LitStr,
+    pub(crate) env_sep: Option<MethodCall<TokenStream>>,
 }
 
 impl ToTokens for Separated {
@@ -175,8 +175,8 @@ impl ToTokens for Separated {
     }
 }
 
-pub struct Bool {
-    pub w: Written,
+pub(crate) struct Bool {
+    pub(crate) w: Written,
 }
 
 impl ToTokens for Bool {

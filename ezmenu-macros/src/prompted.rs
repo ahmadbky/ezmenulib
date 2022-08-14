@@ -856,7 +856,7 @@ fn build_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics, fields: Fiel
 }
 
 /// Expands the `derive(Prompted)` macro.
-pub fn build_prompted(input: DeriveInput) -> TokenStream {
+pub(crate) fn build_prompted(input: DeriveInput) -> TokenStream {
     match input.data {
         Data::Enum(DataEnum { variants, .. }) => {
             build_select(input.attrs, input.ident, input.generics, variants)
