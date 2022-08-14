@@ -1,6 +1,38 @@
 #![allow(dead_code)]
 
 use ezmenulib::prelude::*;
+use std::io;
+
+#[bound]
+fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
+    writeln!(s, "Editing {span}stname")
+}
+
+#[derive(Menu)]
+enum Name {
+    #[menu(mapped(editname, "fir"))]
+    Firstname,
+    #[menu(mapped(editname, "la"))]
+    Lastname,
+    #[menu(back(2))]
+    MainMenu,
+}
+
+#[derive(Menu)]
+enum Settings {
+    #[menu(flatten)]
+    Name,
+}
+
+#[derive(Menu)]
+enum Bonjour {
+    #[menu(bind(play))]
+    Play,
+    #[menu(flatten)]
+    Settings,
+    #[menu()]
+    Quit,
+}
 
 #[derive(Prompted)]
 struct Testing;
