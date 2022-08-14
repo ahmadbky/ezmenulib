@@ -661,9 +661,8 @@ impl<'a> Written<'a> {
     /// # use ezmenulib::prelude::*;
     /// let w = Written::from("hello").format(Format::prefix("==> "));
     /// ```
-    pub fn format(mut self, fmt: Format<'a>) -> Self {
-        self.fmt = fmt;
-        self
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self { fmt, ..self }
     }
 
     /// Gives the default value accepted by the field.
@@ -674,9 +673,9 @@ impl<'a> Written<'a> {
     /// The default value and the example (see the [`example`](Written::example) method documentation)
     /// will be displayed inside parenthesis according to its formatting (see [`Format`]
     /// for more information).
-    pub fn default_value(mut self, default: &'a str) -> Self {
-        self.default = Some(Cow::Borrowed(default));
-        self
+    pub fn default_value(self, default: &'a str) -> Self {
+        let default = Some(Cow::Borrowed(default));
+        Self { default, ..self }
     }
 
     /// Gives the default value of the field, passed by an environment variable.
@@ -699,11 +698,10 @@ impl<'a> Written<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn default_env(mut self, var: &'a str) -> MenuResult<Self> {
-        self.default = Some(Cow::Owned(
-            env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?,
-        ));
-        Ok(self)
+    pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
+        let default = env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?;
+        let default = Some(Cow::Owned(default));
+        Ok(Self { default, ..self })
     }
 
     /// Gives an example of correct value for the field.
@@ -715,9 +713,9 @@ impl<'a> Written<'a> {
     ///
     /// The example will be shown inside parenthesis according to its formatting
     /// (see [`Format`] for more information).
-    pub fn example(mut self, example: &'a str) -> Self {
-        self.example = Some(example);
-        self
+    pub fn example(self, example: &'a str) -> Self {
+        let example = Some(example);
+        Self { example, ..self }
     }
 }
 
