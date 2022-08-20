@@ -242,7 +242,7 @@ impl FieldPrompt {
     /// The message retrieval depends on the field type (named/unnamed).
     fn new(attr: Sp<RawFieldAttr>, field: Field, msg: String, gens: &mut Generics) -> Self {
         let fmt = attr.val.fmt.map(|f| method_call("format", f));
-        let kind = match (attr.val.opt, attr.val.or_default) {
+        let kind = match (attr.val.optional, attr.val.or_default) {
             (true, true) => unreachable!("assert !(opt && or_default)"),
             (true, false) => PromptKind::NextOptional,
             (false, true) if is_ty(&field.ty, "Option") => abort_opt_or_default(attr.span),
@@ -251,8 +251,8 @@ impl FieldPrompt {
             (false, false) => PromptKind::Next,
         };
         let example = attr.val.example.map(|e| method_call("example", e));
-        let default_val = attr.val.default_val.map(|e| method_call("default_val", e));
-        let default_env = attr.val.default_env.map(|e| method_call("default_env", e));
+        let default_val = attr.val.or_val.map(|e| method_call("default_value", e));
+        let default_env = attr.val.or_env.map(|e| method_call("default_env", e));
 
         if let Some(entries) = attr.val.select {
             // Selected promptable
