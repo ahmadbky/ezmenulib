@@ -158,7 +158,7 @@ impl ToTokens for WrittenUntil {
 pub(crate) struct Separated {
     pub(crate) w: Written,
     pub(crate) sep: LitStr,
-    pub(crate) env_sep: Option<MethodCall<TokenStream>>,
+    pub(crate) env_sep: Option<MethodCall<(LitStr, LitStr)>>,
 }
 
 impl ToTokens for Separated {

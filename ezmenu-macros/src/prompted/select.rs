@@ -152,8 +152,6 @@ impl Parse for UnnamedAttr {
 /// An entry is basically a tuple of a string literal and a bound value to it.
 #[derive(Clone)]
 struct Entry {
-    /// The identifier of the enum.
-    enum_name: Ident,
     /// The identifier of the pointed variant.
     id: Ident,
     /// The literal of the entry.
@@ -170,9 +168,8 @@ struct Entry {
 impl Entry {
     /// Creates an entry from the `SelectedField`, the identifier of the pointed variant,
     /// and if the variant has named variants or not.
-    fn new(f: SelectedField, enum_name: Ident, id: Ident, named: bool) -> Self {
+    fn new(f: SelectedField, id: Ident, named: bool) -> Self {
         Self {
-            enum_name,
             id,
             lit: f.lit.value(),
             named,
@@ -181,9 +178,8 @@ impl Entry {
         }
     }
 
-    fn from_var(enum_name: Ident, id: Ident, lit: String, default: Option<Span>) -> Self {
+    fn from_var(id: Ident, lit: String, default: Option<Span>) -> Self {
         Self {
-            enum_name,
             id,
             lit,
             named: false,
@@ -195,11 +191,10 @@ impl Entry {
 
 impl ToTokens for Entry {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let name = &self.enum_name;
         let lit = &self.lit;
         let id = &self.id;
         let mut out = quote! {
-            #lit, #name::#id
+            #lit, Self::#id
         };
 
         if !self.bounds.is_empty() {
@@ -259,21 +254,16 @@ struct Select {
 }
 
 impl Select {
-    fn new(
-        enum_name: Ident,
-        fields: Punctuated<SelectedField, Token![,]>,
-        id: Ident,
-        named: bool,
-    ) -> Self {
+    fn new(fields: Punctuated<SelectedField, Token![,]>, id: Ident, named: bool) -> Self {
         let entries = fields
             .into_iter()
-            .map(|f| Entry::new(f, enum_name.clone(), id.clone(), named))
+            .map(|f| Entry::new(f, id.clone(), named))
             .collect();
 
         Self { entries }
     }
 
-    fn from_variant_with(var: Variant, global_case: Option<Case>, enum_name: Ident) -> Self {
+    fn from_variant_with(var: Variant, global_case: Option<Case>) -> Self {
         // We build the entries according to the fields type of the variant.
         match &var.fields {
             // If it is a unit variant, we return the previous vector of entries with only one entry.
@@ -312,19 +302,19 @@ impl Select {
                         None,
                     ),
                 };
-                let entries = vec![Entry::from_var(enum_name, var.ident, lit, default)];
+                let entries = vec![Entry::from_var(var.ident, lit, default)];
                 Self { entries }
             }
             // Otherwise, we create a new vector with the entries from the fields of the variant.
             Fields::Named(FieldsNamed { named, .. }) => {
                 match get_attr_with_args(&var.attrs, "prompt").map(take_val) {
-                    Some(NamedAttr { fields }) => Self::new(enum_name, fields, var.ident, true),
+                    Some(NamedAttr { fields }) => Self::new(fields, var.ident, true),
                     None => abort_unbounds_fields(true, named),
                 }
             }
             Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
                 match get_attr_with_args(&var.attrs, "prompt").map(take_val) {
-                    Some(UnnamedAttr { fields }) => Self::new(enum_name, fields, var.ident, false),
+                    Some(UnnamedAttr { fields }) => Self::new(fields, var.ident, false),
                     None => abort_unbounds_fields(false, unnamed),
                 }
             }
@@ -421,12 +411,14 @@ pub(crate) fn build_select(
     let root = get_lib_root();
 
     set_dummy(quote! {
+        #[automatically_derived]
         impl #root::menu::Prompted for #name {
             fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
                 unimplemented!()
             }
         }
 
+        #[automatically_derived]
         impl #root::field::Selectable<0> for #name {
             fn select() -> #root::field::Selected<'static, Self, 0> {
                 unimplemented!()
@@ -442,36 +434,30 @@ pub(crate) fn build_select(
 
     // We map the variants into an iterator of selectable entries.
     // A variant can have multiple entries if it has fields.
-    let entries = variants.into_iter().flat_map(|v| {
-        Select::from_variant_with(v, data.case, name.clone())
-            .entries
-            .into_iter()
-    });
+    let entries = variants
+        .into_iter()
+        .flat_map(|v| Select::from_variant_with(v, data.case).entries.into_iter());
+
     // We count the amount of entries to specify in the const generic argument
     // of the `Selectable` trait.
     let n = Index::from(entries.clone().count());
     // We retrieve the `Selectable::default` function expansion from the entries.
     let default_fn = get_default_fn(entries.clone());
 
-    let fn_get_select = format_ident!("__{}_selected", name);
-
     quote! {
-        #[allow(non_snake_case)]
-        fn #fn_get_select() -> #root::field::Selected<'static, #name, #n> {
-            #root::field::Selected::new(#msg, [#(#entries),*])
-            #fmt_fn
-            #default_fn
-        }
-
+        #[automatically_derived]
         impl #root::menu::Prompted for #name {
             fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-                vals.next(#fn_get_select())
+                vals.next(#root::field::Selectable::select())
             }
         }
 
+        #[automatically_derived]
         impl #root::field::Selectable<#n> for #name {
             fn select() -> #root::field::Selected<'static, Self, #n> {
-                #fn_get_select()
+                #root::field::Selected::new(#msg, [#(#entries),*])
+                #fmt_fn
+                #default_fn
             }
         }
     }
