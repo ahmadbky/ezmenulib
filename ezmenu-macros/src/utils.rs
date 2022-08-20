@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
@@ -6,49 +6,24 @@ use quote::{quote, quote_spanned, ToTokens};
 use spelling_corrector::corrector::SimpleCorrector;
 use syn::{
     parse::{Parse, ParseStream},
+    parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    AngleBracketedGenericArguments, Attribute, GenericArgument, Ident, Lit, Meta, MetaNameValue,
-    Path, PathArguments, PathSegment, Token, Type, TypePath,
+    AngleBracketedGenericArguments, Attribute, Expr, GenericArgument, Ident, Lit, Meta,
+    MetaNameValue, Path, PathArguments, PathSegment, Token, Type, TypePath,
 };
 
-pub(crate) fn abort_conflict_param(span: Span) -> ! {
-    abort!(
-        span,
-        "cannot provide this parameter because an other one is in conflict with it"
-    );
+pub(crate) fn abort_duplicate_parameter(span: Span, s: &str) -> ! {
+    abort!(span, "duplicate parameter: `{}`", s);
 }
 
-macro_rules! define_attr {
-    {
-        $(#[$attr:meta])*
-        $Param:ident($sp:ident) -> $Attr:ident {$(
-            $Var:pat => $field:ident: $ty:ty = $from:expr; if $cond:expr => $val:expr
-        ),*}
-    } => {
-        $(#[$attr])*
-        struct $Attr {$(
-            $field: $ty
-        ),*}
-
-        impl Parse for $Attr {
-            fn parse(input: ParseStream) -> syn::Result<Self> {
-                use $Param::*;
-
-                $(let mut $field = $from;)*
-
-                let vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
-                for Sp { span: $sp, val } in vals {
-                    match val {
-                        $($Var if $cond => $field = $val,)*
-                        _ => $crate::utils::abort_conflict_param($sp),
-                    }
-                }
-
-                Ok(Self {$( $field ),*})
-            }
-        }
-    };
+pub(crate) fn abort_conflict_param(span: Span, field: &str, with: &str) -> ! {
+    abort!(
+        span,
+        "cannot provide `{}` parameter because `{}` is in conflict with it",
+        field,
+        with
+    );
 }
 
 /// Internal macro used convert an object to a string slice
@@ -58,7 +33,7 @@ macro_rules! to_str {
     };
 }
 
-pub(crate) use {define_attr, to_str};
+pub(crate) use to_str;
 
 /// Util function used to return the token stream of the path of the library name.
 ///
@@ -129,17 +104,19 @@ pub(crate) fn get_first_doc(attrs: &[Attribute]) -> Option<String> {
 pub(crate) struct MethodCall<T> {
     name: Ident,
     gens: Punctuated<Type, Token![,]>,
-    arg: T,
+    args: Punctuated<Expr, Token![,]>,
     q: Option<Token![?]>,
+    _marker: PhantomData<T>,
 }
 
 impl<T> MethodCall<T> {
-    pub(crate) fn new(name: Ident, arg: T) -> Self {
+    pub(crate) fn new(name: Ident, args: Punctuated<Expr, Token![,]>) -> Self {
         Self {
             name,
             gens: Punctuated::new(),
-            arg,
+            args,
             q: None,
+            _marker: PhantomData,
         }
     }
 
@@ -163,18 +140,21 @@ impl<T> MethodCall<T> {
     }
 }
 
-pub(crate) fn method_call<T>(name: &str, arg: T) -> MethodCall<T> {
-    let name = Ident::new(name, Span::call_site());
-    MethodCall::new(name, arg)
+pub(crate) fn method_call<T: ToTokens>(name: &str, arg: T) -> MethodCall<T> {
+    MethodCall::new(Ident::new(name, Span::call_site()), parse_quote!(#arg))
 }
 
-impl<T: ToTokens> ToTokens for MethodCall<T> {
+pub(crate) fn method_call_empty(name: &str) -> MethodCall<()> {
+    MethodCall::new(Ident::new(name, Span::call_site()), Punctuated::new())
+}
+
+impl<T> ToTokens for MethodCall<T> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = &self.name;
         let gens = &self.gens;
-        let arg = &self.arg;
-        let q = &self.q;
-        quote!(.#name::<#gens>(#arg) #q).to_tokens(tokens);
+        let args = &self.args;
+        quote!(.#name::<#gens>(#args)).to_tokens(tokens);
+        self.q.to_tokens(tokens);
     }
 }
 

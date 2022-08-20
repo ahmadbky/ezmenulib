@@ -143,7 +143,7 @@ impl PromptKind {
     /// output type and the value used as argument.
     ///
     /// It unwraps the nested type inside the `Option<...>` if so.
-    fn call_for<T>(self, ty: &Type, val: T) -> MethodCall<T> {
+    fn call_for(self, ty: &Type, val: Promptable) -> MethodCall<Promptable> {
         let s = match self {
             Self::Next => "next",
             Self::NextOrDefault => "next_or_default",
@@ -259,10 +259,12 @@ impl FieldPrompt {
             } else if let Some(sep) = attr.val.sep {
                 // Separated promptable
 
-                let env_sep = attr
-                    .val
-                    .default_env_with_sep
-                    .map(|(var, sep)| method_call("default_env_with", quote!(#var, #sep)));
+                let env_sep = attr.val.or_env_with.map(|(var, sep)| {
+                    MethodCall::new(
+                        Ident::new("default_env_with", Span::call_site()),
+                        parse_quote!(#var, #sep),
+                    )
+                });
                 Promptable::Separated(Separated { w, sep, env_sep })
             } else if is_ty(&field.ty, "bool") {
                 // Bool promptable
