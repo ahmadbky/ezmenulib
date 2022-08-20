@@ -2,6 +2,8 @@
 
 use ezmenulib::prelude::*;
 use std::io;
+#[allow(unused_imports)]
+use std::str::FromStr;
 
 #[bound]
 fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
@@ -59,7 +61,7 @@ struct HeheHello(
 
 /// How many?!
 #[derive(Prompted, Debug)]
-#[prompt(case = up, fmt(suf: "> ", no_default))]
+#[prompt(case = up, fmt(suffix = "> ", show_default = false))]
 enum Amount {
     #[prompt(("ZERO", 0), ("ONE", 1), default("TWO", 2))]
     N(u8),
@@ -69,13 +71,13 @@ enum Amount {
 }
 
 #[derive(Prompted, Debug)]
-struct WithGenerics<T> {
+struct WithGenerics<T /*: FromStr */> {
     prompt: T,
 }
 
 fn main() {
-    // let amount = Amount::prompt();
-    // println!("Amount = {amount:?}");
+    let amount = Amount::prompt();
+    println!("Amount = {amount:?}");
 
     // let hehe = HeheHello::prompt();
     // println!("HeheHello = {hehe:?}");
