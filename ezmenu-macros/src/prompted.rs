@@ -240,12 +240,7 @@ impl FieldPrompt {
     /// Returns the prompt call of the field from its prompt attribute and the message of the prompt.
     ///
     /// The message retrieval depends on the field type (named/unnamed).
-    fn new(
-        attr: Sp<RawFieldAttr>,
-        field: Field,
-        msg: String,
-        gens: &mut AugmentedGenerics,
-    ) -> Self {
+    fn new(attr: Sp<RawFieldAttr>, field: Field, msg: String, gens: &mut Generics) -> Self {
         let fmt = attr.val.fmt.map(|f| method_call("format", f));
         let kind = match (attr.val.opt, attr.val.or_default) {
             (true, true) => unreachable!("assert !(opt && or_default)"),
@@ -267,7 +262,7 @@ impl FieldPrompt {
             // Flattened prompt, we call `Prompted::from_values` method for this field
             if let Some(id) = get_ty_ident(&field.ty) {
                 let root = get_lib_root();
-                gens.check_for_bound(id, quote!(#root::menu::Prompted));
+                check_for_bound(gens, id, quote!(#root::menu::Prompted));
             }
             let ty_span = field.ty.span();
             Self::Flatten(FlattenedPrompt { ty_span })
@@ -275,7 +270,7 @@ impl FieldPrompt {
             // "Writtens" promptable
 
             if let Some(id) = get_ty_ident(&field.ty) {
-                gens.check_for_bound(id, quote!(::std::str::FromStr));
+                check_for_bound(gens, id, quote!(::core::str::FromStr));
             }
 
             let w = Written {
@@ -286,7 +281,7 @@ impl FieldPrompt {
                 default_env,
             };
 
-            let prompt = if let Some(til) = attr.val.until {
+            let prompt = if let Some(mut til) = attr.val.until {
                 // WrittenUntil promptable
 
                 if let FunctionExpr::Closure(expr) = &mut til {
@@ -341,11 +336,7 @@ fn abort_opt_or_default(span: Span) -> ! {
 }
 
 /// Returns the field prompt from the field itself and the global case of the struct if provided.
-fn get_field_prompt(
-    field: Field,
-    case: Option<&Case>,
-    gens: &mut AugmentedGenerics,
-) -> FieldPrompt {
+fn get_field_prompt(field: Field, case: Option<&Case>, gens: &mut Generics) -> FieldPrompt {
     let attr: Sp<RawFieldAttr> = get_attr_with_args(&field.attrs, "prompt").unwrap_or_default();
 
     let msg = attr
@@ -390,7 +381,7 @@ struct UnnamedField {
 
 impl UnnamedField {
     /// Returns the unnamed field with the optional case of the struct attribute if provided.
-    fn new(field: Field, case: Option<&Case>, gens: &mut AugmentedGenerics) -> Self {
+    fn new(field: Field, case: Option<&Case>, gens: &mut Generics) -> Self {
         let prompt = get_field_prompt(field, case, gens);
         Self { prompt }
     }
@@ -411,7 +402,7 @@ impl UnnamedInit {
     fn new(
         unnamed: Punctuated<Field, Token![,]>,
         case: Option<&Case>,
-        gens: &mut AugmentedGenerics,
+        gens: &mut Generics,
     ) -> Self {
         let values = unnamed
             .into_iter()
@@ -436,7 +427,7 @@ struct NamedField {
 
 impl NamedField {
     /// Returns the named field with the optional case of the struct attribute if provided.
-    fn new(field: Field, case: Option<&Case>, gens: &mut AugmentedGenerics) -> Self {
+    fn new(field: Field, case: Option<&Case>, gens: &mut Generics) -> Self {
         let name = field
             .ident
             .clone()
@@ -460,11 +451,7 @@ struct NamedInit {
 }
 
 impl NamedInit {
-    fn new(
-        fields: Punctuated<Field, Token![,]>,
-        case: Option<&Case>,
-        gens: &mut AugmentedGenerics,
-    ) -> Self {
+    fn new(fields: Punctuated<Field, Token![,]>, case: Option<&Case>, gens: &mut Generics) -> Self {
         let fields = fields
             .into_iter()
             .map(|f| NamedField::new(f, case, gens))
@@ -495,14 +482,15 @@ fn map_unit_ident(attrs: &[Attribute], name: &Ident) -> String {
 /// Expands the `derive(Prompted)` macro for an unit struct.
 ///
 /// This expansion consists of the implementation of the FromStr trait on this struct.
-fn build_unit_struct(attrs: Vec<Attribute>, name: Ident, gens: AugmentedGenerics) -> TokenStream {
+fn build_unit_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics) -> TokenStream {
     let low_name = map_unit_ident(&attrs, &name);
     let err_msg = format!("failed to parse to {name} struct");
 
-    gens.impl_for(
-        quote!(::std::str::FromStr),
-        &name,
-        quote! {
+    let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
+
+    quote! {
+        #[automatically_derived]
+        impl #impl_gens ::core::str::FromStr for #name #ty_gens #where_clause {
             type Err = String;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s.to_lowercase().as_str() {
@@ -510,8 +498,8 @@ fn build_unit_struct(attrs: Vec<Attribute>, name: Ident, gens: AugmentedGenerics
                     _ => Err(#err_msg.to_owned()),
                 }
             }
-        },
-    )
+        }
+    }
 }
 
 /// Returns the TokenStream of the `writeln!(...)` instruction to display a message
@@ -553,7 +541,7 @@ fn disp_title_ts(data: &RootFieldsAttr, attrs: &[Attribute], name: &Ident) -> To
 /// Returns the TokenStream of the struct construction.
 ///
 /// This function is called after checking that the struct isn't an unit struct.
-fn construct_ts(case: Option<&Case>, fields: Fields, gens: &mut AugmentedGenerics) -> TokenStream {
+fn construct_ts(case: Option<&Case>, fields: Fields, gens: &mut Generics) -> TokenStream {
     match fields {
         Fields::Named(FieldsNamed { named, .. }) => {
             NamedInit::new(named, case, gens).into_token_stream()
@@ -569,17 +557,23 @@ fn construct_ts(case: Option<&Case>, fields: Fields, gens: &mut AugmentedGeneric
 fn build_fields_struct(
     attrs: Vec<Attribute>,
     name: Ident,
-    mut gens: AugmentedGenerics,
+    mut gens: Generics,
     fields: Fields,
 ) -> TokenStream {
     // The name of the library.
     let root = get_lib_root();
 
-    set_dummy(gens.impl_for(quote!(#root::menu::Prompted), &name, quote! {
-        fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-            unimplemented!()
-        }
-    }));
+    {
+        let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
+        set_dummy(quote! {
+            #[automatically_derived]
+            impl #impl_gens #root::menu::Prompted for #name #ty_gens #where_clause {
+                fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                    unimplemented!()
+                }
+            }
+        });
+    }
 
     let data = RootFieldsAttr::from(attrs.as_ref());
 
@@ -596,21 +590,25 @@ fn build_fields_struct(
 
     let init = construct_ts(data.case.as_ref(), fields, &mut gens);
 
-    gens.impl_for(quote!(#root::menu::Prompted), &name, quote! {
-        fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
-            Self::from_values(&mut #root::menu::Values::from_handle(handle) #fmt_fn)
-        }
+    let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
 
-        fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-            #disp_title
-            Ok(#init)
+    quote! {
+        #[automatically_derived]
+        impl #impl_gens #root::menu::Prompted for #name #ty_gens #where_clause {
+            fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
+                Self::from_values(&mut #root::menu::Values::from_handle(handle) #fmt_fn)
+            }
+
+            fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                #disp_title
+                Ok(#init)
+            }
         }
-    })
+    }
 }
 
 /// Expands the `derive(Prompted)` macro for a struct.
 fn build_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics, fields: Fields) -> TokenStream {
-    let gens = AugmentedGenerics::from(gens);
     match fields {
         Fields::Unit => build_unit_struct(attrs, name, gens),
         other => build_fields_struct(attrs, name, gens, other),
