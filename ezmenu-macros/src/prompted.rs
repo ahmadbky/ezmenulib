@@ -115,15 +115,15 @@ define_attr! {
 /// Returns the nested type inside the chevrons of an `Option<T>` type.
 ///
 /// &`Option<T>` --> Some(&`T`)
-fn get_nested_type(ty: &Type) -> Option<&Type> {
+fn try_get_nested_type(ty: &Type) -> &Type {
     let nested = get_last_seg_of_ty(ty)
         .filter(|s| s.ident == "Option")
         .and_then(get_nested_args)
         .and_then(Punctuated::first);
 
     match nested {
-        Some(GenericArgument::Type(ty)) => Some(ty),
-        _ => None,
+        Some(GenericArgument::Type(nested)) => nested,
+        _ => ty,
     }
 }
 
@@ -151,7 +151,7 @@ impl PromptKind {
         };
 
         let ty = match self {
-            Self::NextOptional => get_nested_type(ty).unwrap_or(ty),
+            Self::NextOptional => try_get_nested_type(ty),
             _ => ty,
         };
 
