@@ -1,77 +1,40 @@
-use chrono::Datelike;
-use ezmenulib::field::Bool;
 use ezmenulib::prelude::*;
-use std::env;
-use std::error::Error;
-use std::io::Write;
-use std::path::Path;
 
-#[derive(Debug)]
+/// Select a license type
+#[derive(Prompted, Debug)]
 enum Type {
+    #[prompt(default)]
     MIT,
     GPL,
     BSD,
 }
 
-impl Default for Type {
-    fn default() -> Self {
-        Self::MIT
-    }
+#[allow(dead_code)]
+#[derive(Prompted, Debug)]
+#[prompt(no_title)]
+struct License {
+    #[prompt(sep = ", ")]
+    authors: Vec<String>,
+    name: Option<String>,
+    #[prompt(until(|e| *e > 0), or_val("2022"))]
+    date: u16,
+    #[prompt(flatten)]
+    ty: Type,
 }
 
-impl Selectable<3> for Type {
-    fn select() -> Selected<'static, Self, 3> {
-        use Type::*;
-        Selected::new(
-            "Select a license type",
-            [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)],
-        )
-        .default(0)
-    }
+/// Describe your project
+#[derive(Prompted)]
+#[prompt(fmt(prefix = "==> ", chip = " = "))]
+struct Opt {
+    #[prompt(flatten)]
+    license: License,
+    #[prompt(msg = "Are you sure?", basic_example, or_val("no"))]
+    is_sure: bool,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut handle = MenuHandle::default();
-    writeln!(handle, "Describe your project")?;
-
-    let mut lic = Values::from(&mut handle).format(Format {
-        prefix: "==> ",
-        chip: " = ",
-        ..Default::default()
-    });
-
-    let authors =
-        match lic.next_optional(Separated::new("Authors", ", ").example("Ahmad, Julien..."))? {
-            Some(out) => out,
-            None => {
-                let home = env::var("HOME")?;
-                let home = Path::new(&home)
-                    .into_iter()
-                    .last()
-                    .unwrap()
-                    .to_os_string()
-                    .into_string()
-                    .unwrap();
-                vec![home]
-            }
-        };
-    let name: Option<String> = lic.next_optional(Written::from("Project name"))?;
-    let current_year = chrono::Utc::now().year().to_string();
-    let date: u16 = lic.next(Written::from("License date").default_value(current_year.as_str()))?;
-    let ty: Type = lic.next(Type::select())?;
-
-    if lic.next(
-        Bool::new("Are you sure?")
-            .with_basic_example()
-            .default_value(false),
-    )? {
-        writeln!(
-            handle,
-            "{ty:?} License, Copyright (C) {date} {}\n{}",
-            authors.join("; "),
-            if let Some(n) = name { n } else { "".to_owned() }
-        )?;
+fn main() {
+    let opt = Opt::prompt();
+    if opt.is_sure {
+        println!("{:?}", opt.license);
     }
-
-    Ok(())
 }
