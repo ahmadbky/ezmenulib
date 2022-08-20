@@ -35,6 +35,8 @@ macro_rules! to_str {
 
 pub(crate) use to_str;
 
+use crate::kw;
+
 /// Util function used to return the token stream of the path of the library name.
 ///
 /// This function exists because the library name might change in the future.
@@ -190,17 +192,16 @@ impl Case {
 impl Parse for Case {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let id = input.parse::<Ident>()?;
-
-        let ups = ["upper", "upper_case", "uppercase", "up"];
-        let lows = ["lower", "lower_case", "lowercase", "low"];
-        let inhs = ["inherit", "inherited", "inh"];
-
-        match &to_str!(id) {
-            s if ups.contains(s) => Ok(Self::Upper),
-            s if lows.contains(s) => Ok(Self::Lower),
-            s if inhs.contains(s) => Ok(Self::Inherited),
-            _ => abort_invalid_ident(id, &[ups.as_ref(), lows.as_ref(), inhs.as_ref()].concat()),
-        }
+        Ok(match to_str!(id) {
+            "upper" => Self::Upper,
+            "lower" => Self::Lower,
+            "inherit" => Self::Inherited,
+            other => abort!(
+                id,
+                "expected one of `upper`, `lower`, `inherit`, got `{}`",
+                other
+            ),
+        })
     }
 }
 
@@ -270,39 +271,6 @@ pub(crate) fn split_ident_camel_case(id: &Ident) -> String {
     }
 
     out
-}
-
-/// Returns the pretty version of the given array of string slices.
-///
-/// This surrounds each argument of the array with `...`,
-/// and joins it with commas.
-fn prettify(args: &[&str]) -> String {
-    /// The maximum number of lines displayed
-    const MAX: usize = 5;
-
-    let mut lines: Vec<_> = args
-        .iter()
-        .enumerate()
-        .map(|(i, s)| format!("{} - `{s}`\n", i + 1))
-        .take(MAX)
-        .collect();
-    if args.len() > MAX {
-        lines.push("... and more".to_owned());
-    }
-    lines.join("")
-}
-
-/// Util function used to abort when an invalid identifier has been provided.
-pub(crate) fn abort_invalid_ident(id: Ident, valids: &[&str]) -> ! {
-    let corrector = SimpleCorrector::from_iter(valids.iter().copied());
-    let opt_help = corrector
-        .correct(to_str!(id))
-        .map(|w| format!("did you mean `{w}`?"));
-    abort!(
-        id,
-        "unexpected identifier: `{id}`. expected one of:\n{}", prettify(valids);
-        help =? opt_help;
-    );
 }
 
 pub(crate) fn get_last_seg_of_path(path: &Path) -> Option<&PathSegment> {

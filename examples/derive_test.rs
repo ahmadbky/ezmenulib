@@ -40,7 +40,7 @@ enum Bonjour {
 struct Testing;
 
 #[derive(Prompted, Debug)]
-#[prompt(case = up)]
+#[prompt(case = upper)]
 struct Foo {
     value: i32,
     is_sure: bool,
@@ -61,7 +61,7 @@ struct HeheHello(
 
 /// How many?!
 #[derive(Prompted, Debug)]
-#[prompt(case = up, fmt(suffix = "> ", show_default = false))]
+#[prompt(case = upper, fmt(suffix = "> ", show_default = false))]
 enum Amount {
     #[prompt(("ZERO", 0), ("ONE", 1), default("TWO", 2))]
     N(u8),
