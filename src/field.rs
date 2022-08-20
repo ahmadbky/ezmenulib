@@ -3,11 +3,14 @@
 #[cfg(test)]
 mod tests;
 
+use rpassword::{read_password_from_bufread, read_password};
+
 use crate::{customs::MenuBool, menu::Handle, prelude::*, utils::*, DEFAULT_FMT};
 use std::{
     borrow::Cow,
     env,
     fmt::{self, Display, Formatter},
+    io::BufReader,
     marker::PhantomData,
     str::FromStr,
 };
@@ -475,6 +478,99 @@ where
     }
 }
 
+pub struct Password<'a> {
+    msg: &'a str,
+    pub fmt: Format<'a>,
+}
+
+impl<'a> From<&'a str> for Password<'a> {
+    fn from(msg: &'a str) -> Self {
+        Self::new(msg)
+    }
+}
+
+impl<'a> Password<'a> {
+    fn fmt_with_<W: fmt::Write>(&self, mut f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        f.write_str(fmt.prefix)?;
+        f.write_str(self.msg)?;
+
+        if opt {
+            f.write_str(" (optional)")?;
+        }
+
+        if fmt.line_brk {
+            f.write_char('\n')?;
+        }
+        Ok(())
+    }
+
+    pub fn new(msg: &'a str) -> Self {
+        Self {
+            msg,
+            fmt: Format::default(),
+        }
+    }
+
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self { fmt, ..self }
+    }
+}
+
+impl UsesFormat for Password<'_> {
+    fn get_format(&self) -> &Format<'_> {
+        &self.fmt
+    }
+}
+
+impl MenuDisplay for Password<'_> {
+    fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        if !fmt.line_brk {
+            return Ok(());
+        }
+
+        self.fmt_with_(f, fmt, opt)
+    }
+}
+
+impl Display for Password<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <Self as MenuDisplay>::fmt(self, f, false)
+    }
+}
+
+impl Promptable<String> for Password<'_> {
+    type Middle = String;
+
+    fn prompt_once<H: Handle>(
+        &self,
+        mut handle: H,
+        fmt: &Format<'_>,
+        opt: bool,
+    ) -> MenuResult<Option<Self::Middle>> {
+        if fmt.line_brk {
+            handle.write_all(fmt.suffix.as_bytes())?;
+            handle.flush()?;
+        } else {
+            let mut s = String::new();
+            self.fmt_with_(&mut s, fmt, opt)?;
+            handle.write_all(s.as_bytes())?;
+            handle.write_all(fmt.suffix.as_bytes())?;
+            handle.flush()?;
+        }
+
+        let s = read_password()?;
+        if s.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(s.parse().ok())
+    }
+
+    fn convert(self, mid: Self::Middle) -> String {
+        mid
+    }
+}
+
 /// Defines the behavior for a written value provided by the user.
 ///
 /// Like the [selected](Selected) values, it contains its own [format](Format),
@@ -515,6 +611,7 @@ impl UsesFormat for Written<'_> {
 
 impl MenuDisplay for Written<'_> {
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
+        // We will write the prompt at the `Promptable::prompt_once` method call.
         if !fmt.line_brk {
             return Ok(());
         }
@@ -613,10 +710,9 @@ impl<'a> Written<'a> {
         }
 
         if fmt.line_brk {
-            f.write_char('\n')
-        } else {
-            Ok(())
+            f.write_char('\n')?;
         }
+        Ok(())
     }
 
     pub fn new(msg: &'a str) -> Self {

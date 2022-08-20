@@ -20,6 +20,8 @@ struct License {
     date: u16,
     #[prompt(flatten)]
     ty: Type,
+    #[prompt(password)]
+    secret: String,
 }
 
 /// Describe your project

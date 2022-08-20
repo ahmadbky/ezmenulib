@@ -184,3 +184,17 @@ impl ToTokens for Bool {
         self.basic_example.to_tokens(tokens);
     }
 }
+
+pub(crate) struct Password {
+    pub(crate) msg: String,
+    pub(crate) fmt: Option<MethodCall<Format>>,
+}
+
+impl ToTokens for Password {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let root = get_lib_root();
+        let msg = &self.msg;
+        quote!(#root::field::Password::new(#msg)).to_tokens(tokens);
+        self.fmt.to_tokens(tokens);
+    }
+}

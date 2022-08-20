@@ -26,7 +26,7 @@ use crate::{
 };
 
 use self::{
-    promptable::{Bool, RawSelectedField, Selected, Separated, Written, WrittenUntil},
+    promptable::{Bool, Password, RawSelectedField, Selected, Separated, Written, WrittenUntil},
     select::build_select,
 };
 
@@ -94,10 +94,10 @@ define_attr! {
         raw: bool; without msg,
         flatten: bool; without
             msg; fmt; optional; or_default; case; nodoc; raw; select; example;
-            or_val; or_env; until; sep; or_env_with,
+            or_val; or_env; until; sep; or_env_with; basic_example; password,
 
         select: Option<Punctuated<RawSelectedField, Token![,]>>; without
-            msg; nodoc; raw; example; or_val; or_env; until; sep; or_env_with,
+            msg; nodoc; raw; example; or_val; or_env; until; sep; or_env_with; basic_example; password,
 
         example: Option<LitStr>,
         or_val: Option<LitStr>,
@@ -109,6 +109,8 @@ define_attr! {
         or_env_with: Option<(LitStr, LitStr)>,
 
         basic_example: bool; without until; sep; or_env_with,
+
+        password: bool; without example; or_val; or_env; sep; or_env_with; basic_example,
     }
 }
 
@@ -181,6 +183,8 @@ enum Promptable {
     Separated(Separated),
     /// The Bool type.
     Bool(Bool),
+    /// The Password type.
+    Password(Password),
 }
 
 impl ToTokens for Promptable {
@@ -191,6 +195,7 @@ impl ToTokens for Promptable {
             Self::WrittenUntil(w) => w.to_tokens(tokens),
             Self::Separated(s) => s.to_tokens(tokens),
             Self::Bool(b) => b.to_tokens(tokens),
+            Self::Password(p) => p.to_tokens(tokens),
         }
     }
 }
@@ -266,6 +271,9 @@ impl FieldPrompt {
             }
             let ty_span = field.ty.span();
             Self::Flatten(FlattenedPrompt { ty_span })
+        } else if attr.val.password {
+            let prompt = Promptable::Password(Password { msg, fmt });
+            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
         } else {
             // "Writtens" promptable
 

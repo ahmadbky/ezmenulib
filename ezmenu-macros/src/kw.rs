@@ -86,7 +86,7 @@ define_keywords! {
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
         show_default: LitBool, suffix: LitStr, line_brk: LitBool,
     'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr,
-    'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example,
+    'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example, password,
     'else:
         or_env_with(input) -> (LitStr, LitStr) {
             input.parse::<or_env_with>()?;
