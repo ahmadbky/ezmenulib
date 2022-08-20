@@ -255,13 +255,8 @@ pub(crate) fn split_ident_camel_case(id: &Ident) -> String {
         let c = unsafe { chars.next().unwrap_unchecked() };
 
         if c.is_uppercase() {
-            if !prev_up && i > 0 {
-                match chars.next() {
-                    Some(next) if next.is_lowercase() => {
-                        replace_char(i, c.to_lowercase(), &mut out);
-                    }
-                    _ => (),
-                }
+            if !prev_up && i > 0 && chars.next().filter(|c| c.is_lowercase()).is_some() {
+                replace_char(i, c.to_lowercase(), &mut out);
                 out.insert(i, ' ');
                 i += 1;
             }
