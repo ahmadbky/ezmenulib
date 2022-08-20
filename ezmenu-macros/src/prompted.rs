@@ -195,11 +195,23 @@ impl ToTokens for Promptable {
     }
 }
 
+
+struct FlattenedPrompt {
+    ty_span: Span,
+}
+
+impl ToTokens for FlattenedPrompt {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let root = get_lib_root_spanned(self.ty_span);
+        quote_spanned!(self.ty_span=> #root::menu::Prompted::from_values(vals)?).to_tokens(tokens);
+    }
+}
+
 /// Represents the prompt call of a struct field.
 enum FieldPrompt {
     /// The call is flatten, meaning the output type already implements `Prompted` trait,
     /// so we can construct it from the `Prompted::from_values` method.
-    Flatten,
+    Flatten(FlattenedPrompt),
     /// The basic prompt, expanded to `vals.next(Promptable)` for example.
     Basic(Box<MethodCall<Promptable>>),
 }
@@ -237,7 +249,8 @@ impl FieldPrompt {
                 let root = get_lib_root();
                 gens.check_for_bound(id, quote!(#root::menu::Prompted));
             }
-            Self::Flatten
+            let ty_span = field.ty.span();
+            Self::Flatten(FlattenedPrompt { ty_span })
         } else {
             // "Writtens" promptable
 
@@ -287,10 +300,7 @@ impl FieldPrompt {
 impl ToTokens for FieldPrompt {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            FieldPrompt::Flatten => {
-                let root = get_lib_root();
-                quote!(#root::menu::Prompted::from_values(vals)?).to_tokens(tokens)
-            }
+            FieldPrompt::Flatten(prompt) => prompt.to_tokens(tokens),
             FieldPrompt::Basic(call) => quote!(vals #call).to_tokens(tokens),
         }
     }
