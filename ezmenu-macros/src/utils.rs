@@ -38,8 +38,14 @@ pub(crate) use to_str;
 /// Util function used to return the token stream of the path of the library name.
 ///
 /// This function exists because the library name might change in the future.
+#[inline(always)]
 pub(crate) fn get_lib_root() -> TokenStream {
-    quote!(::ezmenulib)
+    get_lib_root_spanned(Span::call_site())
+}
+
+#[inline(always)]
+pub(crate) fn get_lib_root_spanned(span: Span) -> TokenStream {
+    quote_spanned!(span=> ::ezmenulib)
 }
 
 pub(crate) struct Sp<T> {
