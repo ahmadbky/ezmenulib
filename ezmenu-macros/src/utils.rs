@@ -3,7 +3,6 @@ use std::{fmt::Display, marker::PhantomData};
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
 use quote::{quote, quote_spanned, ToTokens};
-use spelling_corrector::corrector::SimpleCorrector;
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote,
@@ -34,8 +33,6 @@ macro_rules! to_str {
 }
 
 pub(crate) use to_str;
-
-use crate::kw;
 
 /// Util function used to return the token stream of the path of the library name.
 ///

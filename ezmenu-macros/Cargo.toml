@@ -21,4 +21,4 @@ quote = "1.0.20"
 syn = { version = "1.0.98", features = ["full", "extra-traits"] }
 proc-macro-error = "1.0.4"
 proc-macro2 = "1.0.40"
-spelling_corrector = "0.2.3"
+concat-idents = "1.1.3"
