@@ -268,7 +268,11 @@ impl FieldPrompt {
                 Promptable::Separated(Separated { w, sep, env_sep })
             } else if is_ty(&field.ty, "bool") {
                 // Bool promptable
-                Promptable::Bool(Bool { w })
+                let basic_example = attr
+                    .val
+                    .basic_example
+                    .then(|| method_call_empty("with_basic_example"));
+                Promptable::Bool(Bool { w, basic_example })
             } else {
                 // Written promptable
 

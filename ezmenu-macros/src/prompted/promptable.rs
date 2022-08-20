@@ -173,6 +173,7 @@ impl ToTokens for Separated {
 
 pub(crate) struct Bool {
     pub(crate) w: Written,
+    pub(crate) basic_example: Option<MethodCall<()>>,
 }
 
 impl ToTokens for Bool {
@@ -180,5 +181,6 @@ impl ToTokens for Bool {
         let root = get_lib_root();
         let w = &self.w;
         quote!(#root::field::Bool::from_written(#w)).to_tokens(tokens);
+        self.basic_example.to_tokens(tokens);
     }
 }
