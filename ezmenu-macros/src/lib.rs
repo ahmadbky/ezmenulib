@@ -18,15 +18,12 @@ use syn::{parse_macro_input, DeriveInput};
 mod bound;
 mod format;
 mod generics;
+mod kw;
 mod menu;
 mod prompted;
 mod utils;
 
-use self::{
-    bound::{build_bound, Bound},
-    menu::build_menu,
-    prompted::build_prompted,
-};
+use self::{bound::build_bound, menu::build_menu, prompted::build_prompted};
 
 #[proc_macro_attribute]
 #[doc(hidden)]
@@ -66,7 +63,7 @@ pub fn derive_menu(item: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn bound(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let attr = parse_macro_input!(attr as Bound);
+    let tui = parse_macro_input!(attr with bound::parse_bound_args);
     let input = parse_macro_input!(item as syn::ItemFn);
-    build_bound(attr.tui, input).into()
+    build_bound(tui, input).into()
 }

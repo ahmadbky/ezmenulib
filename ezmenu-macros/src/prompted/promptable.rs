@@ -1,8 +1,7 @@
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
 use quote::{quote, ToTokens};
 use syn::{
-    ext::IdentExt,
     parenthesized,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
@@ -11,12 +10,13 @@ use syn::{
 
 use crate::{
     format::Format,
-    utils::{abort_invalid_ident, get_lib_root, method_call, MethodCall},
+    kw,
+    utils::{get_lib_root, method_call, MethodCall},
 };
 
 use super::FunctionExpr;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SelectedField {
     lit: LitStr,
     val: Expr,
@@ -40,7 +40,7 @@ impl Parse for SelectedField {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct RawSelectedField {
     raw: SelectedField,
     default: Option<Span>,
@@ -48,12 +48,8 @@ pub(crate) struct RawSelectedField {
 
 impl Parse for RawSelectedField {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let default = if input.peek(Ident::peek_any) {
-            let id = input.parse::<Ident>()?;
-            if id != "default" {
-                abort_invalid_ident(id, &["default"]);
-            }
-            Some(id.span())
+        let default = if input.peek(kw::default) {
+            Some(input.parse::<kw::default>()?.span)
         } else {
             None
         };

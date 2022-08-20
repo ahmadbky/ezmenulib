@@ -1,27 +1,27 @@
-mod promptable;
+pub(crate) mod promptable;
 mod select;
 
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site, set_dummy, ResultExt};
-use quote::{quote, ToTokens};
+use quote::{quote, quote_spanned, ToTokens};
 use syn::{
-    ext::IdentExt,
-    parenthesized,
     parse::{Parse, ParseStream},
     parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
     Attribute, Data, DataEnum, DataStruct, DeriveInput, ExprClosure, Field, Fields, FieldsNamed,
-    FieldsUnnamed, GenericArgument, Generics, Ident, LitStr, Path, Token, Type,
+    FieldsUnnamed, GenericArgument, Generics, Ident, LitStr, Pat, PatIdent, PatStruct,
+    PatTupleStruct, PatType, Path, Token, Type,
 };
 
 use crate::{
     format::Format,
-    generics::AugmentedGenerics,
+    generics::check_for_bound,
+    kw::define_attr,
     utils::{
-        abort_invalid_ident, define_attr, get_attr_with_args, get_first_doc, get_last_seg_of_ty,
-        get_lib_root, get_nested_args, get_ty_ident, is_ty, method_call, split_ident_camel_case,
-        split_ident_snake_case, take_val, to_str, Case, MethodCall, Sp,
+        get_attr_with_args, get_first_doc, get_last_seg_of_ty, get_lib_root, get_lib_root_spanned,
+        get_nested_args, get_ty_ident, is_ty, method_call, method_call_empty,
+        split_ident_camel_case, split_ident_snake_case, take_val, Case, MethodCall, Sp,
     },
 };
 
@@ -30,96 +30,14 @@ use self::{
     select::build_select,
 };
 
-/// Represents a parameter in the prompt attribute of a struct that contains fields.
-enum RootFieldsParam {
-    Case(Case),
-    Fmt(Format),
-    Title(LitStr),
-    NoTitle,
-    NoDoc,
-    Raw,
-}
-
-impl Parse for RootFieldsParam {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(if input.peek(Ident::peek_any) {
-            let id = input.parse::<Ident>()?;
-            match to_str!(id) {
-                "fmt" => {
-                    let content;
-                    parenthesized!(content in input);
-                    Self::Fmt(content.parse()?)
-                }
-                "case" => {
-                    input.parse::<Token![=]>()?;
-                    Self::Case(input.parse()?)
-                }
-                "title" => {
-                    input.parse::<Token![=]>()?;
-                    Self::Title(input.parse()?)
-                }
-                "no_title" => Self::NoTitle,
-                "nodoc" => Self::NoDoc,
-                "raw" => Self::Raw,
-                _ => abort_invalid_ident(id, &["fmt", "case", "raw"]),
-            }
-        } else {
-            Self::Title(input.parse()?)
-        })
-    }
-}
-
-/// Represents the attribute of a struct that contains fields.
-#[derive(Default)]
-struct RootFieldsAttr {
-    case: Option<Case>,
-    fmt: Option<Format>,
-    title: Option<LitStr>,
-    nodoc: bool,
-    raw: bool,
-    no_title: bool,
-}
-
-impl Parse for RootFieldsAttr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        use RootFieldsParam::*;
-
-        let mut case = None;
-        let mut fmt = None;
-        let mut title = None;
-        let mut nodoc = false;
-        let mut raw = false;
-        let mut no_title = false;
-
-        let mut vals = Punctuated::<_, Token![,]>::parse_terminated(input)?.into_iter();
-
-        for _ in 0..4.min(vals.len()) {
-            match vals.next() {
-                Some(Case(c)) => case = Some(c),
-                Some(Fmt(f)) => fmt = Some(f),
-                Some(Title(lit)) => title = Some(lit),
-                Some(NoDoc) => nodoc = true,
-                Some(NoTitle) => no_title = true,
-                Some(Raw) => raw = true,
-                None => (),
-            }
-        }
-
-        match title {
-            Some(t) if !no_title => {
-                abort!(t, "cannot provide a title and the `no_title` restriction")
-            }
-            _ => (),
-        }
-
-        Ok(Self {
-            case,
-            fmt,
-            title,
-            nodoc,
-            raw,
-            no_title,
-        })
+define_attr! {
+    RootFieldsAttr {
+        case: Option<Case>,
+        fmt: Option<Format>,
+        title: Option<LitStr>,
+        nodoc: bool,
+        raw: bool,
+        no_title: bool,
     }
 }
 
@@ -131,28 +49,14 @@ impl From<&[Attribute]> for RootFieldsAttr {
     }
 }
 
-/// Represents the attribute of an unit struct.
-struct RootUnitAttr {
-    raw: bool,
-}
-
-impl Parse for RootUnitAttr {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let raw = if input.peek(Ident) {
-            let id = input.parse::<Ident>()?;
-            if id != "raw" {
-                abort_invalid_ident(id, &["raw"]);
-            }
-            true
-        } else {
-            false
-        };
-
-        Ok(Self { raw })
+define_attr! {
+    RootUnitAttr {
+        raw: bool,
     }
 }
 
 /// Represents a function expression.
+#[derive(Debug)]
 pub(crate) enum FunctionExpr {
     /// Provided as a closure `|x| expr`.
     Closure(ExprClosure),
@@ -179,178 +83,36 @@ impl ToTokens for FunctionExpr {
     }
 }
 
-/// Represents a parameter in the prompt attribute of a struct field.
-enum FieldAttrParam {
-    /* Every promptable */
-    /// The `msg = "..."` or more simply `"..."` parameter.
-    Msg(LitStr),
-    /// The `fmt(...)` parameter.
-    Fmt(Format),
-    /// The `opt` identifier.
-    Optional,
-    /// The `or_default` identifier.
-    OrDefault,
-    /// The `case = ...` parameter.
-    Case(Case),
-    /// The `nodoc` identifier.
-    NoDoc,
-    /// The `raw` identifier.
-    Raw,
-    /// The `flatten` identifier.
-    Flatten,
-
-    /* Selected */
-    /// The `select(...)` parameter, with its entries.
-    Select(Punctuated<RawSelectedField, Token![,]>),
-
-    /* Written/WrittenUntil/Separated */
-    /// The `example = "..."` parameter.
-    Example(LitStr),
-    /// The `or_val("...")` parameter.
-    OrVal(LitStr),
-    /// The `or_env("...")` parameter.
-    OrEnv(LitStr),
-
-    /* WrittenUntil */
-    /// The `until(...)` parameter.
-    Until(FunctionExpr),
-
-    /* Separated */
-    /// The `sep = "...` parameter.
-    Sep(LitStr),
-    /// The `or_env_with("var", "sep")` parameter.
-    OrEnvWithSep(LitStr, LitStr),
-}
-
-impl Parse for Sp<FieldAttrParam> {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        use FieldAttrParam::*;
-
-        Ok(if input.peek(Ident::peek_any) {
-            let id = input.parse::<Ident>()?;
-            let span = id.span();
-            let val = match to_str!(id) {
-                "msg" => {
-                    input.parse::<Token![=]>()?;
-                    Msg(input.parse()?)
-                }
-                "optional" | "opt" => Optional,
-                "or_default" => OrDefault,
-                "case" => {
-                    input.parse::<Token![=]>()?;
-                    Case(input.parse()?)
-                }
-                "nodoc" => NoDoc,
-                "raw" => Raw,
-                "flatten" => Flatten,
-                "example" => {
-                    input.parse::<Token![=]>()?;
-                    Example(input.parse()?)
-                }
-                "sep" => {
-                    input.parse::<Token![=]>()?;
-                    Sep(input.parse()?)
-                }
-                other => {
-                    let content;
-                    parenthesized!(content in input);
-                    match other {
-                        "fmt" => Fmt(content.parse()?),
-                        "select" => Select(content.parse_terminated(Parse::parse)?),
-                        "or" | "or_val" => OrVal(content.parse()?),
-                        "or_env" => OrEnv(content.parse()?),
-                        "or_env_with" | "env_sep" => {
-                            let var = content.parse()?;
-                            content.parse::<Token![,]>()?;
-                            OrEnvWithSep(var, content.parse()?)
-                        }
-                        "until" => Until(content.parse()?),
-                        _ => abort_invalid_ident(
-                            id,
-                            &[
-                                "optional",
-                                "opt",
-                                "or_default",
-                                "example",
-                                "sep",
-                                "fmt",
-                                "select",
-                                "or",
-                                "or_val",
-                                "or_env",
-                                "or_env_with",
-                                "env_sep",
-                                "until",
-                            ],
-                        ),
-                    }
-                }
-            };
-
-            Self { span, val }
-        } else {
-            let val = input.parse::<LitStr>()?;
-            Self {
-                span: val.span(),
-                val: Msg(val),
-            }
-        })
-    }
-}
-
 define_attr! {
-    #[derive(Default)]
-    FieldAttrParam(sp) -> RawFieldAttr {
-        Msg(m) => msg: Option<LitStr> = None; if msg.is_none() => Some(m),
-        Fmt(f) => fmt: Option<Format> = None; if fmt.is_none() => Some(f),
-        Optional => opt: bool = false; if !opt && !or_default => true,
-        OrDefault => or_default: bool = false; if !or_default && !opt => true,
-        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
-        NoDoc => nodoc: bool = false; if !nodoc => true,
-        Raw => raw: bool = false; if !raw && msg.is_none() => true,
-        Flatten => flatten: bool = false;
-            if !flatten
-                && msg.is_none()
-                && fmt.is_none()
-                && !opt
-                && !or_default
-                && case.is_none()
-                && !nodoc
-                && !raw
-                && select.is_none()
-                && example.is_none()
-                && default_env.is_none()
-                && until.is_none()
-                && sep.is_none()
-                && default_env_with_sep.is_none()
-            => true,
+    RawFieldAttr {
+        msg: Option<LitStr>,
+        fmt: Option<Format>,
+        optional: bool,
+        or_default: bool; without optional,
+        case: Option<Case>,
+        nodoc: bool,
+        raw: bool; without msg,
+        flatten: bool; without
+            msg; fmt; optional; or_default; case; nodoc; raw; select; example;
+            or_val; or_env; until; sep; or_env_with,
 
-        Select(fields) => select: Option<Punctuated<RawSelectedField, Token![,]>> = None;
-            if select.is_none()
-                && msg.is_none()
-                && !nodoc
-                && !raw
-                && example.is_none()
-                && default_env.is_none()
-                && until.is_none()
-                && sep.is_none()
-                && default_env_with_sep.is_none()
-            => Some(fields),
+        select: Option<Punctuated<RawSelectedField, Token![,]>>; without
+            msg; nodoc; raw; example; or_val; or_env; until; sep; or_env_with,
 
-        Example(e) => example: Option<LitStr> = None; if example.is_none() => Some(e),
-        OrVal(v) => default_val: Option<LitStr> = None; if default_val.is_none() => Some(v),
-        OrEnv(v) => default_env: Option<LitStr> = None; if default_env.is_none() => Some(v),
+        example: Option<LitStr>,
+        or_val: Option<LitStr>,
+        or_env: Option<LitStr>,
 
-        Until(f) => until: Option<FunctionExpr> = None;
-            if until.is_none() && sep.is_none() && default_env_with_sep.is_none() => Some(f),
+        until: Option<FunctionExpr>; without sep; or_env_with,
 
-        Sep(s) => sep: Option<LitStr> = None; if sep.is_none() => Some(s),
-        OrEnvWithSep(v, s) => default_env_with_sep: Option<(LitStr, LitStr)> = None;
-            if default_env_with_sep.is_none() => Some((v, s))
+        sep: Option<LitStr>,
+        or_env_with: Option<(LitStr, LitStr)>,
+
+        basic_example: bool; without until; sep; or_env_with,
     }
 }
 
-/// Returns the nested type inside the chevrons
+/// Returns the nested type inside the chevrons of an `Option<T>` type.
 ///
 /// &`Option<T>` --> Some(&`T`)
 fn get_nested_type(ty: &Type) -> Option<&Type> {

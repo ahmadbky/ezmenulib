@@ -9,8 +9,9 @@ use syn::{
     Signature, Token, TraitBound, Type, TypeParamBound, TypePath, TypeReference,
 };
 
-use crate::utils::{
-    abort_invalid_ident, get_last_seg_of_path, get_lib_root, get_nested_args, is_path,
+use crate::{
+    kw::define_attr,
+    utils::{get_last_seg_of_path, get_lib_root, get_nested_args, is_path},
 };
 
 fn abort_invalid_fn(span: Span, kw: &str) -> ! {
@@ -118,25 +119,12 @@ pub(crate) fn build_bound(tui: bool, mut input: ItemFn) -> TokenStream {
     input.into_token_stream()
 }
 
-pub(crate) struct Bound {
-    pub(crate) tui: bool,
+define_attr! {
+    BoundArgs {
+        tui: bool,
+    }
 }
 
-impl Parse for Bound {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let tui = if input.peek(Ident) {
-            let id = input.parse::<Ident>()?;
-            if id == "tui" && input.is_empty() {
-                true
-            } else {
-                abort_invalid_ident(id, &["tui"]);
-            }
-        } else if input.is_empty() {
-            false
-        } else {
-            abort!(input.span(), "invalid bound attribute");
-        };
-
-        Ok(Self { tui })
-    }
+pub(crate) fn parse_bound_args(input: ParseStream) -> syn::Result<bool> {
+    BoundArgs::parse(input).map(|args| args.tui)
 }

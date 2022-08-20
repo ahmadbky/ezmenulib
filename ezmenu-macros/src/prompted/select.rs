@@ -1,6 +1,6 @@
 use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream};
 use proc_macro_error::{abort, set_dummy};
-use quote::{format_ident, quote, ToTokens, TokenStreamExt};
+use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
     ext::IdentExt,
     parenthesized,
@@ -12,65 +12,20 @@ use syn::{
 
 use crate::{
     format::Format,
+    kw::define_attr,
     utils::{
-        abort_invalid_ident, define_attr, get_attr_with_args, get_first_doc, get_lib_root,
-        method_call, split_ident_camel_case, take_val, to_str, Case, MethodCall, Sp,
+        get_attr_with_args, get_first_doc, get_lib_root, method_call, split_ident_camel_case,
+        take_val, Case, MethodCall,
     },
 };
 
-/// Represents a parameter in the prompt attribute of an unit variant.
-enum UnitParam {
-    /// The `default` identifier.
-    Default,
-    /// The `msg` optional identifier with the provided string literal.
-    Msg(LitStr),
-    /// The `case` optional identifier with the provided case specification.
-    Case(Case),
-    /// The `nodoc` identifier.
-    NoDoc,
-    /// The `raw` identifier.
-    RawIdent,
-}
-
-impl Parse for Sp<UnitParam> {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(if input.peek(Ident::peek_any) {
-            let id = input.parse::<Ident>()?;
-            let span = id.span();
-            let val = match to_str!(id) {
-                "default" => UnitParam::Default,
-                "msg" => {
-                    input.parse::<Token![=]>()?;
-                    UnitParam::Msg(input.parse()?)
-                }
-                "case" => {
-                    input.parse::<Token![=]>()?;
-                    UnitParam::Case(input.parse()?)
-                }
-                "nodoc" => UnitParam::NoDoc,
-                "raw" => UnitParam::RawIdent,
-                _ => abort_invalid_ident(id, &["default", "msg", "case", "nodoc", "raw"]),
-            };
-
-            Self { span, val }
-        } else {
-            // Else, the next token must be a string literal to represent the given message.
-            let msg = input.parse::<LitStr>()?;
-            Self {
-                span: msg.span(),
-                val: UnitParam::Msg(msg),
-            }
-        })
-    }
-}
-
 define_attr! {
-    UnitParam(sp) -> UnitAttr {
-        Msg(m) => lit: Option<LitStr> = None; if lit.is_none() => Some(m),
-        Default => default: Option<Span> = None; if default.is_none() => Some(sp),
-        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
-        NoDoc => nodoc: bool = false; if !nodoc && lit.is_none() => true,
-        RawIdent => raw_ident: bool = false; if !raw_ident && lit.is_none() => true
+    UnitAttr {
+        msg: Option<LitStr>,
+        default: Option<Span>,
+        case: Option<Case>,
+        nodoc: bool; without msg,
+        raw: bool; without msg,
     }
 }
 
@@ -325,13 +280,13 @@ impl Select {
             Fields::Unit => {
                 let (lit, default) = match get_attr_with_args(&var.attrs, "prompt").map(take_val) {
                     Some(UnitAttr {
-                        lit,
+                        msg,
                         default,
                         case,
                         nodoc,
-                        raw_ident,
+                        raw,
                     }) => {
-                        let lit = lit
+                        let lit = msg
                             .map(|l| l.value())
                             .or_else(|| {
                                 if nodoc {
@@ -341,7 +296,7 @@ impl Select {
                                 }
                             })
                             .unwrap_or_else(|| {
-                                if raw_ident {
+                                if raw {
                                     var.ident.to_string()
                                 } else {
                                     split_ident_camel_case(&var.ident)
@@ -377,64 +332,13 @@ impl Select {
     }
 }
 
-/// Represents a parameter in the root `select` attribute.
-enum RootParam {
-    /// The `msg` identifier, with the provided string literal.
-    Msg(LitStr),
-    /// The `fmt` identifier, with the provided `Format` instantiation.
-    Fmt(Format),
-    /// The `nodoc` identifier.
-    NoDoc,
-    /// The `case` identifier with the provided case specification.
-    Case(Case),
-    /// The `raw` identifier.
-    RawIdent,
-}
-
-impl Parse for Sp<RootParam> {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(if input.peek(Ident) {
-            // The provided identifier must be either `msg` or `fmt`.
-            let id = input.parse::<Ident>()?;
-            let span = id.span();
-
-            let val = match to_str!(id) {
-                "msg" => {
-                    input.parse::<Token![=]>()?;
-                    RootParam::Msg(input.parse()?)
-                }
-                "fmt" => {
-                    let content;
-                    parenthesized!(content in input);
-                    RootParam::Fmt(content.parse()?)
-                }
-                "nodoc" => RootParam::NoDoc,
-                "case" => {
-                    input.parse::<Token![=]>()?;
-                    RootParam::Case(input.parse()?)
-                }
-                "raw" => RootParam::RawIdent,
-                _ => abort_invalid_ident(id, &["msg", "fmt", "nodoc", "case"]),
-            };
-
-            Self { span, val }
-        } else {
-            // Else, the next token must be a string literal to represent the given message.
-            let lit = input.parse::<LitStr>()?;
-            let span = lit.span();
-            let val = RootParam::Msg(lit);
-            Self { span, val }
-        })
-    }
-}
-
 define_attr! {
-    RootParam(sp) -> RootAttr {
-        Msg(m) => msg: Option<LitStr> = None; if msg.is_none() => Some(m),
-        Fmt(f) => fmt: Option<Format> = None; if fmt.is_none() => Some(f),
-        Case(c) => case: Option<Case> = None; if case.is_none() => Some(c),
-        NoDoc => nodoc: bool = false; if !nodoc && msg.is_none() => true,
-        RawIdent => raw_ident: bool = false; if !raw_ident && msg.is_none() => true
+    RootAttr {
+        msg: Option<LitStr>,
+        fmt: Option<Format>,
+        case: Option<Case>,
+        nodoc: bool; without msg,
+        raw: bool; without msg,
     }
 }
 
@@ -454,13 +358,13 @@ impl RootData {
                 fmt,
                 nodoc,
                 case,
-                raw_ident,
+                raw,
             }) => {
                 let msg = msg
                     .map(|l| l.value())
                     .or_else(|| if nodoc { None } else { get_first_doc(attrs) })
                     .unwrap_or_else(|| {
-                        if raw_ident {
+                        if raw {
                             name.to_string()
                         } else {
                             split_ident_camel_case(&name)
