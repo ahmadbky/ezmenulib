@@ -1,6 +1,6 @@
 [package]
 name = "ezmenulib"
-version = "0.3.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["Ahmad Baalbaky <ahmad@salondesdevs.fr>"]
 documentation = "https://docs.rs/ezmenulib"
@@ -14,33 +14,15 @@ readme = "README.md"
 [lib]
 name = "ezmenulib"
 
+[dependencies]
+rpassword = { version = "7.0.0", default-features = false, optional = true }
+termion = { version = "1.5.6", default-features = false, optional = true }
+tui = { version = "0.19.0", default-features = false, optional = true }
+crossterm = { version = "0.25.0", default-features = false, optional = true }
+ezmenu-macros = { version = "0.1.0", path = "ezmenu-macros", default-features = false, optional = true }
+
 [package.metadata.docs.rs]
 all-features = true
-
-[dependencies.meval]
-version = "0.2.0"
-optional = true
-default-features = false 
-
-[dependencies.crossterm]
-version = "0.24.0"
-optional = true
-default-features = false
-
-[dependencies.termion]
-version = "1.5.6"
-optional = true
-default-features = false
-
-[dependencies.tui]
-version = "0.18.0"
-optional = true
-default-features= false
-
-[dependencies.ezmenu-macros]
-version = "0.1.0"
-optional = true
-path = "ezmenu-macros"
 
 [build-dependencies]
 rustc_version = "0.4.0"
@@ -48,7 +30,6 @@ rustc_version = "0.4.0"
 [features]
 default = ["derive"]
 derive = ["dep:ezmenu-macros"]
-expr = ["dep:meval"]
 crossterm = ["dep:crossterm", "tui?/crossterm"]
 termion = ["dep:termion", "tui?/termion"]
 

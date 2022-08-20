@@ -1,6 +1,6 @@
 # Changelog of `ezmenulib`.
 
-## 0.3.0 (WIP)
+## 1.0.0 (WIP)
 
 ### Breaking changes
 

@@ -184,7 +184,7 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
         let mut remaining = true;
 
         match e {
-            Event::Key(KeyEvent { code, modifiers }) => match code {
+            Event::Key(KeyEvent { code, modifiers, .. }) => match code {
                 KeyCode::Char('q') => return Quit,
                 KeyCode::Char('c') | KeyCode::Char('d') if modifiers == KeyModifiers::CONTROL => {
                     return Quit

@@ -243,15 +243,11 @@ impl<'a> Bool<'a> {
     }
 
     pub fn format(self, fmt: Format<'a>) -> Self {
-        Self {
-            inner: self.inner.format(fmt),
-        }
+        Self::from_written(self.inner.format(fmt))
     }
 
     pub fn example(self, example: &'a str) -> Self {
-        Self {
-            inner: self.inner.example(example),
-        }
+        Self::from_written(self.inner.example(example))
     }
 
     pub fn with_basic_example(self) -> Self {
@@ -260,15 +256,11 @@ impl<'a> Bool<'a> {
 
     pub fn default_value(self, default: bool) -> Self {
         let val = if default { "yes" } else { "no" };
-        Self {
-            inner: self.inner.default_value(val),
-        }
+        Self::from_written(self.inner.default_value(val))
     }
 
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
-        Ok(Self {
-            inner: self.inner.default_env(var)?,
-        })
+        Ok(Self::from_written(self.inner.default_env(var)?))
     }
 }
 
@@ -331,31 +323,23 @@ impl<'a, I, T> Separated<'a, I, T> {
     }
 
     pub fn format(self, fmt: Format<'a>) -> Self {
-        Self {
-            inner: self.inner.format(fmt),
-            ..self
-        }
+        let inner = self.inner.format(fmt);
+        Self { inner, ..self }
     }
 
     pub fn example(self, example: &'a str) -> Self {
-        Self {
-            inner: self.inner.example(example),
-            ..self
-        }
+        let inner = self.inner.example(example);
+        Self { inner, ..self }
     }
 
     pub fn default_value(self, default: &'a str) -> Self {
-        Self {
-            inner: self.inner.default_value(default),
-            ..self
-        }
+        let inner = self.inner.default_value(default);
+        Self { inner, ..self }
     }
 
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
-        Ok(Self {
-            inner: self.inner.default_env(var)?,
-            ..self
-        })
+        let inner = self.inner.default_env(var)?;
+        Ok(Self { inner, ..self })
     }
 
     pub fn default_env_with(mut self, var: &'a str, sep: &'a str) -> MenuResult<Self> {
@@ -438,24 +422,15 @@ impl<'a, F> WrittenUntil<'a, F> {
     }
 
     pub fn format(self, fmt: Format<'a>) -> Self {
-        Self {
-            inner: self.inner.format(fmt),
-            ..self
-        }
+        Self::from_written(self.inner.format(fmt), self.til)
     }
 
     pub fn default_value(self, default: &'a str) -> Self {
-        Self {
-            inner: self.inner.default_value(default),
-            ..self
-        }
+        Self::from_written(self.inner.default_value(default), self.til)
     }
 
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
-        Ok(Self {
-            inner: self.inner.default_env(var)?,
-            ..self
-        })
+        Ok(Self::from_written(self.inner.default_env(var)?, self.til))
     }
 }
 
