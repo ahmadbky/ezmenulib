@@ -195,6 +195,26 @@ impl ToTokens for Promptable {
     }
 }
 
+fn insert_type_for(ExprClosure { inputs, .. }: &mut ExprClosure, ty: &Type) {
+    fn insert_type(inputs: &mut Punctuated<Pat, Token![,]>, ty: &Type) {
+        let pat = Box::new(inputs[0].clone());
+        let ty = try_get_nested_type(ty);
+        inputs[0] = Pat::Type(PatType {
+            attrs: vec![],
+            pat,
+            colon_token: Token![:](Span::call_site()),
+            ty: Box::new(parse_quote!(&#ty)),
+        });
+    }
+
+    match inputs.first() {
+        Some(Pat::Ident(PatIdent { .. })) => insert_type(inputs, ty),
+        Some(
+            Pat::Struct(PatStruct { path, .. }) | Pat::TupleStruct(PatTupleStruct { path, .. }),
+        ) => insert_type(inputs, &parse_quote!(#path)),
+        _ => (),
+    }
+}
 
 struct FlattenedPrompt {
     ty_span: Span,
@@ -268,6 +288,11 @@ impl FieldPrompt {
 
             let prompt = if let Some(til) = attr.val.until {
                 // WrittenUntil promptable
+
+                if let FunctionExpr::Closure(expr) = &mut til {
+                    insert_type_for(expr, &field.ty);
+                }
+
                 Promptable::WrittenUntil(WrittenUntil { w, til })
             } else if let Some(sep) = attr.val.sep {
                 // Separated promptable
