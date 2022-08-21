@@ -2,11 +2,9 @@ use proc_macro2::{Span, TokenStream};
 use proc_macro_error::{abort, set_dummy};
 use quote::{quote, ToTokens};
 use syn::{
-    parse::{Parse, ParseStream},
-    parse_quote,
-    punctuated::Punctuated,
-    FnArg, GenericArgument, Generics, Ident, ItemFn, Pat, PatType, Path, PathSegment, Receiver,
-    Signature, Token, TraitBound, Type, TypeParamBound, TypePath, TypeReference,
+    parse_quote, punctuated::Punctuated, FnArg, GenericArgument, Generics, Ident, ItemFn, Pat,
+    PatType, Path, PathSegment, Receiver, Signature, Token, TraitBound, Type, TypeParamBound,
+    TypePath, TypeReference,
 };
 
 use crate::{

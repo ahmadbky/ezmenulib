@@ -11,7 +11,7 @@ macro_rules! impl_fmt {
     ($( $field:ident: $ty:ty ),*) => {
         define_attr! ( FormatInner {$( $field: $ty, )*} );
 
-        #[derive(Debug)]
+        #[derive(Clone, Debug)]
         pub(crate) struct Format {
             inner: FormatInner,
             some_omitted: bool,

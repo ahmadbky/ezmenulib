@@ -28,8 +28,9 @@ all-features = true
 rustc_version = "0.4.0"
 
 [features]
-default = ["derive"]
+default = ["derive", "password"]
 derive = ["dep:ezmenu-macros"]
+password = ["dep:rpassword"]
 crossterm = ["dep:crossterm", "tui?/crossterm"]
 termion = ["dep:termion", "tui?/termion"]
 

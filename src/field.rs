@@ -3,14 +3,14 @@
 #[cfg(test)]
 mod tests;
 
-use rpassword::{read_password_from_bufread, read_password};
+#[cfg(feature = "password")]
+use rpassword::read_password;
 
 use crate::{customs::MenuBool, menu::Handle, prelude::*, utils::*, DEFAULT_FMT};
 use std::{
     borrow::Cow,
     env,
     fmt::{self, Display, Formatter},
-    io::BufReader,
     marker::PhantomData,
     str::FromStr,
 };
@@ -409,58 +409,50 @@ where
     }
 }
 
+pub type SeparatedUntil<'a, I, T, F> = Until<Separated<'a, I, T>, F>;
+
 #[derive(Debug, Clone)]
-pub struct WrittenUntil<'a, F> {
-    inner: Written<'a>,
+pub struct Until<P, F> {
+    inner: P,
     til: F,
 }
 
-impl<'a, F> WrittenUntil<'a, F> {
-    pub fn from_written(inner: Written<'a>, til: F) -> Self {
-        Self { inner, til }
-    }
-
+impl<'a, P: From<&'a str> + 'a, F> Until<P, F> {
     pub fn new(msg: &'a str, til: F) -> Self {
-        Self::from_written(From::from(msg), til)
-    }
-
-    pub fn format(self, fmt: Format<'a>) -> Self {
-        Self::from_written(self.inner.format(fmt), self.til)
-    }
-
-    pub fn default_value(self, default: &'a str) -> Self {
-        Self::from_written(self.inner.default_value(default), self.til)
-    }
-
-    pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
-        Ok(Self::from_written(self.inner.default_env(var)?, self.til))
+        Self::from_promptable(From::from(msg), til)
     }
 }
 
-impl<F> UsesFormat for WrittenUntil<'_, F> {
+impl<P, F> Until<P, F> {
+    pub fn from_promptable(inner: P, til: F) -> Self {
+        Self { inner, til }
+    }
+}
+
+impl<P: UsesFormat, F> UsesFormat for Until<P, F> {
     fn get_format(&self) -> &Format<'_> {
         self.inner.get_format()
     }
 }
 
-impl<F> MenuDisplay for WrittenUntil<'_, F> {
+impl<P: MenuDisplay, F> MenuDisplay for Until<P, F> {
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
         MenuDisplay::fmt_with(&self.inner, f, fmt, opt)
     }
 }
 
-impl<F> Display for WrittenUntil<'_, F> {
+impl<P: MenuDisplay + UsesFormat, F> Display for Until<P, F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         <Self as MenuDisplay>::fmt(self, f, false)
     }
 }
 
-impl<T, F> Promptable<T> for WrittenUntil<'_, F>
+impl<T, P, F> Promptable<T> for Until<P, F>
 where
-    T: FromStr,
-    F: Fn(&T) -> bool,
+    P: Promptable<T>,
+    F: Fn(&<P as Promptable<T>>::Middle) -> bool,
 {
-    type Middle = T;
+    type Middle = <P as Promptable<T>>::Middle;
 
     fn prompt_once<H: Handle>(
         &self,
@@ -474,21 +466,27 @@ where
     }
 
     fn convert(self, mid: Self::Middle) -> T {
-        mid
+        self.inner.convert(mid)
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 pub struct Password<'a> {
     msg: &'a str,
     pub fmt: Format<'a>,
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl<'a> From<&'a str> for Password<'a> {
     fn from(msg: &'a str) -> Self {
         Self::new(msg)
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl<'a> Password<'a> {
     fn fmt_with_<W: fmt::Write>(&self, mut f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
         f.write_str(fmt.prefix)?;
@@ -516,12 +514,16 @@ impl<'a> Password<'a> {
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl UsesFormat for Password<'_> {
     fn get_format(&self) -> &Format<'_> {
         &self.fmt
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl MenuDisplay for Password<'_> {
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
         if !fmt.line_brk {
@@ -532,12 +534,16 @@ impl MenuDisplay for Password<'_> {
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl Display for Password<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         <Self as MenuDisplay>::fmt(self, f, false)
     }
 }
 
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
 impl Promptable<String> for Password<'_> {
     type Middle = String;
 
@@ -570,6 +576,10 @@ impl Promptable<String> for Password<'_> {
         mid
     }
 }
+
+#[cfg(feature = "password")]
+#[cfg_attr(nightly, doc(cfg(feature = "password")))]
+pub type PasswordUntil<'a, F> = Until<Password<'a>, F>;
 
 /// Defines the behavior for a written value provided by the user.
 ///
@@ -789,6 +799,8 @@ impl<'a> Written<'a> {
         Self { example, ..self }
     }
 }
+
+pub type WrittenUntil<'a, F> = Until<Written<'a>, F>;
 
 /// Used to define a selectable type.
 ///

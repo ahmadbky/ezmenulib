@@ -14,7 +14,7 @@ use crate::{
     utils::{get_lib_root, method_call, MethodCall},
 };
 
-use super::FunctionExpr;
+use super::{FunctionExpr, Promptable};
 
 #[derive(Clone, Debug)]
 struct SelectedField {
@@ -78,7 +78,7 @@ fn get_default_fn<I: Iterator<Item = RawSelectedField>>(input: I) -> Option<Meth
     default.map(|i| method_call("default", i))
 }
 
-pub(crate) struct Selected {
+pub(super) struct Selected {
     msg: String,
     entries: Punctuated<SelectedField, Token![,]>,
     fmt: Option<MethodCall<Format>>,
@@ -86,7 +86,7 @@ pub(crate) struct Selected {
 }
 
 impl Selected {
-    pub(crate) fn new(
+    pub(super) fn new(
         msg: String,
         fmt: Option<MethodCall<Format>>,
         entries: Punctuated<RawSelectedField, Token![,]>,
@@ -118,12 +118,12 @@ impl ToTokens for Selected {
     }
 }
 
-pub(crate) struct Written {
-    pub(crate) msg: String,
-    pub(crate) fmt: Option<MethodCall<Format>>,
-    pub(crate) example: Option<MethodCall<LitStr>>,
-    pub(crate) default_val: Option<MethodCall<LitStr>>,
-    pub(crate) default_env: Option<MethodCall<LitStr>>,
+pub(super) struct Written {
+    pub(super) msg: String,
+    pub(super) fmt: Option<MethodCall<Format>>,
+    pub(super) example: Option<MethodCall<LitStr>>,
+    pub(super) or_val: Option<MethodCall<LitStr>>,
+    pub(super) or_env: Option<MethodCall<LitStr>>,
 }
 
 impl ToTokens for Written {
@@ -134,31 +134,31 @@ impl ToTokens for Written {
         let mut out = quote!(#root::field::Written::new(#msg));
         self.fmt.to_tokens(&mut out);
         self.example.to_tokens(&mut out);
-        self.default_val.to_tokens(&mut out);
-        self.default_env.to_tokens(&mut out);
+        self.or_val.to_tokens(&mut out);
+        self.or_env.to_tokens(&mut out);
 
         tokens.extend(out);
     }
 }
 
-pub(crate) struct WrittenUntil {
-    pub(crate) w: Written,
-    pub(crate) til: FunctionExpr,
+pub(super) struct Until {
+    pub(super) inner: Box<Promptable>,
+    pub(super) til: FunctionExpr,
 }
 
-impl ToTokens for WrittenUntil {
+impl ToTokens for Until {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let root = get_lib_root();
-        let w = &self.w;
+        let inner = &self.inner;
         let til = &self.til;
-        quote!(#root::field::WrittenUntil::from_written(#w, #til)).to_tokens(tokens);
+        quote!(#root::field::Until::from_promptable(#inner, #til)).to_tokens(tokens);
     }
 }
 
-pub(crate) struct Separated {
-    pub(crate) w: Written,
-    pub(crate) sep: LitStr,
-    pub(crate) env_sep: Option<MethodCall<(LitStr, LitStr)>>,
+pub(super) struct Separated {
+    pub(super) w: Written,
+    pub(super) sep: LitStr,
+    pub(super) env_sep: Option<MethodCall<(LitStr, LitStr)>>,
 }
 
 impl ToTokens for Separated {
@@ -171,9 +171,9 @@ impl ToTokens for Separated {
     }
 }
 
-pub(crate) struct Bool {
-    pub(crate) w: Written,
-    pub(crate) basic_example: Option<MethodCall<()>>,
+pub(super) struct Bool {
+    pub(super) w: Written,
+    pub(super) basic_example: Option<MethodCall<()>>,
 }
 
 impl ToTokens for Bool {
@@ -185,9 +185,9 @@ impl ToTokens for Bool {
     }
 }
 
-pub(crate) struct Password {
-    pub(crate) msg: String,
-    pub(crate) fmt: Option<MethodCall<Format>>,
+pub(super) struct Password {
+    pub(super) msg: String,
+    pub(super) fmt: Option<MethodCall<Format>>,
 }
 
 impl ToTokens for Password {

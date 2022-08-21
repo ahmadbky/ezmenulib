@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ezmenulib::prelude::*;
 
 /// Select a license type
@@ -9,18 +11,17 @@ enum Type {
     BSD,
 }
 
-#[allow(dead_code)]
 #[derive(Prompted, Debug)]
 #[prompt(no_title)]
 struct License {
     #[prompt(sep = ", ")]
     authors: Vec<String>,
     name: Option<String>,
-    #[prompt(until(|e| *e > 0), or_val("2022"))]
+    #[prompt(or_val("2022"))]
     date: u16,
     #[prompt(flatten)]
     ty: Type,
-    #[prompt(password)]
+    #[prompt(password, until(|s| s.len() > 5))]
     secret: String,
 }
 

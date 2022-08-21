@@ -26,7 +26,7 @@ use crate::{
 };
 
 use self::{
-    promptable::{Bool, Password, RawSelectedField, Selected, Separated, Written, WrittenUntil},
+    promptable::{Bool, Password, RawSelectedField, Selected, Separated, Until, Written},
     select::build_select,
 };
 
@@ -56,7 +56,7 @@ define_attr! {
 }
 
 /// Represents a function expression.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum FunctionExpr {
     /// Provided as a closure `|x| expr`.
     Closure(ExprClosure),
@@ -97,18 +97,19 @@ define_attr! {
             or_val; or_env; until; sep; or_env_with; basic_example; password,
 
         select: Option<Punctuated<RawSelectedField, Token![,]>>; without
-            msg; nodoc; raw; example; or_val; or_env; until; sep; or_env_with; basic_example; password,
+            msg; nodoc; raw; example; or_val; or_env; sep; or_env_with; basic_example; password;
+            /* [1] this isn't mandatory but is placed for more sense */ until,
 
         example: Option<LitStr>,
         or_val: Option<LitStr>,
         or_env: Option<LitStr>,
 
-        until: Option<FunctionExpr>; without sep; or_env_with,
+        until: Option<FunctionExpr>,
 
         sep: Option<LitStr>,
         or_env_with: Option<(LitStr, LitStr)>,
 
-        basic_example: bool; without until; sep; or_env_with,
+        basic_example: bool; without sep; or_env_with; /* same as [1] */ until,
 
         password: bool; without example; or_val; or_env; sep; or_env_with; basic_example,
     }
@@ -145,7 +146,7 @@ impl PromptKind {
     /// output type and the value used as argument.
     ///
     /// It unwraps the nested type inside the `Option<...>` if so.
-    fn call_for(self, ty: &Type, val: Promptable) -> MethodCall<Promptable> {
+    fn call_for(self, ty: &Type, val: Promptable) -> Box<MethodCall<Promptable>> {
         let s = match self {
             Self::Next => "next",
             Self::NextOrDefault => "next_or_default",
@@ -161,11 +162,10 @@ impl PromptKind {
             .with_span(ty.span())
             .with_generics(vec![ty.clone(), parse_quote!(_)]);
 
-        if let Self::NextOrDefault = self {
-            out
-        } else {
-            out.with_question()
-        }
+        Box::new(match self {
+            Self::NextOrDefault => out,
+            _ => out.with_question(),
+        })
     }
 }
 
@@ -178,7 +178,7 @@ enum Promptable {
     /// The Written type.
     Written(Written),
     /// The WrittenUntil type.
-    WrittenUntil(WrittenUntil),
+    Until(Until),
     /// The Separated type.
     Separated(Separated),
     /// The Bool type.
@@ -187,12 +187,47 @@ enum Promptable {
     Password(Password),
 }
 
+impl Promptable {
+    fn from_not_until(ty: &Type, w: Written, attr: RawFieldAttr, gens: &mut Generics) -> Self {
+        if let Some(entries) = attr.select {
+            Promptable::Selected(Selected::new(w.msg, w.fmt, entries).unwrap_or_abort())
+        } else if attr.password {
+            Promptable::Password(Password {
+                msg: w.msg,
+                fmt: w.fmt,
+            })
+        } else if is_ty(ty, "bool") {
+            // Bool promptable
+            let basic_example = attr
+                .basic_example
+                .then(|| method_call_empty("with_basic_example"));
+            Promptable::Bool(Bool { w, basic_example })
+        } else {
+            if let Some(id) = get_ty_ident(ty) {
+                check_for_bound(gens, id, quote!(::core::str::FromStr));
+            }
+
+            if let Some(sep) = attr.sep {
+                let env_sep = attr.or_env_with.map(|(var, sep)| {
+                    MethodCall::new(
+                        Ident::new("default_env_with", Span::call_site()),
+                        parse_quote!(#var, #sep),
+                    )
+                });
+                Promptable::Separated(Separated { w, sep, env_sep })
+            } else {
+                Promptable::Written(w)
+            }
+        }
+    }
+}
+
 impl ToTokens for Promptable {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
             Self::Selected(s) => s.to_tokens(tokens),
             Self::Written(w) => w.to_tokens(tokens),
-            Self::WrittenUntil(w) => w.to_tokens(tokens),
+            Self::Until(u) => u.to_tokens(tokens),
             Self::Separated(s) => s.to_tokens(tokens),
             Self::Bool(b) => b.to_tokens(tokens),
             Self::Password(p) => p.to_tokens(tokens),
@@ -221,22 +256,17 @@ fn insert_type_for(ExprClosure { inputs, .. }: &mut ExprClosure, ty: &Type) {
     }
 }
 
-struct FlattenedPrompt {
-    ty_span: Span,
-}
-
-impl ToTokens for FlattenedPrompt {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root_spanned(self.ty_span);
-        quote_spanned!(self.ty_span=> #root::menu::Prompted::from_values(vals)?).to_tokens(tokens);
-    }
+macro_rules! map_method_call {
+    ($attr:ident: $( $field:ident $msg:expr ),*) => {$(
+        let $field = $attr.val.$field.clone().map(|v| method_call($msg, v));
+    )*};
 }
 
 /// Represents the prompt call of a struct field.
 enum FieldPrompt {
     /// The call is flatten, meaning the output type already implements `Prompted` trait,
     /// so we can construct it from the `Prompted::from_values` method.
-    Flatten(FlattenedPrompt),
+    Flatten(Span),
     /// The basic prompt, expanded to `vals.next(Promptable)` for example.
     Basic(Box<MethodCall<Promptable>>),
 }
@@ -245,8 +275,7 @@ impl FieldPrompt {
     /// Returns the prompt call of the field from its prompt attribute and the message of the prompt.
     ///
     /// The message retrieval depends on the field type (named/unnamed).
-    fn new(attr: Sp<RawFieldAttr>, field: Field, msg: String, gens: &mut Generics) -> Self {
-        let fmt = attr.val.fmt.map(|f| method_call("format", f));
+    fn new(mut attr: Sp<RawFieldAttr>, field: Field, msg: String, gens: &mut Generics) -> Self {
         let kind = match (attr.val.optional, attr.val.or_default) {
             (true, true) => unreachable!("assert !(opt && or_default)"),
             (true, false) => PromptKind::NextOptional,
@@ -255,72 +284,36 @@ impl FieldPrompt {
             (false, false) if is_ty(&field.ty, "Option") => PromptKind::NextOptional,
             (false, false) => PromptKind::Next,
         };
-        let example = attr.val.example.map(|e| method_call("example", e));
-        let default_val = attr.val.or_val.map(|e| method_call("default_value", e));
-        let default_env = attr.val.or_env.map(|e| method_call("default_env", e));
 
-        if let Some(entries) = attr.val.select {
-            // Selected promptable
-            let prompt = Promptable::Selected(Selected::new(msg, fmt, entries).unwrap_or_abort());
-            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
-        } else if attr.val.flatten {
+        map_method_call!(attr: example "example", or_val "default_value", or_env "default_env", fmt "format");
+
+        let w = Written {
+            msg,
+            fmt,
+            example,
+            or_val,
+            or_env,
+        };
+
+        if attr.val.flatten {
             // Flattened prompt, we call `Prompted::from_values` method for this field
             if let Some(id) = get_ty_ident(&field.ty) {
                 let root = get_lib_root();
                 check_for_bound(gens, id, quote!(#root::menu::Prompted));
             }
-            let ty_span = field.ty.span();
-            Self::Flatten(FlattenedPrompt { ty_span })
-        } else if attr.val.password {
-            let prompt = Promptable::Password(Password { msg, fmt });
-            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
+            Self::Flatten(field.ty.span())
         } else {
-            // "Writtens" promptable
-
-            if let Some(id) = get_ty_ident(&field.ty) {
-                check_for_bound(gens, id, quote!(::core::str::FromStr));
-            }
-
-            let w = Written {
-                msg,
-                fmt,
-                example,
-                default_val,
-                default_env,
-            };
-
-            let prompt = if let Some(mut til) = attr.val.until {
-                // WrittenUntil promptable
-
+            let prompt = if let Some(mut til) = attr.val.until.take() {
                 if let FunctionExpr::Closure(expr) = &mut til {
                     insert_type_for(expr, &field.ty);
                 }
-
-                Promptable::WrittenUntil(WrittenUntil { w, til })
-            } else if let Some(sep) = attr.val.sep {
-                // Separated promptable
-
-                let env_sep = attr.val.or_env_with.map(|(var, sep)| {
-                    MethodCall::new(
-                        Ident::new("default_env_with", Span::call_site()),
-                        parse_quote!(#var, #sep),
-                    )
-                });
-                Promptable::Separated(Separated { w, sep, env_sep })
-            } else if is_ty(&field.ty, "bool") {
-                // Bool promptable
-                let basic_example = attr
-                    .val
-                    .basic_example
-                    .then(|| method_call_empty("with_basic_example"));
-                Promptable::Bool(Bool { w, basic_example })
+                let inner = Box::new(Promptable::from_not_until(&field.ty, w, attr.val, gens));
+                Promptable::Until(Until { inner, til })
             } else {
-                // Written promptable
-
-                Promptable::Written(w)
+                Promptable::from_not_until(&field.ty, w, attr.val, gens)
             };
 
-            Self::Basic(Box::new(kind.call_for(&field.ty, prompt)))
+            Self::Basic(kind.call_for(&field.ty, prompt))
         }
     }
 }
@@ -328,7 +321,10 @@ impl FieldPrompt {
 impl ToTokens for FieldPrompt {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            FieldPrompt::Flatten(prompt) => prompt.to_tokens(tokens),
+            FieldPrompt::Flatten(sp) => {
+                let root = get_lib_root_spanned(*sp);
+                quote_spanned!(*sp=> #root::menu::Prompted::from_values(vals)?).to_tokens(tokens);
+            }
             FieldPrompt::Basic(call) => quote!(vals #call).to_tokens(tokens),
         }
     }
