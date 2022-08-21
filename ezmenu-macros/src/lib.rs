@@ -23,7 +23,7 @@ mod menu;
 mod prompted;
 mod utils;
 
-use self::{bound::build_bound, menu::build_menu, prompted::build_prompted};
+use self::{bound::{build_bound, BoundArgs}, menu::build_menu, prompted::build_prompted};
 
 #[proc_macro_attribute]
 #[doc(hidden)]
@@ -63,7 +63,7 @@ pub fn derive_menu(item: TokenStream) -> TokenStream {
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn bound(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let tui = parse_macro_input!(attr with bound::parse_bound_args);
+    let tui = parse_macro_input!(attr as BoundArgs);
     let input = parse_macro_input!(item as syn::ItemFn);
     build_bound(tui, input).into()
 }

@@ -116,19 +116,15 @@ fn append_handle(tui: bool, input: &mut Signature) {
     }
 }
 
-pub(crate) fn build_bound(tui: bool, mut input: ItemFn) -> TokenStream {
+pub(crate) fn build_bound(args: BoundArgs, mut input: ItemFn) -> TokenStream {
     set_dummy(input.to_token_stream());
-    append_handle(tui, &mut input.sig);
+    append_handle(args.tui, &mut input.sig);
 
     input.into_token_stream()
 }
 
 define_attr! {
-    BoundArgs {
+    pub(crate) BoundArgs {
         tui: bool,
     }
-}
-
-pub(crate) fn parse_bound_args(input: ParseStream) -> syn::Result<bool> {
-    BoundArgs::parse(input).map(|args| args.tui)
 }
