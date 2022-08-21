@@ -1,4 +1,11 @@
-use syn::{custom_keyword, parse::Parse, punctuated::Punctuated, LitBool, LitStr, Token};
+use syn::{
+    custom_keyword,
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    LitBool, LitStr, Token,
+};
+
+use concat_idents::concat_idents as id;
 
 use crate::{
     format::Format,
@@ -13,8 +20,6 @@ macro_rules! define_keywords {
         'unit: $( $unit:ident, )*
         'else: $( $else:ident($input:ident) -> $else_ty:ty $block:block ),*
     } => {
-        use syn::parse::ParseStream;
-        use concat_idents::concat_idents as id;
 
         $(
             custom_keyword!($eq);
@@ -80,7 +85,6 @@ macro_rules! define_keywords {
     };
 }
 
-// This macro invocation expands to >2000 lines
 define_keywords! {
     'eq: case: Case, title: LitStr, msg: LitStr, example: LitStr, sep: LitStr,
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
@@ -114,7 +118,7 @@ macro_rules! define_attr {
             $field:ident: $ty:ty $(; without $($cond:expr);*)?,
         )*}
     } => {
-        #[derive(Default, Debug)]
+        #[derive(Clone, Default, Debug)]
         $pub struct $Attr {$(
             $field: $ty,
         )*}
