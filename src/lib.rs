@@ -58,8 +58,7 @@ use crate::field::Format;
 use std::env::VarError;
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::io::{self, BufRead, Read, Write};
-use std::ops::{Deref, DerefMut};
+use std::io;
 
 pub(crate) const DEFAULT_FMT: Format<'static> = Format {
     prefix: "--> ",

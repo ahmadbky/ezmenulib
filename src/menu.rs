@@ -135,9 +135,8 @@ impl<'a, H> Values<'a, H> {
     ///
     /// If the field contains custom formatting specifications, it will save them
     /// when printing to the writer.
-    pub fn format(mut self, fmt: Format<'a>) -> Self {
-        self.fmt = fmt;
-        self
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self { fmt, ..self }
     }
 }
 
@@ -304,23 +303,21 @@ impl<'a, H> RawMenu<'a, H> {
     }
 
     /// Defines the global formatting applied to all the fields the menu displays.
-    pub fn format(mut self, fmt: Format<'a>) -> Self {
-        self.fmt = fmt;
-        self
+    pub fn format(self, fmt: Format<'a>) -> Self {
+        Self { fmt, ..self }
     }
 
     /// Defines the title of the menu, which corresponds to the string slice displayed
     /// at the top when running the menu.
-    pub fn title(mut self, title: &'a str) -> Self {
-        self.title = Some(title);
-        self
+    pub fn title(self, title: &'a str) -> Self {
+        let title = Some(title);
+        Self { title, ..self }
     }
 
     /// Defines if the menu should run once or loop when calling a mapped function
     /// to a field.
-    pub fn run_once(mut self, once: bool) -> Self {
-        self.once = once;
-        self
+    pub fn run_once(self) -> Self {
+        Self { once: true, ..self }
     }
 }
 
@@ -340,7 +337,7 @@ impl<H: Handle> RawMenu<'_, H> {
                 once: self.once,
             },
             self.title,
-            self.fields,
+            &self.fields,
         )
         .map(|_| ())
     }
@@ -358,7 +355,7 @@ struct RunParams<'a, 'b: 'a, H> {
 fn show_menu<H: Handle>(
     params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: Fields<H>,
+    fields: &[Field<H>],
 ) -> MenuResult {
     // Title of current selective menu.
     if let Some(s) = msg {
@@ -416,7 +413,7 @@ fn handle_field<H: Handle>(
 fn run_with<H: Handle>(
     params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: Fields<H>,
+    fields: &[Field<H>],
 ) -> MenuResult<Depth> {
     loop {
         show_menu(params, msg, fields)?;
