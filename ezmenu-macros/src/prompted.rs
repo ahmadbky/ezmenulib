@@ -18,6 +18,7 @@ use crate::{
     format::Format,
     generics::check_for_bound,
     kw::define_attr,
+    pretend::pretend_used,
     utils::{
         get_attr_with_args, get_first_doc, get_last_seg_of_ty, get_lib_root, get_lib_root_spanned,
         get_nested_args, get_ty_ident, is_ty, method_call, method_call_empty,

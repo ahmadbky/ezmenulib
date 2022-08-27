@@ -2,7 +2,7 @@ use syn::{
     custom_keyword,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    LitBool, LitStr, Token,
+    Expr, Index, LitBool, LitStr, Path, Token,
 };
 
 use concat_idents::concat_idents as id;
@@ -20,7 +20,6 @@ macro_rules! define_keywords {
         'unit: $( $unit:ident, )*
         'else: $( $else:ident($input:ident) -> $else_ty:ty $block:block ),*
     } => {
-
         $(
             custom_keyword!($eq);
             id!(parse_eq = parse_, $eq {
@@ -89,9 +88,20 @@ define_keywords! {
     'eq: case: Case, title: LitStr, msg: LitStr, example: LitStr, sep: LitStr,
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
         show_default: LitBool, suffix: LitStr, line_brk: LitBool,
-    'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr,
+    'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr, map: FunctionExpr,
     'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example, password,
+        parent, quit, once,
     'else:
+        back(input) -> Index {
+            let id = input.parse::<back>()?;
+            if input.peek(syn::token::Paren) {
+                let content;
+                syn::parenthesized!(content in input);
+                content.parse()?
+            } else {
+                Index { index: 0, span: id.span }
+            }
+        },
         or_env_with(input) -> (LitStr, LitStr) {
             input.parse::<or_env_with>()?;
             let content;
@@ -109,6 +119,14 @@ define_keywords! {
         },
         default(input) -> proc_macro2::Span {
             input.parse::<default>()?.span
+        },
+        mapped(input) -> (Path, Punctuated<Expr, Token![,]>) {
+            input.parse::<mapped>()?;
+            let content;
+            syn::parenthesized!(content in input);
+            let id = content.parse()?;
+            content.parse::<Token![,]>()?;
+            (id, content.parse_terminated(Parse::parse)?)
         }
 }
 
