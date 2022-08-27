@@ -1023,7 +1023,7 @@ pub type Field<'a, H = MenuHandle> = (&'a str, Kind<'a, H>);
 ///
 /// It simply corresponds to a slice of fields.
 /// It is used for more convenience in the library.
-pub type Fields<'a, H = MenuHandle> = &'a [Field<'a, H>];
+pub type Fields<'a, H = MenuHandle> = Vec<Field<'a, H>>;
 
 /// Corresponds to the function mapped to a field.
 ///
@@ -1046,6 +1046,19 @@ pub enum Kind<'a, H = MenuHandle> {
     Back(usize),
     /// Closes all the nested menus to the top when the user selects the field.
     Quit,
+}
+
+pub trait IntoFields<'a, H = MenuHandle> {
+    fn into_fields(self) -> Fields<'a, H>;
+}
+
+impl<'a, H, T> IntoFields<'a, H> for T
+where
+    T: IntoIterator<Item = Field<'a, H>>,
+{
+    fn into_fields(self) -> Fields<'a, H> {
+        Vec::from_iter(self)
+    }
 }
 
 impl<'a, H> fmt::Debug for Kind<'a, H> {
@@ -1079,8 +1092,8 @@ pub mod kinds {
     }
 
     #[inline(always)]
-    pub fn parent<H>(f: Fields<'_, H>) -> Kind<'_, H> {
-        Kind::Parent(f)
+    pub fn parent<'a, I: IntoFields<'a, H>, H>(fields: I) -> Kind<'a, H> {
+        Kind::Parent(fields.into_fields())
     }
 
     #[inline(always)]

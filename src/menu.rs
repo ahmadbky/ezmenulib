@@ -189,6 +189,28 @@ pub trait Prompted: Sized {
     fn from_values<H: Handle>(vals: &mut Values<H>) -> MenuResult<Self>;
 }
 
+pub trait Menu {
+    fn fields<'a, H: Handle + 'static>() -> Fields<'a, H>;
+
+    fn raw_menu<'a, H: Handle + 'static>(h: H) -> RawMenu<'a, H>;
+
+    fn try_run_with<H: Handle + 'static>(h: H) -> MenuResult {
+        Self::raw_menu(h).run()
+    }
+
+    fn try_run() -> MenuResult {
+        Self::try_run_with(MenuHandle::default())
+    }
+
+    fn run_with<H: Handle + 'static>(h: H) {
+        Self::try_run_with(h).expect("unexpected error while prompting menu")
+    }
+
+    fn run() {
+        Self::try_run().expect("unexpected error while prompting menu")
+    }
+}
+
 /// Defines a menu, with a title, the fields, and the reader and writer types.
 ///
 /// It handles the [stream](MenuStream) and a [format](Format).
@@ -247,28 +269,31 @@ impl<H> Display for RawMenu<'_, H> {
 }
 
 impl<'a> RawMenu<'a> {
-    pub fn new(fields: Fields<'a>) -> Self {
-        check_fields(fields);
+    pub fn new<I>(fields: I) -> Self
+    where
+        I: IntoFields<'a>,
+    {
         Self::with_handle(MenuHandle::default(), fields)
     }
 }
 
-impl<'a> From<Fields<'a>> for RawMenu<'a> {
+impl<'a, I> From<I> for RawMenu<'a>
+where
+    I: IntoFields<'a>,
+{
     #[inline]
-    fn from(fields: Fields<'a>) -> Self {
+    fn from(fields: I) -> Self {
         Self::new(fields)
     }
 }
 
-impl<'a, const N: usize> From<&'a [Field<'a>; N]> for RawMenu<'a> {
-    #[inline]
-    fn from(fields: &'a [Field<'a>; N]) -> Self {
-        Self::from(fields.as_ref())
-    }
-}
-
 impl<'a, H> RawMenu<'a, H> {
-    pub fn with_handle(handle: H, fields: Fields<'a, H>) -> Self {
+    pub fn with_handle<I>(handle: H, fields: I) -> Self
+    where
+        I: IntoFields<'a, H>,
+    {
+        let fields = fields.into_fields();
+        check_fields(&fields);
         Self {
             fmt: Format::default(),
             title: None,
