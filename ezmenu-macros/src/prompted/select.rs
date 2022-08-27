@@ -398,6 +398,7 @@ fn get_default_fn<I: Iterator<Item = Entry>>(input: I) -> Option<MethodCall<Inde
 /// The expansion consists of the implementation of the `Selectable` trait for the given enum,
 /// with the given variants, and the `Prompted` trait.
 pub(crate) fn build_select(
+    used: TokenStream,
     attrs: Vec<Attribute>,
     name: Ident,
     gens: Generics,
@@ -421,6 +422,7 @@ pub(crate) fn build_select(
         #[automatically_derived]
         impl #root::field::Selectable<0> for #name {
             fn select() -> #root::field::Selected<'static, Self, 0> {
+                #used
                 unimplemented!()
             }
         }
@@ -455,6 +457,7 @@ pub(crate) fn build_select(
         #[automatically_derived]
         impl #root::field::Selectable<#n> for #name {
             fn select() -> #root::field::Selected<'static, Self, #n> {
+                #used
                 #root::field::Selected::new(#msg, [#(#entries),*])
                 #fmt_fn
                 #default_fn

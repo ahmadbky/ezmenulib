@@ -559,6 +559,7 @@ fn construct_ts(case: Option<&Case>, fields: Fields, gens: &mut Generics) -> Tok
 
 /// Expands the `derive(Prompted)` macro on a struct that contains fields.
 fn build_fields_struct(
+    used: TokenStream,
     attrs: Vec<Attribute>,
     name: Ident,
     mut gens: Generics,
@@ -573,6 +574,7 @@ fn build_fields_struct(
             #[automatically_derived]
             impl #impl_gens #root::menu::Prompted for #name #ty_gens #where_clause {
                 fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                    #used
                     unimplemented!()
                 }
             }
@@ -604,6 +606,7 @@ fn build_fields_struct(
             }
 
             fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                #used
                 #disp_title
                 Ok(#init)
             }
@@ -612,21 +615,29 @@ fn build_fields_struct(
 }
 
 /// Expands the `derive(Prompted)` macro for a struct.
-fn build_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics, fields: Fields) -> TokenStream {
+fn build_struct(
+    used: TokenStream,
+    attrs: Vec<Attribute>,
+    name: Ident,
+    gens: Generics,
+    fields: Fields,
+) -> TokenStream {
     match fields {
         Fields::Unit => build_unit_struct(attrs, name, gens),
-        other => build_fields_struct(attrs, name, gens, other),
+        other => build_fields_struct(used, attrs, name, gens, other),
     }
 }
 
 /// Expands the `derive(Prompted)` macro.
 pub(crate) fn build_prompted(input: DeriveInput) -> TokenStream {
+    let used = pretend_used(&input);
+
     match input.data {
         Data::Enum(DataEnum { variants, .. }) => {
-            build_select(input.attrs, input.ident, input.generics, variants)
+            build_select(used, input.attrs, input.ident, input.generics, variants)
         }
         Data::Struct(DataStruct { fields, .. }) => {
-            build_struct(input.attrs, input.ident, input.generics, fields)
+            build_struct(used, input.attrs, input.ident, input.generics, fields)
         }
         _ => abort_call_site!("derive(Prompted) only supports enums and structs"),
     }
