@@ -63,14 +63,14 @@ fn main() -> MenuResult {
     let edit_first = app.clone();
     let edit_last = app.clone();
 
-    RawMenu::from(&[
+    RawMenu::from([
         ("Play", mapped!(play, &*edit_play.borrow())),
         (
             "Settings",
-            parent(&[
+            parent([
                 (
                     "Name",
-                    parent(&[
+                    parent([
                         (
                             "Firstname",
                             map(move |s| edit_first.borrow_mut().change_firstname(s)),

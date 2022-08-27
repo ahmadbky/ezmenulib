@@ -1,6 +1,34 @@
 use ezmenulib::{field::kinds::*, menu::Handle, prelude::*};
 use std::io;
 
+#[derive(Menu)]
+enum Name {
+    #[menu(mapped(edit_name, "fir"))]
+    Firstname,
+    #[menu(mapped(edit_name, "la"))]
+    Lastname,
+    #[menu(back(2))]
+    MainMenu,
+}
+
+#[derive(Menu)]
+enum Settings {
+    #[menu(parent)]
+    Name,
+    #[menu(back)]
+    MainMenu,
+    Quit,
+}
+
+#[derive(Menu)]
+enum MainMenu {
+    #[menu(map(play))]
+    Play,
+    #[menu(parent)]
+    Settings,
+    Quit,
+}
+
 fn play<H: Handle>(s: &mut H) -> io::Result<()> {
     writeln!(s, "Now playing.")
 }
@@ -10,25 +38,5 @@ fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
 }
 
 fn main() {
-    RawMenu::from(&[
-        ("Play", map(play)),
-        (
-            "Settings",
-            parent(&[
-                (
-                    "Name",
-                    parent(&[
-                        ("Firstname", mapped!(edit_name, "fir")),
-                        ("Lastname", mapped!(edit_name, "la")),
-                        ("Main menu", back(2)),
-                    ]),
-                ),
-                ("Main menu", back(1)),
-                ("Quit", quit()),
-            ]),
-        ),
-        ("Quit", quit()),
-    ])
-    .run()
-    .unwrap();
+    MainMenu::run();
 }

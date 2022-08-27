@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use ezmenulib::prelude::*;
 
 /// Select a license type

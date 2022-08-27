@@ -12,9 +12,9 @@ fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
 
 #[derive(Menu)]
 enum Name {
-    #[menu(mapped(editname, "fir"))]
+    #[menu(mapped(edit_name, "fir"))]
     Firstname,
-    #[menu(mapped(editname, "la"))]
+    #[menu(mapped(edit_name, "la"))]
     Lastname,
     #[menu(back(2))]
     MainMenu,
@@ -22,15 +22,20 @@ enum Name {
 
 #[derive(Menu)]
 enum Settings {
-    #[menu(flatten)]
+    #[menu(parent)]
     Name,
+}
+
+#[bound]
+fn play() {
+    println!("salut");
 }
 
 #[derive(Menu)]
 enum Bonjour {
-    #[menu(bind(play))]
+    #[menu(map(play))]
     Play,
-    #[menu(flatten)]
+    #[menu(parent)]
     Settings,
     #[menu()]
     Quit,
