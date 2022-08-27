@@ -341,7 +341,7 @@ struct RootData {
 }
 
 impl RootData {
-    fn new(name: Ident, attrs: &[Attribute]) -> Self {
+    fn new(name: &Ident, attrs: &[Attribute]) -> Self {
         let (case, msg, fmt) = match get_attr_with_args(attrs, "prompt").map(take_val) {
             Some(RootAttr {
                 msg,
@@ -357,7 +357,7 @@ impl RootData {
                         if raw {
                             name.to_string()
                         } else {
-                            split_ident_camel_case(&name)
+                            split_ident_camel_case(name)
                         }
                     });
                 (case, case.unwrap_or_default().map(msg), fmt)
@@ -428,7 +428,7 @@ pub(crate) fn build_select(
         }
     });
 
-    let data = RootData::new(name.clone(), &attrs);
+    let data = RootData::new(&name, &attrs);
 
     // The message and optional `Selected::format` method call, retrieved from
     // the optional attribute and the name of the enum.
