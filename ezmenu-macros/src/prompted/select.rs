@@ -364,7 +364,7 @@ impl RootData {
             }
             None => (
                 None,
-                get_first_doc(attrs).unwrap_or_else(|| split_ident_camel_case(&name)),
+                get_first_doc(attrs).unwrap_or_else(|| split_ident_camel_case(name)),
                 None,
             ),
         };
