@@ -472,6 +472,7 @@ where
 
 #[cfg(feature = "password")]
 #[cfg_attr(nightly, doc(cfg(feature = "password")))]
+#[derive(Debug)]
 pub struct Password<'a> {
     msg: &'a str,
     pub fmt: Format<'a>,
@@ -1031,7 +1032,7 @@ pub type Fields<'a, H = MenuHandle> = Vec<Field<'a, H>>;
 ///
 /// See [`Kind::Map`] for more information.
 // pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
-pub type Callback<H = MenuHandle> = Box<dyn Fn(&mut H) -> MenuResult>;
+pub type Callback<H = MenuHandle> = Box<dyn FnMut(&mut H) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
 pub enum Kind<'a, H = MenuHandle> {
@@ -1083,9 +1084,9 @@ pub mod kinds {
         }};
     }
 
-    pub fn map<'a, F, R, H>(f: F) -> Kind<'a, H>
+    pub fn map<'a, F, R, H>(mut f: F) -> Kind<'a, H>
     where
-        F: Fn(&mut H) -> R + 'static,
+        F: FnMut(&mut H) -> R + 'static,
         R: IntoResult,
     {
         Kind::Map(Box::new(move |d| f(d).into_result()))

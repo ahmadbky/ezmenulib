@@ -174,13 +174,66 @@ pub mod __private {
     pub use core::result::Result;
     pub use core::str::FromStr;
     pub use std::string::String;
+    use std::sync::{Arc, RwLock};
+    use std::thread::LocalKey;
     pub use std::vec;
     #[cfg(feature = "tui")]
     pub use tui;
     #[allow(non_camel_case_types)]
     pub type str = ty_export::Str;
 
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
     mod ty_export {
         pub(super) type Str = str;
+    }
+
+    pub trait MutableStatic<T> {
+        type Out;
+
+        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R;
+
+        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R;
+    }
+
+    impl<T> MutableStatic<T> for LocalKey<Rc<RefCell<T>>> {
+        type Out = Rc<RefCell<T>>;
+
+        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+        {
+            self.with(|p| f(h, &*p.borrow()))
+        }
+
+        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+        {
+            self.with(|p| f(h, &mut *p.borrow_mut()))
+        }
+    }
+
+    impl<T> MutableStatic<T> for LocalKey<Arc<RwLock<T>>> {
+        type Out = Arc<RwLock<T>>;
+
+        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+        {
+            self.with(|p| f(h, &*p.read().unwrap()))
+        }
+
+        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+        {
+            self.with(|p| f(h, &mut *p.write().unwrap()))
+        }
     }
 }

@@ -9,6 +9,7 @@ use concat_idents::concat_idents as id;
 
 use crate::{
     format::Format,
+    menu::{MapWith, MappedWith},
     prompted::{promptable::RawSelectedField, FunctionExpr},
     utils::Case,
 };
@@ -89,6 +90,7 @@ define_keywords! {
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
         show_default: LitBool, suffix: LitStr, line_brk: LitBool,
     'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr, map: FunctionExpr,
+        mapped_with: MappedWith, map_with: MapWith,
     'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example, password,
         parent, quit, once,
     'else:
@@ -125,8 +127,13 @@ define_keywords! {
             let content;
             syn::parenthesized!(content in input);
             let id = content.parse()?;
-            content.parse::<Token![,]>()?;
-            (id, content.parse_terminated(Parse::parse)?)
+            let args = if input.peek(Token![,]) {
+                content.parse::<Token![,]>()?;
+                content.parse_terminated(Parse::parse)?
+            } else {
+                Punctuated::new()
+            };
+            (id, args)
         }
 }
 

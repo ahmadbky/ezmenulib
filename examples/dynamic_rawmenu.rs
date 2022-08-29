@@ -1,10 +1,5 @@
+use ezmenulib::{field::*, menu::Handle, prelude::*};
 use std::{cell::RefCell, fmt, io, rc::Rc};
-
-use ezmenulib::{
-    field::{kinds::*, *},
-    menu::Handle,
-    prelude::*,
-};
 
 struct App {
     firstname: String,
@@ -53,41 +48,42 @@ fn change_name<H: Handle>(mut s: H, name: &mut String, span: &str) -> MenuResult
     Ok(())
 }
 
+thread_local! {
+    static APP: Rc<RefCell<App>> = Default::default();
+}
+
+#[derive(Menu)]
+enum Name {
+    #[menu(map_with(mut APP: |h| app.change_firstname(h)))]
+    EditFirstname,
+    #[menu(map_with(mut APP: |h| app.change_lastname(h)))]
+    EditLastname,
+    #[menu(back(2))]
+    MainMenu,
+}
+
+#[derive(Menu)]
+enum Settings {
+    #[menu(parent)]
+    Name,
+    #[menu(back)]
+    MainMenu,
+    Quit,
+}
+
+#[derive(Menu)]
+enum MainMenu {
+    #[menu(map_with(APP: play))]
+    Play,
+    #[menu(parent)]
+    Settings,
+    Quit,
+}
+
 fn play<H: Handle>(mut s: H, play: &App) -> io::Result<()> {
     writeln!(s, "Now playing with {play}")
 }
 
-fn main() -> MenuResult {
-    let app = Rc::new(RefCell::new(App::default()));
-    let edit_play = app.clone();
-    let edit_first = app.clone();
-    let edit_last = app.clone();
-
-    RawMenu::from([
-        ("Play", mapped!(play, &*edit_play.borrow())),
-        (
-            "Settings",
-            parent([
-                (
-                    "Name",
-                    parent([
-                        (
-                            "Firstname",
-                            map(move |s| edit_first.borrow_mut().change_firstname(s)),
-                        ),
-                        (
-                            "Lastname",
-                            map(move |s| edit_last.borrow_mut().change_lastname(s)),
-                        ),
-                        ("Main menu", back(2)),
-                    ]),
-                ),
-                ("Main menu", back(1)),
-                ("Quit", quit()),
-            ]),
-        ),
-        ("Quit", quit()),
-    ])
-    .title("Basic menu")
-    .run()
+fn main() {
+    MainMenu::run();
 }

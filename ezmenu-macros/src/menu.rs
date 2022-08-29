@@ -2,8 +2,10 @@ use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site, set_dummy};
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
-    punctuated::Punctuated, Attribute, Data, DataEnum, DeriveInput, Expr, Fields, Ident, Index,
-    LitStr, Path, Token, Variant,
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    Attribute, Data, DataEnum, DeriveInput, Expr, ExprClosure, Fields, Ident, Index, LitStr, Pat,
+    PatIdent, Path, Token, Variant,
 };
 
 use crate::{
@@ -12,8 +14,8 @@ use crate::{
     pretend::pretend_used,
     prompted::FunctionExpr,
     utils::{
-        get_attr_with_args, get_first_doc, get_lib_root, method_call, method_call_empty,
-        split_ident_camel_case, wrap_in_const, Case,
+        get_attr_with_args, get_first_doc, get_last_seg_of_path, get_lib_root, method_call,
+        method_call_empty, split_ident_camel_case, wrap_in_const, Case,
     },
 };
 
@@ -24,17 +26,143 @@ define_attr! {
         raw: bool; without msg,
         nodoc: bool; without msg,
 
+        mapped_with: Option<MappedWith>; without mapped; map_with; map; parent; back; quit,
         mapped: Option<(Path, Punctuated<Expr, Token![,]>)>; without
-            map; parent; back; quit,
-        map: Option<FunctionExpr>; without mapped; parent; back; quit,
-        parent: bool; without mapped; map; back; quit,
-        back: Option<Index>; without mapped; map; parent; quit,
-        quit: bool; without mapped; map; parent; back,
+            mapped_with; map_with; map; parent; back; quit,
+        map_with: Option<MapWith>; without mapped_with; mapped; map; parent; back; quit,
+        map: Option<FunctionExpr>; without mapped_with; mapped; map_with; parent; back; quit,
+        parent: bool; without mapped_with; mapped; map_with; map; back; quit,
+        back: Option<Index>; without mapped_with; mapped; map_with; map; parent; quit,
+        quit: bool; without mapped_with; mapped; map_with; map; parent; back,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MappedWith {
+    mutable: bool,
+    static_path: Path,
+    static_ident: Ident,
+    fn_path: Path,
+    args: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for MappedWith {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mutable = if input.peek(Token![mut]) {
+            input.parse::<Token![mut]>()?;
+            true
+        } else {
+            false
+        };
+
+        let static_path = input.parse()?;
+        let static_ident = get_last_seg_of_path(&static_path).unwrap().ident.clone();
+        let static_ident = Ident::new(
+            static_ident.to_string().to_lowercase().as_str(),
+            static_ident.span(),
+        );
+        input.parse::<Token![:]>()?;
+
+        let fn_path = input.parse()?;
+
+        let args = if input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+            input.parse_terminated(Parse::parse)?
+        } else {
+            Punctuated::new()
+        };
+
+        Ok(Self {
+            mutable,
+            static_path,
+            static_ident,
+            fn_path,
+            args,
+        })
+    }
+}
+
+impl ToTokens for MappedWith {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let static_path = &self.static_path;
+        let static_ident = &self.static_ident;
+        let root = get_lib_root().1;
+        let map_fn = if self.mutable { "map_mut" } else { "map" };
+        let map_fn = Ident::new(map_fn, Span::call_site());
+        let fn_path = &self.fn_path;
+        let args = &self.args;
+
+        quote! {
+            |__h| #root::__private::MutableStatic::#map_fn(
+                &#static_path, __h, move |__h, #static_ident| #fn_path(__h, #static_ident, #args)
+            )
+        }
+        .to_tokens(tokens);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MapWith {
+    mutable: bool,
+    static_path: Path,
+    fn_expr: FunctionExpr,
+}
+
+impl Parse for MapWith {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mutable = if input.peek(Token![mut]) {
+            input.parse::<Token![mut]>()?;
+            true
+        } else {
+            false
+        };
+
+        let static_path = input.parse()?;
+        let static_ident = get_last_seg_of_path(&static_path).unwrap().ident.clone();
+        let static_ident = Ident::new(
+            static_ident.to_string().to_lowercase().as_str(),
+            static_ident.span(),
+        );
+        input.parse::<Token![:]>()?;
+
+        let mut fn_expr = input.parse::<FunctionExpr>()?;
+        if let FunctionExpr::Closure(ExprClosure { inputs, .. }) = &mut fn_expr {
+            inputs.push(Pat::Ident(PatIdent {
+                ident: static_ident,
+                attrs: vec![],
+                by_ref: None,
+                mutability: None,
+                subpat: None,
+            }));
+        }
+
+        Ok(Self {
+            mutable,
+            static_path,
+            fn_expr,
+        })
+    }
+}
+
+impl ToTokens for MapWith {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let static_path = &self.static_path;
+        let root = get_lib_root().1;
+        let map_fn = if self.mutable { "map_mut" } else { "map" };
+        let map_fn = Ident::new(map_fn, Span::call_site());
+        let fn_expr = &self.fn_expr;
+
+        quote! {
+            |__h| #root::__private::MutableStatic::#map_fn(&#static_path, __h, #fn_expr)
+        }
+        .to_tokens(tokens);
     }
 }
 
 enum EntryKind {
+    MappedWith(MappedWith),
     Mapped(Path, Punctuated<Expr, Token![,]>),
+    MapWith(MapWith),
     Map(FunctionExpr),
     Parent(Ident),
     Back(Index),
@@ -51,6 +179,10 @@ impl EntryKind {
             Self::Back(i.clone())
         } else if raw_attr.parent {
             Self::Parent(id.clone())
+        } else if let Some(map_with) = &raw_attr.map_with {
+            Self::MapWith(map_with.clone())
+        } else if let Some(mapped_with) = &raw_attr.mapped_with {
+            Self::MappedWith(mapped_with.clone())
         } else {
             Self::Quit
         }
@@ -63,7 +195,9 @@ impl ToTokens for EntryKind {
         quote!(#root::field::kinds::).to_tokens(tokens);
 
         let (id, args) = match self {
-            Self::Mapped(path, args) => ("map", quote!(move |s| #path(s, #args))),
+            Self::MappedWith(mapped) => ("map", mapped.to_token_stream()),
+            Self::Mapped(path, args) => ("map", quote!(move |__h| #path(__h, #args))),
+            Self::MapWith(map) => ("map", map.to_token_stream()),
             Self::Map(func) => ("map", func.to_token_stream()),
             Self::Parent(id) => ("parent", quote!(<#id as #root::menu::Menu>::fields())),
             Self::Back(i) => ("back", i.to_token_stream()),

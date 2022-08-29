@@ -337,7 +337,7 @@ impl<H: Handle> RawMenu<'_, H> {
                 once: self.once,
             },
             self.title,
-            &self.fields,
+            &mut self.fields,
         )
         .map(|_| ())
     }
@@ -355,7 +355,7 @@ struct RunParams<'a, 'b: 'a, H> {
 fn show_menu<H: Handle>(
     params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: &[Field<H>],
+    fields: &mut [Field<H>],
 ) -> MenuResult {
     // Title of current selective menu.
     if let Some(s) = msg {
@@ -378,7 +378,7 @@ fn show_menu<H: Handle>(
 fn handle_field<H: Handle>(
     params: &mut RunParams<H>,
     msg: &str,
-    kind: &Kind<H>,
+    kind: &mut Kind<H>,
 ) -> MenuResult<Depth> {
     use Depth::*;
 
@@ -397,7 +397,7 @@ fn handle_field<H: Handle>(
             Back(i) => Back(i - 1),
         },
         Kind::Back(0) => Current,
-        Kind::Back(i) => Back(i - 1),
+        Kind::Back(i) => Back(*i - 1),
         Kind::Quit => Quit,
     })
 }
@@ -413,7 +413,7 @@ fn handle_field<H: Handle>(
 fn run_with<H: Handle>(
     params: &mut RunParams<H>,
     msg: Option<&str>,
-    fields: &[Field<H>],
+    fields: &mut [Field<H>],
 ) -> MenuResult<Depth> {
     loop {
         show_menu(params, msg, fields)?;
@@ -421,7 +421,7 @@ fn run_with<H: Handle>(
         // Gets the message and the field kind selected by the user.
         let (msg, kind) = loop {
             match select(&mut params.handle, params.fmt.suffix, fields.len())?
-                .and_then(|i| fields.get(i))
+                .and_then(|i| fields.get_mut(i))
             {
                 Some(field) => break field,
                 None => continue,
