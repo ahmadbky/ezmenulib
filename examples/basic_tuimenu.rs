@@ -1,4 +1,3 @@
-use ::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ::tui::{
     backend::{Backend, CrosstermBackend},
     Terminal,
@@ -6,7 +5,7 @@ use ::tui::{
 use crossterm::{
     event::{read, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ezmenulib::{prelude::*, tui::*};
 use std::io::{self, stdout, Write};

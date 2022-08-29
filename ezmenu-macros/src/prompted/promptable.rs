@@ -106,7 +106,7 @@ impl Selected {
 
 impl ToTokens for Selected {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let msg = &self.msg;
         let entries = &self.entries;
 
@@ -128,7 +128,7 @@ pub(super) struct Written {
 
 impl ToTokens for Written {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let msg = &self.msg;
 
         let mut out = quote!(#root::field::Written::new(#msg));
@@ -148,7 +148,7 @@ pub(super) struct Until {
 
 impl ToTokens for Until {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let inner = &self.inner;
         let til = &self.til;
         quote!(#root::field::Until::from_promptable(#inner, #til)).to_tokens(tokens);
@@ -163,7 +163,7 @@ pub(super) struct Separated {
 
 impl ToTokens for Separated {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let w = &self.w;
         let sep = &self.sep;
         quote!(#root::field::Separated::from_written(#w, #sep)).to_tokens(tokens);
@@ -178,7 +178,7 @@ pub(super) struct Bool {
 
 impl ToTokens for Bool {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let w = &self.w;
         quote!(#root::field::Bool::from_written(#w)).to_tokens(tokens);
         self.basic_example.to_tokens(tokens);
@@ -192,7 +192,7 @@ pub(super) struct Password {
 
 impl ToTokens for Password {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         let msg = &self.msg;
         quote!(#root::field::Password::new(#msg)).to_tokens(tokens);
         self.fmt.to_tokens(tokens);

@@ -165,3 +165,22 @@ impl IntoResult for () {
         Ok(())
     }
 }
+
+#[doc(hidden)]
+pub mod __private {
+    pub use core::default::Default;
+    pub use core::option::Option;
+    pub use core::ptr::addr_of;
+    pub use core::result::Result;
+    pub use core::str::FromStr;
+    pub use std::string::String;
+    pub use std::vec;
+    #[cfg(feature = "tui")]
+    pub use tui;
+    #[allow(non_camel_case_types)]
+    pub type str = ty_export::Str;
+
+    mod ty_export {
+        pub(super) type Str = str;
+    }
+}

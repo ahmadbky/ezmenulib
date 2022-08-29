@@ -15,7 +15,7 @@ use crate::{
     kw::define_attr,
     utils::{
         get_attr_with_args, get_first_doc, get_lib_root, method_call, split_ident_camel_case,
-        take_val, Case, MethodCall,
+        take_val, wrap_in_const, Case, MethodCall,
     },
 };
 
@@ -409,12 +409,12 @@ pub(crate) fn build_select(
     }
 
     // The name of the library.
-    let root = get_lib_root();
+    let root = get_lib_root().1;
 
-    set_dummy(quote! {
+    set_dummy(wrap_in_const(quote! {
         #[automatically_derived]
         impl #root::menu::Prompted for #name {
-            fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+            fn from_values<__H: #root::menu::Handle>(_: &mut #root::menu::Values<__H>) -> #root::MenuResult<Self> {
                 unimplemented!()
             }
         }
@@ -426,7 +426,7 @@ pub(crate) fn build_select(
                 unimplemented!()
             }
         }
-    });
+    }));
 
     let data = RootData::new(&name, &attrs);
 
@@ -446,11 +446,11 @@ pub(crate) fn build_select(
     // We retrieve the `Selectable::default` function expansion from the entries.
     let default_fn = get_default_fn(entries.clone());
 
-    quote! {
+    wrap_in_const(quote! {
         #[automatically_derived]
         impl #root::menu::Prompted for #name {
-            fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
-                vals.next(#root::field::Selectable::select())
+            fn from_values<__H: #root::menu::Handle>(__vals: &mut #root::menu::Values<__H>) -> #root::MenuResult<Self> {
+                __vals.next(#root::field::Selectable::select())
             }
         }
 
@@ -463,5 +463,5 @@ pub(crate) fn build_select(
                 #default_fn
             }
         }
-    }
+    })
 }

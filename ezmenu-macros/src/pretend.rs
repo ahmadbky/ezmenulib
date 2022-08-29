@@ -6,7 +6,7 @@ use syn::{
     Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed, Token, Variant,
 };
 
-use crate::utils::{get_attr_with_args, take_val};
+use crate::utils::{get_attr_with_args, get_lib_root, take_val};
 
 pub(crate) fn pretend_used(input: &DeriveInput) -> TokenStream {
     match &input.data {
@@ -18,7 +18,7 @@ pub(crate) fn pretend_used(input: &DeriveInput) -> TokenStream {
 
 fn used_enum(input: &DeriveInput, variants: &Punctuated<Variant, Token![,]>) -> TokenStream {
     let name = &input.ident;
-    let (_, ty_gens, _) = input.generics.split_for_impl();
+    let ty_gens = input.generics.split_for_impl().1;
     let turbofish = ty_gens.as_turbofish();
 
     let patterns: Punctuated<_, Token![,]> = variants
@@ -103,15 +103,16 @@ fn used_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
 
 fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     let name = &input.ident;
-    let (_, ty_gens, _) = input.generics.split_for_impl();
+    let ty_gens = input.generics.split_for_impl().1;
     let fields = fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
+    let root = get_lib_root().1;
 
     #[cfg(not(no_ptr_addr_of))]
     {
         quote! {
-            match ::core::option::Option::<&#name #ty_gens>::None {
-                ::core::option::Option::Some(__v @ #name { #(#fields: _),* }) => {#(
-                    let _ = ::core::ptr::addr_of!(__v.#fields);
+            match #root::__private::Option::<&#name #ty_gens>::None {
+                #root::__private::Option::Some(__v @ #name { #(#fields: _),* }) => {#(
+                    let _ = #root::__private::addr_of!(__v.#fields);
                 )*}
                 _ => (),
             }
@@ -123,8 +124,8 @@ fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
         let vals = (0..fields.len()).map(|i| format_ident!("__v{}", i));
 
         quote! {
-            match ::core::option::Option::<#name #ty_gens>::None {
-                ::core::option::Option::Some(#name { #(#fields: #vals),* }) = (),
+            match #root::__private::Option::<#name #ty_gens>::None {
+                #root::__private::Option::Some(#name { #(#fields: #vals),* }) = (),
                 _ => (),
             }
         }
@@ -133,14 +134,16 @@ fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
 
 fn used_not_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     let name = &input.ident;
-    let (_, ty_gens, _) = input.generics.split_for_impl();
+    let ty_gens = input.generics.split_for_impl().1;
 
     let vals = (0..fields.len()).map(|i| format_ident!("__v{}", i));
     let fields = fields.iter().map(|f| &f.ident);
 
+    let root = get_lib_root().1;
+
     quote! {
-        match ::core::option::Option::<&#name #ty_gens>::None {
-            ::core::option::Option::Some(#name { #(#fields: #vals),* }) => (),
+        match #root::__private::Option::<&#name #ty_gens>::None {
+            #root::__private::Option::Some(#name { #(#fields: #vals),* }) => (),
             _ => (),
         }
     }

@@ -36,9 +36,10 @@ macro_rules! impl_fmt {
 
         impl ToTokens for Format {
             fn to_tokens(&self, tokens: &mut TokenStream) {
-                let root = get_lib_root();
+                let root = get_lib_root().1;
                 $(let $field = self.inner.$field.as_ref().map(|v| quote!($field: #v,)));*;
-                let base_struct = self.some_omitted.then(|| quote!(..Default::default()));
+                let base_struct = self.some_omitted
+                    .then(|| quote!(..#root::__private::Default::default()));
                 quote! {
                     #root::field::Format {
                         $(#$field)*

@@ -22,7 +22,8 @@ use crate::{
     utils::{
         get_attr_with_args, get_first_doc, get_last_seg_of_ty, get_lib_root, get_lib_root_spanned,
         get_nested_args, get_ty_ident, is_ty, method_call, method_call_empty,
-        split_ident_camel_case, split_ident_snake_case, take_val, Case, MethodCall, Sp,
+        split_ident_camel_case, split_ident_snake_case, take_val, wrap_in_const, Case, MethodCall,
+        Sp,
     },
 };
 
@@ -299,7 +300,7 @@ impl FieldPrompt {
         if attr.val.flatten {
             // Flattened prompt, we call `Prompted::from_values` method for this field
             if let Some(id) = get_ty_ident(&field.ty) {
-                let root = get_lib_root();
+                let root = get_lib_root().1;
                 check_for_bound(gens, id, quote!(#root::menu::Prompted));
             }
             Self::Flatten(field.ty.span())
@@ -323,10 +324,11 @@ impl ToTokens for FieldPrompt {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
             FieldPrompt::Flatten(sp) => {
-                let root = get_lib_root_spanned(*sp);
-                quote_spanned!(*sp=> #root::menu::Prompted::from_values(vals)?).to_tokens(tokens);
+                let root = get_lib_root_spanned(*sp).1;
+                quote_spanned!(*sp=> #root::menu::Prompted::from_values(__vals)?)
+                    .to_tokens(tokens);
             }
-            FieldPrompt::Basic(call) => quote!(vals #call).to_tokens(tokens),
+            FieldPrompt::Basic(call) => quote!(__vals #call).to_tokens(tokens),
         }
     }
 }
@@ -493,18 +495,20 @@ fn build_unit_struct(attrs: Vec<Attribute>, name: Ident, gens: Generics) -> Toke
 
     let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
 
-    quote! {
+    let root = get_lib_root().1;
+
+    wrap_in_const(quote! {
         #[automatically_derived]
-        impl #impl_gens ::core::str::FromStr for #name #ty_gens #where_clause {
-            type Err = String;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
+        impl #impl_gens #root::__private::FromStr for #name #ty_gens #where_clause {
+            type Err = #root::__private::String;
+            fn from_str(s: &#root::__private::str) -> #root::__private::Result<Self, Self::Err> {
                 match s.to_lowercase().as_str() {
-                    #low_name => Ok(Self),
-                    _ => Err(#err_msg.to_owned()),
+                    #low_name => #root::__private::Result::Ok(Self),
+                    _ => #root::__private::Result::Err(#err_msg.to_owned()),
                 }
             }
         }
-    }
+    })
 }
 
 /// Returns the TokenStream of the `writeln!(...)` instruction to display a message
@@ -540,7 +544,7 @@ fn disp_title_ts(data: &RootFieldsAttr, attrs: &[Attribute], name: &Ident) -> To
         None => name,
     };
 
-    quote!(writeln!(vals.handle, #name)?;)
+    quote!(writeln!(__vals.handle, #name)?;)
 }
 
 /// Returns the TokenStream of the struct construction.
@@ -567,19 +571,19 @@ fn build_fields_struct(
     fields: Fields,
 ) -> TokenStream {
     // The name of the library.
-    let root = get_lib_root();
+    let root = get_lib_root().1;
 
     {
         let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
-        set_dummy(quote! {
+        set_dummy(wrap_in_const(quote! {
             #[automatically_derived]
             impl #impl_gens #root::menu::Prompted for #name #ty_gens #where_clause {
-                fn from_values<H: #root::menu::Handle>(_: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+                fn from_values<__H: #root::menu::Handle>(_: &mut #root::menu::Values<__H>) -> #root::MenuResult<Self> {
                     #used
                     unimplemented!()
                 }
             }
-        });
+        }));
     }
 
     let data = RootFieldsAttr::from(attrs.as_ref());
@@ -599,20 +603,20 @@ fn build_fields_struct(
 
     let (impl_gens, ty_gens, where_clause) = gens.split_for_impl();
 
-    quote! {
+    wrap_in_const(quote! {
         #[automatically_derived]
         impl #impl_gens #root::menu::Prompted for #name #ty_gens #where_clause {
-            fn try_prompt_with<H: #root::menu::Handle>(handle: H) -> #root::MenuResult<Self> {
-                Self::from_values(&mut #root::menu::Values::from_handle(handle) #fmt_fn)
+            fn try_prompt_with<__H: #root::menu::Handle>(__handle: __H) -> #root::MenuResult<Self> {
+                Self::from_values(&mut #root::menu::Values::from_handle(__handle) #fmt_fn)
             }
 
-            fn from_values<H: #root::menu::Handle>(vals: &mut #root::menu::Values<H>) -> #root::MenuResult<Self> {
+            fn from_values<__H: #root::menu::Handle>(__vals: &mut #root::menu::Values<__H>) -> #root::MenuResult<Self> {
                 #used
                 #disp_title
-                Ok(#init)
+                #root::MenuResult::Ok(#init)
             }
         }
-    }
+    })
 }
 
 /// Expands the `derive(Prompted)` macro for a struct.

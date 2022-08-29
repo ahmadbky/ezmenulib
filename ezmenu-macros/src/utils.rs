@@ -2,7 +2,7 @@ use std::{fmt::Display, marker::PhantomData};
 
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
-use quote::{quote, quote_spanned, ToTokens};
+use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote,
@@ -34,17 +34,30 @@ macro_rules! to_str {
 
 pub(crate) use to_str;
 
-/// Util function used to return the token stream of the path of the library name.
-///
-/// This function exists because the library name might change in the future.
+pub(crate) fn wrap_in_const(code: TokenStream) -> TokenStream {
+    let (name, reexport) = get_lib_root();
+
+    quote! {
+        #[doc(hidden)]
+        #[allow(non_upper_case_globals, unused_attributes, unused_qualifications)]
+        const _: () = {
+            #[allow(unused_extern_crates, clippy::useless_attribute)]
+            extern crate #name as #reexport;
+            #code
+        };
+    }
+}
+
 #[inline(always)]
-pub(crate) fn get_lib_root() -> TokenStream {
+pub(crate) fn get_lib_root() -> (Ident, Ident) {
     get_lib_root_spanned(Span::call_site())
 }
 
 #[inline(always)]
-pub(crate) fn get_lib_root_spanned(span: Span) -> TokenStream {
-    quote_spanned!(span=> ::ezmenulib)
+pub(crate) fn get_lib_root_spanned(span: Span) -> (Ident, Ident) {
+    let name = Ident::new("ezmenulib", span);
+    let reexport = format_ident!("_{}", name);
+    (name, reexport)
 }
 
 pub(crate) struct Sp<T> {

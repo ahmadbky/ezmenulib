@@ -13,7 +13,7 @@ use crate::{
     prompted::FunctionExpr,
     utils::{
         get_attr_with_args, get_first_doc, get_lib_root, method_call, method_call_empty,
-        split_ident_camel_case, Case,
+        split_ident_camel_case, wrap_in_const, Case,
     },
 };
 
@@ -59,7 +59,7 @@ impl EntryKind {
 
 impl ToTokens for EntryKind {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root();
+        let root = get_lib_root().1;
         quote!(#root::field::kinds::).to_tokens(tokens);
 
         let (id, args) = match self {
@@ -203,22 +203,22 @@ pub(crate) fn build_menu(input: DeriveInput) -> TokenStream {
     let used = pretend_used(&input);
 
     let name = input.ident;
-    let root = get_lib_root();
+    let root = get_lib_root().1;
 
-    set_dummy(quote! {
+    set_dummy(wrap_in_const(quote! {
         impl #root::menu::Menu for #name {
-            fn fields<'a, H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, H> {
+            fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
                 #used
                 unimplemented!()
             }
 
-            fn raw_menu<'a, H: #root::menu::Handle + 'static>(
-                _: H,
-            ) -> #root::menu::RawMenu<'a, H> {
+            fn raw_menu<'a, __H: #root::menu::Handle + 'static>(
+                _: __H,
+            ) -> #root::menu::RawMenu<'a, __H> {
                 unimplemented!()
             }
         }
-    });
+    }));
 
     let data = RootData::new(&name, &input.attrs);
 
@@ -233,21 +233,21 @@ pub(crate) fn build_menu(input: DeriveInput) -> TokenStream {
         _ => abort_call_site!("derive(Menu) supports only unit enums"),
     };
 
-    quote! {
+    wrap_in_const(quote! {
         impl #root::menu::Menu for #name {
-            fn fields<'a, H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, H> {
+            fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
                 #used
-                vec![#(#fields),*]
+                #root::__private::vec![#(#fields),*]
             }
 
-            fn raw_menu<'a, H: #root::menu::Handle + 'static>(
-                h: H,
-            ) -> #root::menu::RawMenu<'a, H> {
-                #root::menu::RawMenu::with_handle(h, Self::fields())
+            fn raw_menu<'a, __H: #root::menu::Handle + 'static>(
+                __h: __H,
+            ) -> #root::menu::RawMenu<'a, __H> {
+                #root::menu::RawMenu::with_handle(__h, Self::fields())
                 #fmt_fn
                 #title_fn
                 #once_fn
             }
         }
-    }
+    })
 }

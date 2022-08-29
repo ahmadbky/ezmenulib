@@ -36,11 +36,14 @@ fn get_or_push_h_gen(tui: bool, gens: &mut Generics) -> Ident {
     if let Some(id) = get_h_gen(tui, gens) {
         id.clone()
     } else {
+        let root = get_lib_root().0;
         let (id, path): (_, Path) = if tui {
-            ("__Backend", parse_quote!(::tui::backend::Backend))
+            (
+                "__Backend",
+                parse_quote!(::#root::__private::tui::backend::Backend),
+            )
         } else {
-            let root = get_lib_root();
-            ("__Handle", parse_quote!(#root::menu::Handle))
+            ("__Handle", parse_quote!(::#root::menu::Handle))
         };
         let id = Ident::new(id, Span::call_site());
         gens.params.push(parse_quote!(#id: #path));
@@ -102,9 +105,10 @@ fn needs_insert(tui: bool, id: &Ident, args: &Punctuated<FnArg, Token![,]>) -> b
 fn append_handle(tui: bool, input: &mut Signature) {
     check_sig(input);
 
+    let root = get_lib_root().0;
     let id = get_or_push_h_gen(tui, &mut input.generics);
     let id_ts = if tui {
-        quote!(::tui::Terminal<#id>)
+        quote!(::#root::__private::tui::Terminal<#id>)
     } else {
         id.to_token_stream()
     };

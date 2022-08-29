@@ -1,4 +1,4 @@
-use ezmenulib::{field::kinds::*, menu::Handle, prelude::*};
+use ezmenulib::{menu::Handle, prelude::*};
 use std::io;
 
 #[derive(Menu)]
