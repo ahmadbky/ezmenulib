@@ -38,15 +38,13 @@ define_attr! {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MappedWith {
+struct InnerMapWith {
     mutable: bool,
     static_path: Path,
     static_ident: Ident,
-    fn_path: Path,
-    args: Punctuated<Expr, Token![,]>,
 }
 
-impl Parse for MappedWith {
+impl Parse for InnerMapWith {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mutable = if input.peek(Token![mut]) {
             input.parse::<Token![mut]>()?;
@@ -63,8 +61,40 @@ impl Parse for MappedWith {
         );
         input.parse::<Token![:]>()?;
 
-        let fn_path = input.parse()?;
+        Ok(Self {
+            mutable,
+            static_path,
+            static_ident,
+        })
+    }
+}
 
+impl InnerMapWith {
+    fn to_tokens_with(&self, tokens: &mut TokenStream, arg: TokenStream) {
+        let root = get_lib_root().1;
+        let static_path = &self.static_path;
+        let map_fn = if self.mutable { "map_mut" } else { "map" };
+
+        quote! {
+            |__h| #root::__private::MutableStatic::#map_fn(
+                &#static_path, __h, #arg
+            )
+        }
+        .to_tokens(tokens);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MappedWith {
+    inner: InnerMapWith,
+    fn_path: Path,
+    args: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for MappedWith {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let inner = input.call(Parse::parse)?;
+        let fn_path = input.parse()?;
         let args = if input.peek(Token![,]) {
             input.parse::<Token![,]>()?;
             input.parse_terminated(Parse::parse)?
@@ -73,9 +103,7 @@ impl Parse for MappedWith {
         };
 
         Ok(Self {
-            mutable,
-            static_path,
-            static_ident,
+            inner,
             fn_path,
             args,
         })
@@ -84,51 +112,31 @@ impl Parse for MappedWith {
 
 impl ToTokens for MappedWith {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let static_path = &self.static_path;
-        let static_ident = &self.static_ident;
-        let root = get_lib_root().1;
-        let map_fn = if self.mutable { "map_mut" } else { "map" };
-        let map_fn = Ident::new(map_fn, Span::call_site());
+        let static_ident = &self.inner.static_ident;
         let fn_path = &self.fn_path;
         let args = &self.args;
 
-        quote! {
-            |__h| #root::__private::MutableStatic::#map_fn(
-                &#static_path, __h, move |__h, #static_ident| #fn_path(__h, #static_ident, #args)
-            )
-        }
-        .to_tokens(tokens);
+        self.inner.to_tokens_with(
+            tokens,
+            quote!(move |__h, #static_ident| #fn_path(__h, #static_ident, #args)),
+        );
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct MapWith {
-    mutable: bool,
-    static_path: Path,
+    inner: InnerMapWith,
     fn_expr: FunctionExpr,
 }
 
 impl Parse for MapWith {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mutable = if input.peek(Token![mut]) {
-            input.parse::<Token![mut]>()?;
-            true
-        } else {
-            false
-        };
-
-        let static_path = input.parse()?;
-        let static_ident = get_last_seg_of_path(&static_path).unwrap().ident.clone();
-        let static_ident = Ident::new(
-            static_ident.to_string().to_lowercase().as_str(),
-            static_ident.span(),
-        );
-        input.parse::<Token![:]>()?;
+        let inner = input.call(InnerMapWith::parse)?;
 
         let mut fn_expr = input.parse::<FunctionExpr>()?;
         if let FunctionExpr::Closure(ExprClosure { inputs, .. }) = &mut fn_expr {
             inputs.push(Pat::Ident(PatIdent {
-                ident: static_ident,
+                ident: inner.static_ident.clone(),
                 attrs: vec![],
                 by_ref: None,
                 mutability: None,
@@ -136,26 +144,14 @@ impl Parse for MapWith {
             }));
         }
 
-        Ok(Self {
-            mutable,
-            static_path,
-            fn_expr,
-        })
+        Ok(Self { inner, fn_expr })
     }
 }
 
 impl ToTokens for MapWith {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let static_path = &self.static_path;
-        let root = get_lib_root().1;
-        let map_fn = if self.mutable { "map_mut" } else { "map" };
-        let map_fn = Ident::new(map_fn, Span::call_site());
-        let fn_expr = &self.fn_expr;
-
-        quote! {
-            |__h| #root::__private::MutableStatic::#map_fn(&#static_path, __h, #fn_expr)
-        }
-        .to_tokens(tokens);
+        self.inner
+            .to_tokens_with(tokens, self.fn_expr.to_token_stream());
     }
 }
 
