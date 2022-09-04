@@ -155,47 +155,24 @@ impl ToTokens for MapWith {
     }
 }
 
-enum EntryKind {
+enum EntryKindType<'a> {
     MappedWith(MappedWith),
     Mapped(Path, Punctuated<Expr, Token![,]>),
     MapWith(MapWith),
     Map(FunctionExpr),
-    Parent(Ident),
+    Parent(Ident, &'a TokenStream),
     Back(Index),
     Quit,
 }
 
-impl EntryKind {
-    fn new(id: &Ident, raw_attr: &RawEntryAttr) -> Self {
-        if let Some((path, args)) = &raw_attr.mapped {
-            Self::Mapped(path.clone(), args.clone())
-        } else if let Some(func) = &raw_attr.map {
-            Self::Map(func.clone())
-        } else if let Some(i) = &raw_attr.back {
-            Self::Back(i.clone())
-        } else if raw_attr.parent {
-            Self::Parent(id.clone())
-        } else if let Some(map_with) = &raw_attr.map_with {
-            Self::MapWith(map_with.clone())
-        } else if let Some(mapped_with) = &raw_attr.mapped_with {
-            Self::MappedWith(mapped_with.clone())
-        } else {
-            Self::Quit
-        }
-    }
-}
-
-impl ToTokens for EntryKind {
+impl ToTokens for EntryKindType<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let root = get_lib_root().1;
-        quote!(#root::field::kinds::).to_tokens(tokens);
-
-        let (id, args) = match self {
+        let (id, args) = match &self {
             Self::MappedWith(mapped) => ("map", mapped.to_token_stream()),
             Self::Mapped(path, args) => ("map", quote!(move |__h| #path(__h, #args))),
             Self::MapWith(map) => ("map", map.to_token_stream()),
-            Self::Map(func) => ("map", func.to_token_stream()),
-            Self::Parent(id) => ("parent", quote!(<#id as #root::menu::Menu>::fields())),
+            Self::Map(map) => ("map", map.to_token_stream()),
+            Self::Parent(id, trait_path) => ("parent", quote!(<#id as #trait_path>::fields())),
             Self::Back(i) => ("back", i.to_token_stream()),
             Self::Quit => ("quit", TokenStream::new()),
         };
@@ -205,13 +182,30 @@ impl ToTokens for EntryKind {
     }
 }
 
-struct EntryField {
-    msg: String,
-    kind: EntryKind,
+struct EntryKind<'a> {
+    fields_path: &'a TokenStream,
+    ty: EntryKindType<'a>,
 }
 
-impl EntryField {
-    fn new(var: Variant, global_case: Option<Case>) -> Self {
+impl ToTokens for EntryKind<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.fields_path.to_tokens(tokens);
+        self.ty.to_tokens(tokens);
+    }
+}
+
+struct EntryField<'a> {
+    msg: String,
+    kind: EntryKind<'a>,
+}
+
+impl<'a> EntryField<'a> {
+    fn new(
+        var: Variant,
+        global_case: Option<Case>,
+        fields_path: &'a TokenStream,
+        trait_path: &'a TokenStream,
+    ) -> Self {
         match &var.fields {
             Fields::Unit => (),
             other => {
@@ -228,43 +222,52 @@ impl EntryField {
             }
         }
 
-        let attr = get_attr_with_args(&var.attrs, "menu")
+        let attr: RawEntryAttr = get_attr_with_args(&var.attrs, "menu")
             .unwrap_or_default()
             .val;
 
-        let kind = EntryKind::new(&var.ident, &attr);
+        let ty = if let Some((path, args)) = attr.mapped {
+            EntryKindType::Mapped(path, args)
+        } else if let Some(map) = attr.map {
+            EntryKindType::Map(map)
+        } else if let Some(i) = attr.back {
+            EntryKindType::Back(i)
+        } else if let Some(map) = attr.map_with {
+            EntryKindType::MapWith(map)
+        } else if let Some(map) = attr.mapped_with {
+            EntryKindType::MappedWith(map)
+        } else if attr.parent {
+            EntryKindType::Parent(var.ident.clone(), trait_path)
+        } else {
+            EntryKindType::Quit
+        };
 
-        let RawEntryAttr {
-            msg,
-            case,
-            raw,
-            nodoc,
-            ..
-        } = attr;
+        let kind = EntryKind { fields_path, ty };
 
-        let msg = msg
+        let msg = attr
+            .msg
             .map(|l| l.value())
             .or_else(|| {
-                if nodoc {
+                if attr.nodoc {
                     None
                 } else {
                     get_first_doc(&var.attrs)
                 }
             })
             .unwrap_or_else(|| {
-                if raw {
+                if attr.raw {
                     var.ident.to_string()
                 } else {
                     split_ident_camel_case(&var.ident)
                 }
             });
-        let msg = case.or(global_case).unwrap_or_default().map(msg);
+        let msg = attr.case.or(global_case).unwrap_or_default().map(msg);
 
         Self { msg, kind }
     }
 }
 
-impl ToTokens for EntryField {
+impl ToTokens for EntryField<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let msg = &self.msg;
         let kind = &self.kind;
@@ -281,6 +284,7 @@ define_attr! {
         fmt: Option<Format>,
         case: Option<Case>,
         once: bool,
+        tui: bool; without once,
     }
 }
 
@@ -289,6 +293,9 @@ struct RootData {
     case: Option<Case>,
     fmt: Option<Format>,
     once: bool,
+    tui: bool,
+    fields_path: TokenStream,
+    trait_path: TokenStream,
 }
 
 impl RootData {
@@ -301,6 +308,7 @@ impl RootData {
             fmt,
             case,
             once,
+            tui,
         } = get_attr_with_args(attrs, "menu").unwrap_or_default().val;
 
         let title = if no_title {
@@ -320,64 +328,127 @@ impl RootData {
             )
         };
 
+        let root = get_lib_root().1;
+        let (fields_path, trait_path) = if tui {
+            (quote!(#root::tui::), quote!(#root::tui::Menu))
+        } else {
+            (quote!(#root::field::kinds::), quote!(#root::menu::Menu))
+        };
+
         Self {
             title,
             case,
             fmt,
             once,
+            tui,
+            fields_path,
+            trait_path,
         }
     }
-}
 
-pub(crate) fn build_menu(input: DeriveInput) -> TokenStream {
-    let used = pretend_used(&input);
+    fn quote_with(
+        &self,
+        name: &Ident,
+        fields_ts: TokenStream,
+        menu_ts: TokenStream,
+    ) -> TokenStream {
+        let root = get_lib_root().1;
 
-    let name = input.ident;
-    let root = get_lib_root().1;
+        let out = if self.tui {
+            quote! {
+                impl #root::tui::Menu for #name {
+                    fn fields<'a, __B: #root::__private::tui::backend::Backend + #root::__private::Write + 'static>(
+                    ) -> #root::tui::TuiFields<'a, __B> {
+                        #fields_ts
+                    }
 
-    set_dummy(wrap_in_const(quote! {
-        impl #root::menu::Menu for #name {
-            fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
-                #used
-                unimplemented!()
+                    fn tui_menu<'a, __B: #root::__private::tui::backend::Backend + #root::__private::Write + 'static>(
+                    ) -> #root::tui::TuiMenu<'a, __B> {
+                        #menu_ts
+                    }
+                }
             }
+        } else {
+            quote! {
+                impl #root::menu::Menu for #name {
+                    fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
+                        #fields_ts
+                    }
 
-            fn raw_menu<'a, __H: #root::menu::Handle + 'static>(
-                _: __H,
-            ) -> #root::menu::RawMenu<'a, __H> {
-                unimplemented!()
+                    fn raw_menu<'a, __H: #root::menu::Handle + 'static>(__h: __H) -> #root::menu::RawMenu<'a, __H> {
+                        #menu_ts
+                    }
+                }
             }
-        }
-    }));
+        };
 
-    let data = RootData::new(&name, &input.attrs);
+        wrap_in_const(out)
+    }
 
-    let fmt_fn = data.fmt.map(|f| method_call("format", f));
-    let title_fn = method_call("title", data.title);
-    let once_fn = data.once.then(|| method_call_empty("once"));
+    fn dummy_token_stream_with(&self, name: &Ident, used: &TokenStream) -> TokenStream {
+        self.quote_with(
+            name,
+            quote!(#used unimplemented!()),
+            quote!(unimplemented!()),
+        )
+    }
 
-    let fields = match input.data {
-        Data::Enum(DataEnum { variants, .. }) => {
-            variants.into_iter().map(|v| EntryField::new(v, data.case))
-        }
-        _ => abort_call_site!("derive(Menu) supports only unit enums"),
-    };
+    fn to_token_stream_with(
+        &self,
+        name: &Ident,
+        used: &TokenStream,
+        fields: Punctuated<EntryField<'_>, Token![,]>,
+    ) -> TokenStream {
+        let root = get_lib_root().1;
 
-    wrap_in_const(quote! {
-        impl #root::menu::Menu for #name {
-            fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
-                #used
-                #root::__private::vec![#(#fields),*]
+        let fmt_fn = self.fmt.as_ref().map(|f| method_call("format", f));
+
+        let menu_ts = if self.tui {
+            let title_fn = self.title.as_ref().map(|title| {
+                method_call(
+                    "block",
+                    quote! {
+                        #root::__private::tui::widgets::Block::default()
+                            .title(#title)
+                            .borders(#root::__private::tui::widgets::Borders::all())
+                    },
+                )
+            });
+
+            quote! {
+                #root::tui::TuiMenu::new(Self::fields())
+                #fmt_fn
+                #title_fn
             }
-
-            fn raw_menu<'a, __H: #root::menu::Handle + 'static>(
-                __h: __H,
-            ) -> #root::menu::RawMenu<'a, __H> {
+        } else {
+            let title_fn = self.title.as_ref().map(|t| method_call("title", t));
+            let once_fn = self.once.then(|| method_call_empty("once"));
+            quote! {
                 #root::menu::RawMenu::with_handle(__h, Self::fields())
                 #fmt_fn
                 #title_fn
                 #once_fn
             }
-        }
-    })
+        };
+
+        self.quote_with(name, quote!(#used #root::__private::vec![#fields]), menu_ts)
+    }
+}
+
+pub(crate) fn build_menu(input: DeriveInput) -> TokenStream {
+    let used = pretend_used(&input);
+    let name = input.ident;
+    let data = RootData::new(&name, &input.attrs);
+
+    set_dummy(data.dummy_token_stream_with(&name, &used));
+
+    let fields = match input.data {
+        Data::Enum(DataEnum { variants, .. }) => variants
+            .into_iter()
+            .map(|v| EntryField::new(v, data.case, &data.fields_path, &data.trait_path))
+            .collect(),
+        _ => abort_call_site!("derive(Menu) supports only unit enums"),
+    };
+
+    data.to_token_stream_with(&name, &used, fields)
 }

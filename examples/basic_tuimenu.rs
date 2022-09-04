@@ -5,9 +5,9 @@ use ::tui::{
 use crossterm::{
     event::{read, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ezmenulib::{prelude::*, tui::*};
+use ezmenulib::{prelude::*, tui::Menu};
 use std::io::{self, stdout, Write};
 
 fn restore_terminal<B: Backend + Write>(term: &mut Terminal<B>) -> io::Result<()> {
@@ -41,28 +41,40 @@ fn wait() -> io::Result<()> {
     disable_raw_mode()
 }
 
+#[derive(Menu)]
+#[menu(tui)]
+enum Name {
+    #[menu(mapped(display, "Editing firstname"))]
+    Firstname,
+    #[menu(mapped(display, "Editing lastname"))]
+    Lastname,
+    #[menu(back(2))]
+    MainMenu,
+}
+
+#[derive(Menu)]
+#[menu(tui)]
+enum Settings {
+    #[menu(parent)]
+    Name,
+    #[menu(back)]
+    MainMenu,
+    Quit,
+}
+
+#[derive(Menu)]
+#[menu(tui)]
+enum MainMenu {
+    #[menu(mapped(display, "Now playing."))]
+    Play,
+    #[menu(parent)]
+    Settings,
+    Quit,
+}
+
 fn main() -> MenuResult {
-    let name = &[
-        ("Firstname", tui_mapped!(display, "Editing firstname.")),
-        ("Lastname", tui_mapped!(display, "Editing lastname.")),
-        ("Main menu", back(2)),
-    ];
-
-    let settings = &[
-        ("Name", parent(name)),
-        ("Main menu", back(1)),
-        ("Quit", quit()),
-    ];
-
-    let fields = &[
-        ("Play", tui_mapped!(display, "Now playing.")),
-        ("Settings", parent(settings)),
-        ("Quit", quit()),
-    ];
-
     let mut term = Terminal::new(CrosstermBackend::new(stdout()))?;
-
-    let mut menu = TuiMenu::new(fields);
+    let mut menu = MainMenu::tui_menu();
 
     writeln!(
         term.backend_mut(),

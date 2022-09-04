@@ -127,7 +127,7 @@ define_keywords! {
             let content;
             syn::parenthesized!(content in input);
             let id = content.parse()?;
-            let args = if input.peek(Token![,]) {
+            let args = if content.peek(Token![,]) {
                 content.parse::<Token![,]>()?;
                 content.parse_terminated(Parse::parse)?
             } else {

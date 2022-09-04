@@ -181,6 +181,7 @@ pub mod __private {
     pub use tui;
     #[allow(non_camel_case_types)]
     pub type str = ty_export::Str;
+    pub use std::io::Write;
 
     use std::cell::RefCell;
     use std::rc::Rc;

@@ -1093,7 +1093,10 @@ pub mod kinds {
     }
 
     #[inline(always)]
-    pub fn parent<'a, I: IntoFields<'a, H>, H>(fields: I) -> Kind<'a, H> {
+    pub fn parent<'a, I, H>(fields: I) -> Kind<'a, H>
+    where
+        I: IntoFields<'a, H>,
+    {
         Kind::Parent(fields.into_fields())
     }
 

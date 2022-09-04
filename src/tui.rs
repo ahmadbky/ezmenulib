@@ -2,7 +2,7 @@
 //!
 //! This module is mainly used to generate menu using the [`tui`](https://docs.rs/tui/) crate.
 
-use std::fmt;
+use std::{cell::RefCell, fmt, io::Write, rc::Rc};
 
 use tui::{
     backend::Backend,
@@ -26,7 +26,7 @@ fn consume_cb<B: Backend>(res: EventResult<B>, term: &mut Terminal<B>) -> MenuRe
 
     match res {
         Callback(b) => {
-            b(term)?;
+            b.borrow_mut()(term)?;
             term.clear()?;
             Ok(false)
         }
@@ -43,12 +43,16 @@ pub struct TuiMenu<'a, B: Backend> {
     s_style: FieldStyle,
     f_style: FieldStyle,
     block: Block<'a>,
-    levels: Vec<(TuiFields<'a, B>, usize)>,
+    levels: Vec<(Rc<TuiFields<'a, B>>, usize)>,
 }
 
 impl<'a, B: Backend> TuiMenu<'a, B> {
-    pub fn new(fields: TuiFields<'a, B>) -> Self {
-        check_fields(fields);
+    pub fn new<I>(fields: I) -> Self
+    where
+        I: IntoTuiFields<'a, B>,
+    {
+        let fields = fields.into_tui_fields();
+        check_fields(&fields);
         Self {
             s_style: (
                 Style::default()
@@ -60,10 +64,12 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
             block: Block::default()
                 .borders(Borders::all())
                 .title_alignment(Alignment::Center),
-            levels: vec![(fields, 0)],
+            levels: vec![(Rc::new(fields), 0)],
         }
     }
+}
 
+impl<'a, B: Backend> TuiMenu<'a, B> {
     /// Defines the style of the selected field.
     ///
     /// The style corresponds to the *text* style. If you want to modify the background color
@@ -113,13 +119,11 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
             None => return Quit,
         };
 
-        let mut remaining = true;
-
         match e {
             Event::Key(k) => match k {
                 Key::Char('q') | Key::Ctrl('c') | Key::Ctrl('d') => return Quit,
                 Key::Esc if self.levels.is_empty() => return Quit,
-                Key::Esc => remaining = false,
+                Key::Esc => return Consumed,
                 Key::Up | Key::Left if selected == 0 => selected = fields.len() - 1,
                 Key::Up | Key::Left => selected -= 1,
                 Key::Down | Key::Right if selected == fields.len() - 1 => selected = 0,
@@ -128,21 +132,22 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
                     let kind = &fields[selected].1;
                     match kind {
                         TuiKind::Map(b) => {
+                            let b = b.clone();
                             self.levels.push((fields, selected));
-                            return Callback(&*b);
+                            return Callback(b);
                         }
                         TuiKind::Parent(inner_fields) => {
+                            let next = (inner_fields.clone(), selected.min(inner_fields.len() - 1));
                             self.levels.push((fields, selected));
-                            remaining = false;
-                            self.levels
-                                .push((inner_fields, selected.min(inner_fields.len() - 1)));
+                            self.levels.push(next);
+                            return Consumed;
                         }
                         TuiKind::Back(0) => (),
                         TuiKind::Back(i) => {
                             for _ in 0..i - 1 {
                                 self.levels.pop();
                             }
-                            remaining = false;
+                            return Consumed;
                         }
                         TuiKind::Quit => return Quit,
                     }
@@ -152,9 +157,7 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
             _ => return Ignored,
         }
 
-        if remaining {
-            self.levels.push((fields, selected));
-        }
+        self.levels.push((fields, selected));
 
         Consumed
     }
@@ -181,16 +184,16 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
             None => return Quit,
         };
 
-        let mut remaining = true;
-
         match e {
-            Event::Key(KeyEvent { code, modifiers, .. }) => match code {
+            Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) => match code {
                 KeyCode::Char('q') => return Quit,
                 KeyCode::Char('c') | KeyCode::Char('d') if modifiers == KeyModifiers::CONTROL => {
                     return Quit
                 }
                 KeyCode::Esc if self.levels.is_empty() => return Quit,
-                KeyCode::Esc => remaining = false,
+                KeyCode::Esc => return Consumed,
                 KeyCode::Up | KeyCode::Left if selected == 0 => selected = fields.len() - 1,
                 KeyCode::Up | KeyCode::Left => selected -= 1,
                 KeyCode::Down | KeyCode::Right if selected == fields.len() - 1 => selected = 0,
@@ -199,21 +202,22 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
                     let kind = &fields[selected].1;
                     match kind {
                         TuiKind::Map(b) => {
+                            let b = b.clone();
                             self.levels.push((fields, selected));
-                            return Callback(&*b);
+                            return Callback(b);
                         }
                         TuiKind::Parent(inner_fields) => {
+                            let next = (inner_fields.clone(), selected.min(inner_fields.len() - 1));
                             self.levels.push((fields, selected));
-                            remaining = false;
-                            self.levels
-                                .push((inner_fields, selected.min(inner_fields.len() - 1)));
+                            self.levels.push(next);
+                            return Consumed;
                         }
                         TuiKind::Back(0) => (),
                         TuiKind::Back(i) => {
                             for _ in 0..i - 1 {
                                 self.levels.pop();
                             }
-                            remaining = false;
+                            return Consumed;
                         }
                         TuiKind::Quit => return Quit,
                     }
@@ -229,9 +233,7 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
             }
         }
 
-        if remaining {
-            self.levels.push((fields, selected));
-        }
+        self.levels.push((fields, selected));
 
         Consumed
     }
@@ -247,14 +249,14 @@ impl<'a, B: Backend> TuiMenu<'a, B> {
     }
 }
 
-pub enum EventResult<'a, B: Backend> {
+pub enum EventResult<B: Backend> {
     Quit,
     Consumed,
     Ignored,
-    Callback(&'a dyn Fn(&mut Terminal<B>) -> MenuResult),
+    Callback(Rc<RefCell<dyn FnMut(&mut Terminal<B>) -> MenuResult>>),
 }
 
-impl<B: Backend> fmt::Debug for EventResult<'_, B> {
+impl<B: Backend> fmt::Debug for EventResult<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Quit => write!(f, "Quit"),
@@ -280,7 +282,7 @@ impl<'a, B: Backend> Widget for &TuiMenu<'a, B> {
         }
         .render(area, buf);
 
-        for (i, (msg, _)) in fields.into_iter().enumerate() {
+        for (i, (msg, _)) in fields.iter().enumerate() {
             let (fg_style, bg_style) = if i == *selected {
                 (self.s_style.0, Style::default().bg(self.s_style.1))
             } else {
@@ -291,6 +293,12 @@ impl<'a, B: Backend> Widget for &TuiMenu<'a, B> {
             buf.set_style(Rect::new(x + 1, y + 1 + i as u16, width - 2, 1), bg_style);
         }
     }
+}
+
+pub trait Menu {
+    fn fields<'a, B: Backend + Write + 'static>() -> TuiFields<'a, B>;
+
+    fn tui_menu<'a, B: Backend + Write + 'static>() -> TuiMenu<'a, B>;
 }
 
 /// A tui menu field.
@@ -305,20 +313,20 @@ pub type TuiField<'a, B> = (&'a str, TuiKind<'a, B>);
 ///
 /// It simply corresponds to a slice of fields.
 /// It is used for more convenience in the library.
-pub type TuiFields<'a, B> = &'a [TuiField<'a, B>];
+pub type TuiFields<'a, B> = Vec<TuiField<'a, B>>;
 
 /// Corresponds to the function mapped to a field.
 ///
 /// It can be viewed as a callback for a menu button.
 /// This function is called right after the user selected the corresponding field.
-pub type TuiCallback<B> = Box<dyn Fn(&mut Terminal<B>) -> MenuResult>;
+pub type TuiCallback<B> = Rc<RefCell<dyn FnMut(&mut Terminal<B>) -> MenuResult>>;
 
 /// Defines the behavior of a [tui field](TuiField).
 pub enum TuiKind<'a, B: Backend> {
     /// Maps a function to call right after the user selects the field.
     Map(TuiCallback<B>),
     /// Defines the current field as a parent menu of a sub-menu defined by its given fields.
-    Parent(TuiFields<'a, B>),
+    Parent(Rc<TuiFields<'a, B>>),
     /// Allows the user to go back to the given depth level from the current running page.
     ///
     /// The depth level of the current running page is at `0`, meaning it will stay at
@@ -347,18 +355,23 @@ macro_rules! tui_mapped {
     }};
 }
 
-pub fn map<'a, B, F, Res>(f: F) -> TuiKind<'a, B>
+pub fn map<'a, B, F, Res>(mut f: F) -> TuiKind<'a, B>
 where
     B: Backend,
+    F: FnMut(&mut Terminal<B>) -> Res + 'static,
     Res: IntoResult,
-    F: Fn(&mut Terminal<B>) -> Res + 'static,
 {
-    TuiKind::Map(Box::new(move |s| f(s).into_result()))
+    let f = move |s: &mut Terminal<B>| f(s).into_result();
+    TuiKind::Map(Rc::new(RefCell::new(f)) as _)
 }
 
 #[inline(always)]
-pub fn parent<'a, B: Backend>(f: TuiFields<'a, B>) -> TuiKind<'a, B> {
-    TuiKind::Parent(f)
+pub fn parent<'a, I, B>(f: I) -> TuiKind<'a, B>
+where
+    I: IntoTuiFields<'a, B>,
+    B: Backend,
+{
+    TuiKind::Parent(Rc::new(f.into_tui_fields()))
 }
 
 #[inline(always)]
@@ -369,4 +382,18 @@ pub fn back<'a, B: Backend>(i: usize) -> TuiKind<'a, B> {
 #[inline(always)]
 pub fn quit<'a, B: Backend>() -> TuiKind<'a, B> {
     TuiKind::Quit
+}
+
+pub trait IntoTuiFields<'a, B: Backend> {
+    fn into_tui_fields(self) -> TuiFields<'a, B>;
+}
+
+impl<'a, B, T> IntoTuiFields<'a, B> for T
+where
+    T: IntoIterator<Item = TuiField<'a, B>>,
+    B: Backend,
+{
+    fn into_tui_fields(self) -> TuiFields<'a, B> {
+        Vec::from_iter(self)
+    }
 }
