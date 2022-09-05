@@ -208,7 +208,7 @@ enum EntryField<'a> {
     },
     Regular {
         msg: String,
-        kind: EntryKind<'a>,
+        kind: Box<EntryKind<'a>>,
     },
 }
 
@@ -261,7 +261,7 @@ impl<'a> EntryField<'a> {
                 EntryKindType::Quit
             };
 
-            let kind = EntryKind { fields_path, ty };
+            let kind = Box::new(EntryKind { fields_path, ty });
 
             let msg = attr
                 .msg
