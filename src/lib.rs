@@ -191,8 +191,6 @@ pub mod __private {
     }
 
     pub trait MutableStatic<T> {
-        type Out;
-
         fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, f: F) -> R
         where
             F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R;
@@ -202,9 +200,23 @@ pub mod __private {
             F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R;
     }
 
-    impl<T> MutableStatic<T> for LocalKey<Rc<RefCell<T>>> {
-        type Out = Rc<RefCell<T>>;
+    impl<T> MutableStatic<T> for LocalKey<RefCell<T>> {
+        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+        {
+            self.with(|p| f(h, &p.borrow()))
+        }
 
+        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+        {
+            self.with(|p| f(h, &mut p.borrow_mut()))
+        }
+    }
+
+    impl<T> MutableStatic<T> for LocalKey<Rc<RefCell<T>>> {
         fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
         where
             F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
@@ -221,8 +233,6 @@ pub mod __private {
     }
 
     impl<T> MutableStatic<T> for LocalKey<Arc<RwLock<T>>> {
-        type Out = Arc<RwLock<T>>;
-
         fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
         where
             F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
@@ -235,6 +245,22 @@ pub mod __private {
             F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
         {
             self.with(|p| f(h, &mut *p.write().unwrap()))
+        }
+    }
+
+    impl<T> MutableStatic<T> for LocalKey<RwLock<T>> {
+        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+        {
+            self.with(|p| f(h, &p.read().unwrap()))
+        }
+
+        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+        where
+            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+        {
+            self.with(|p| f(h, &mut p.write().unwrap()))
         }
     }
 }
