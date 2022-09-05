@@ -48,6 +48,10 @@ fn change_name<H: Handle>(mut s: H, name: &mut String, span: &str) -> MenuResult
     Ok(())
 }
 
+fn play<H: Handle>(mut s: H, play: &App) -> io::Result<()> {
+    writeln!(s, "Now playing with {play}")
+}
+
 thread_local! {
     static APP: Rc<RefCell<App>> = Default::default();
 }
@@ -78,10 +82,6 @@ enum MainMenu {
     #[menu(parent)]
     Settings,
     Quit,
-}
-
-fn play<H: Handle>(mut s: H, play: &App) -> io::Result<()> {
-    writeln!(s, "Now playing with {play}")
 }
 
 fn main() {

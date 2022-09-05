@@ -16,11 +16,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ezmenulib::{
-    field::Promptable,
-    prelude::*,
-    tui::{back, map, parent, quit, TuiMenu},
-};
+use ezmenulib::{field::Promptable, prelude::*, tui::Menu};
 
 struct App {
     firstname: String,
@@ -84,38 +80,44 @@ fn change_name<B: Backend + Write>(
     Ok(())
 }
 
-fn main() -> MenuResult {
-    let app = Rc::new(RefCell::new(App::default()));
-    let edit_first = app.clone();
-    let edit_last = app.clone();
-    let edit_play = app.clone();
+thread_local! {
+    static APP: Rc<RefCell<App>> = Default::default();
+}
 
+#[derive(Menu)]
+#[menu(tui)]
+enum Name {
+    #[menu(map_with(mut APP: |h| app.change_firstname(h)))]
+    Firstname,
+    #[menu(map_with(mut APP: |h| app.change_lastname(h)))]
+    Lastname,
+    #[menu(back(2))]
+    MainMenu,
+}
+
+#[derive(Menu)]
+#[menu(tui)]
+enum Settings {
+    #[menu(parent)]
+    Name,
+    #[menu(back)]
+    MainMenu,
+    Quit,
+}
+
+#[derive(Menu)]
+#[menu(tui, title = "A dynamic TUI menu")]
+enum MainMenu {
+    #[menu(map_with(mut APP: |_| app.handle_play()))]
+    Play,
+    #[menu(parent)]
+    Settings,
+    Quit,
+}
+
+fn main() -> MenuResult {
     let mut term = Terminal::new(CrosstermBackend::new(stdout()))?;
     setup_terminal(&mut term)?;
-
-    let name = &[
-        (
-            "Firstname",
-            map(move |t| edit_first.borrow_mut().change_firstname(t)),
-        ),
-        (
-            "Lastname",
-            map(move |t| edit_last.borrow_mut().change_lastname(t)),
-        ),
-        ("Main menu", back(2)),
-    ];
-
-    let settings = &[
-        ("Name", parent(name)),
-        ("Main menu", back(1)),
-        ("Quit", quit()),
-    ];
-
-    let fields = &[
-        ("Play", map(move |_| edit_play.borrow_mut().handle_play())),
-        ("Settings", parent(settings)),
-        ("Quit", quit()),
-    ];
 
     // Left part: menu; right part: information
     let root = Layout::default()
@@ -128,11 +130,7 @@ fn main() -> MenuResult {
         .constraints([Constraint::Percentage(50), Constraint::Min(0)])
         .split(root[1]);
 
-    let mut menu = TuiMenu::new(fields).block(
-        Block::default()
-            .title("A dynamic TUI menu")
-            .borders(Borders::all()),
-    );
+    let mut menu = MainMenu::tui_menu();
 
     let tick_rate = Duration::from_millis(100);
     let mut status = ['/', '-', '\\', '|'].into_iter().cycle();
@@ -149,6 +147,7 @@ fn main() -> MenuResult {
         term.draw(|f| {
             f.render_widget(&menu, root[0]);
 
+            let app = APP.with(|app| app.clone());
             let app = app.borrow();
 
             let list = List::new([

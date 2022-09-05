@@ -1,9 +1,10 @@
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site, set_dummy};
-use quote::{quote, ToTokens, TokenStreamExt};
+use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
+    spanned::Spanned,
     Attribute, Data, DataEnum, DeriveInput, Expr, ExprClosure, Fields, Ident, Index, LitStr, Pat,
     PatIdent, Path, Token, Variant,
 };
@@ -26,14 +27,16 @@ define_attr! {
         raw: bool; without msg,
         nodoc: bool; without msg,
 
-        mapped_with: Option<MappedWith>; without mapped; map_with; map; parent; back; quit,
+        flatten: bool; without mapped_with; mapped; map_with; map; parent; back; quit,
+        mapped_with: Option<MappedWith>; without mapped; map_with; map; parent; back; quit;
+            flatten,
         mapped: Option<(Path, Punctuated<Expr, Token![,]>)>; without
-            mapped_with; map_with; map; parent; back; quit,
-        map_with: Option<MapWith>; without mapped_with; mapped; map; parent; back; quit,
-        map: Option<FunctionExpr>; without mapped_with; mapped; map_with; parent; back; quit,
-        parent: bool; without mapped_with; mapped; map_with; map; back; quit,
-        back: Option<Index>; without mapped_with; mapped; map_with; map; parent; quit,
-        quit: bool; without mapped_with; mapped; map_with; map; parent; back,
+            mapped_with; map_with; map; parent; back; quit; flatten,
+        map_with: Option<MapWith>; without mapped_with; mapped; map; parent; back; quit; flatten,
+        map: Option<FunctionExpr>; without mapped_with; mapped; map_with; parent; back; quit; flatten,
+        parent: bool; without mapped_with; mapped; map_with; map; back; quit; flatten,
+        back: Option<Index>; without mapped_with; mapped; map_with; map; parent; quit; flatten,
+        quit: bool; without mapped_with; mapped; map_with; map; parent; back; flatten,
     }
 }
 
@@ -73,9 +76,10 @@ impl InnerMapWith {
     fn to_tokens_with(&self, tokens: &mut TokenStream, arg: TokenStream) {
         let root = get_lib_root().1;
         let static_path = &self.static_path;
-        let map_fn = if self.mutable { "map_mut" } else { "map" };
+        let span = static_path.span();
+        let map_fn = Ident::new(if self.mutable { "map_mut" } else { "map" }, span);
 
-        quote! {
+        quote_spanned! {span=>
             |__h| #root::__private::MutableStatic::#map_fn(
                 &#static_path, __h, #arg
             )
@@ -172,7 +176,10 @@ impl ToTokens for EntryKindType<'_> {
             Self::Mapped(path, args) => ("map", quote!(move |__h| #path(__h, #args))),
             Self::MapWith(map) => ("map", map.to_token_stream()),
             Self::Map(map) => ("map", map.to_token_stream()),
-            Self::Parent(id, trait_path) => ("parent", quote!(<#id as #trait_path>::fields())),
+            Self::Parent(id, trait_path) => (
+                "parent",
+                quote_spanned!(id.span()=> <#id as #trait_path>::fields()),
+            ),
             Self::Back(i) => ("back", i.to_token_stream()),
             Self::Quit => ("quit", TokenStream::new()),
         };
@@ -194,9 +201,15 @@ impl ToTokens for EntryKind<'_> {
     }
 }
 
-struct EntryField<'a> {
-    msg: String,
-    kind: EntryKind<'a>,
+enum EntryField<'a> {
+    Flattened {
+        trait_path: &'a TokenStream,
+        name: Ident,
+    },
+    Regular {
+        msg: String,
+        kind: EntryKind<'a>,
+    },
 }
 
 impl<'a> EntryField<'a> {
@@ -226,52 +239,69 @@ impl<'a> EntryField<'a> {
             .unwrap_or_default()
             .val;
 
-        let ty = if let Some((path, args)) = attr.mapped {
-            EntryKindType::Mapped(path, args)
-        } else if let Some(map) = attr.map {
-            EntryKindType::Map(map)
-        } else if let Some(i) = attr.back {
-            EntryKindType::Back(i)
-        } else if let Some(map) = attr.map_with {
-            EntryKindType::MapWith(map)
-        } else if let Some(map) = attr.mapped_with {
-            EntryKindType::MappedWith(map)
-        } else if attr.parent {
-            EntryKindType::Parent(var.ident.clone(), trait_path)
+        if attr.flatten {
+            Self::Flattened {
+                trait_path,
+                name: var.ident,
+            }
         } else {
-            EntryKindType::Quit
-        };
+            let ty = if let Some((path, args)) = attr.mapped {
+                EntryKindType::Mapped(path, args)
+            } else if let Some(map) = attr.map {
+                EntryKindType::Map(map)
+            } else if let Some(i) = attr.back {
+                EntryKindType::Back(i)
+            } else if let Some(map) = attr.map_with {
+                EntryKindType::MapWith(map)
+            } else if let Some(map) = attr.mapped_with {
+                EntryKindType::MappedWith(map)
+            } else if attr.parent {
+                EntryKindType::Parent(var.ident.clone(), trait_path)
+            } else {
+                EntryKindType::Quit
+            };
 
-        let kind = EntryKind { fields_path, ty };
+            let kind = EntryKind { fields_path, ty };
 
-        let msg = attr
-            .msg
-            .map(|l| l.value())
-            .or_else(|| {
-                if attr.nodoc {
-                    None
-                } else {
-                    get_first_doc(&var.attrs)
-                }
-            })
-            .unwrap_or_else(|| {
-                if attr.raw {
-                    var.ident.to_string()
-                } else {
-                    split_ident_camel_case(&var.ident)
-                }
-            });
-        let msg = attr.case.or(global_case).unwrap_or_default().map(msg);
+            let msg = attr
+                .msg
+                .map(|l| l.value())
+                .or_else(|| {
+                    if attr.nodoc {
+                        None
+                    } else {
+                        get_first_doc(&var.attrs)
+                    }
+                })
+                .unwrap_or_else(|| {
+                    if attr.raw {
+                        var.ident.to_string()
+                    } else {
+                        split_ident_camel_case(&var.ident)
+                    }
+                });
+            let msg = attr.case.or(global_case).unwrap_or_default().map(msg);
 
-        Self { msg, kind }
+            Self::Regular { msg, kind }
+        }
     }
 }
 
 impl ToTokens for EntryField<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let msg = &self.msg;
-        let kind = &self.kind;
-        quote!((#msg, #kind)).to_tokens(tokens);
+        let root = get_lib_root().1;
+        method_call(
+            "chain",
+            match self {
+                EntryField::Flattened { trait_path, name } => {
+                    quote_spanned!(name.span()=> <#name as #trait_path>::fields())
+                }
+                Self::Regular { msg, kind } => {
+                    quote!(#root::__private::vec![(#msg, #kind)])
+                }
+            },
+        )
+        .to_tokens(tokens);
     }
 }
 
@@ -397,7 +427,7 @@ impl RootData {
         &self,
         name: &Ident,
         used: &TokenStream,
-        fields: Punctuated<EntryField<'_>, Token![,]>,
+        fields: Vec<EntryField<'_>>,
     ) -> TokenStream {
         let root = get_lib_root().1;
 
@@ -431,7 +461,11 @@ impl RootData {
             }
         };
 
-        self.quote_with(name, quote!(#used #root::__private::vec![#fields]), menu_ts)
+        self.quote_with(
+            name,
+            quote!(#used [].into_iter() #(#fields)* .collect()),
+            menu_ts,
+        )
     }
 }
 
