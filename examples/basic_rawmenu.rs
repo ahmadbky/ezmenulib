@@ -1,19 +1,23 @@
 use ezmenulib::{menu::Handle, prelude::*};
 use std::io;
 
-#[derive(Menu)]
-enum Name {
-    #[menu(mapped(edit_name, "fir"))]
-    Firstname,
-    #[menu(mapped(edit_name, "la"))]
-    Lastname,
-    #[menu(back(2))]
-    MainMenu,
+mod hehe {
+    use super::*;
+
+    #[derive(Menu)]
+    pub enum Name {
+        #[menu(mapped(edit_name, "fir"))]
+        Firstname,
+        #[menu(mapped(edit_name, "la"))]
+        Lastname,
+        #[menu(back(2))]
+        MainMenu,
+    }
 }
 
 #[derive(Menu)]
 enum Settings {
-    #[menu(parent)]
+    #[menu(path = hehe::Name, parent)]
     Name,
     #[menu(back)]
     MainMenu,

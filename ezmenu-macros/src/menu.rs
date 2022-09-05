@@ -3,6 +3,7 @@ use proc_macro_error::{abort, abort_call_site, set_dummy};
 use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
     parse::{Parse, ParseStream},
+    parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
     Attribute, Data, DataEnum, DeriveInput, Expr, ExprClosure, Fields, Ident, Index, LitStr, Pat,
@@ -26,6 +27,7 @@ define_attr! {
         case: Option<Case>,
         raw: bool; without msg,
         nodoc: bool; without msg,
+        path: Option<Path>; without mapped_with; mapped; map_with; map; back; quit,
 
         flatten: bool; without mapped_with; mapped; map_with; map; parent; back; quit,
         mapped_with: Option<MappedWith>; without mapped; map_with; map; parent; back; quit;
@@ -49,12 +51,7 @@ struct InnerMapWith {
 
 impl Parse for InnerMapWith {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mutable = if input.peek(Token![mut]) {
-            input.parse::<Token![mut]>()?;
-            true
-        } else {
-            false
-        };
+        let mutable = input.parse::<Option<Token![mut]>>()?.is_some();
 
         let static_path = input.parse()?;
         let static_ident = get_last_seg_of_path(&static_path).unwrap().ident.clone();
@@ -164,7 +161,7 @@ enum EntryKindType<'a> {
     Mapped(Path, Punctuated<Expr, Token![,]>),
     MapWith(MapWith),
     Map(FunctionExpr),
-    Parent(Ident, &'a TokenStream),
+    Parent(Path, &'a TokenStream),
     Back(Index),
     Quit,
 }
@@ -256,7 +253,13 @@ impl<'a> EntryField<'a> {
             } else if let Some(map) = attr.mapped_with {
                 EntryKindType::MappedWith(map)
             } else if attr.parent {
-                EntryKindType::Parent(var.ident.clone(), trait_path)
+                EntryKindType::Parent(
+                    attr.path.unwrap_or_else(|| {
+                        let default = var.ident.clone();
+                        parse_quote!(#default)
+                    }),
+                    trait_path,
+                )
             } else {
                 EntryKindType::Quit
             };
@@ -386,6 +389,7 @@ impl RootData {
 
         let out = if self.tui {
             quote! {
+                #[automatically_derived]
                 impl #root::tui::Menu for #name {
                     fn fields<'a, __B: #root::__private::tui::backend::Backend + #root::__private::Write + 'static>(
                     ) -> #root::tui::TuiFields<'a, __B> {
@@ -400,6 +404,7 @@ impl RootData {
             }
         } else {
             quote! {
+                #[automatically_derived]
                 impl #root::menu::Menu for #name {
                     fn fields<'a, __H: #root::menu::Handle + 'static>() -> #root::field::Fields<'a, __H> {
                         #fields_ts

@@ -88,7 +88,7 @@ macro_rules! define_keywords {
 define_keywords! {
     'eq: case: Case, title: LitStr, msg: LitStr, example: LitStr, sep: LitStr,
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
-        show_default: LitBool, suffix: LitStr, line_brk: LitBool,
+        show_default: LitBool, suffix: LitStr, line_brk: LitBool, path: Path,
     'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr, map: FunctionExpr,
         mapped_with: MappedWith, map_with: MapWith,
     'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example, password,
