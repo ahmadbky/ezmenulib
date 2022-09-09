@@ -263,4 +263,42 @@ pub mod __private {
             self.with(|p| f(h, &mut p.write().unwrap()))
         }
     }
+
+    #[cfg(feature = "extra-globals")]
+    mod custom_impl {
+        use super::{Arc, LocalKey, MutableStatic};
+        use parking_lot::RwLock;
+
+        impl<T> MutableStatic<T> for LocalKey<Arc<RwLock<T>>> {
+            fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+            where
+                F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+            {
+                self.with(|p| f(h, &*p.read()))
+            }
+
+            fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+            where
+                F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+            {
+                self.with(|p| f(h, &mut *p.write()))
+            }
+        }
+
+        impl<T> MutableStatic<T> for LocalKey<RwLock<T>> {
+            fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+            where
+                F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+            {
+                self.with(|p| f(h, &p.read()))
+            }
+
+            fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
+            where
+                F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+            {
+                self.with(|p| f(h, &mut p.write()))
+            }
+        }
+    }
 }
