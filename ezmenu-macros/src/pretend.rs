@@ -107,27 +107,12 @@ fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     let fields = fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
     let root = get_lib_root().1;
 
-    #[cfg(not(no_ptr_addr_of))]
-    {
-        quote! {
-            match #root::__private::Option::<&#name #ty_gens>::None {
-                #root::__private::Option::Some(__v @ #name { #(#fields: _),* }) => {#(
-                    let _ = #root::__private::addr_of!(__v.#fields);
-                )*}
-                _ => (),
-            }
-        }
-    }
-
-    #[cfg(no_ptr_addr_of)]
-    {
-        let vals = (0..fields.len()).map(|i| format_ident!("__v{}", i));
-
-        quote! {
-            match #root::__private::Option::<#name #ty_gens>::None {
-                #root::__private::Option::Some(#name { #(#fields: #vals),* }) = (),
-                _ => (),
-            }
+    quote! {
+        match #root::__private::Option::<&#name #ty_gens>::None {
+            #root::__private::Option::Some(__v @ #name { #(#fields: _),* }) => {#(
+                let _ = #root::__private::addr_of!(__v.#fields);
+            )*}
+            _ => (),
         }
     }
 }
