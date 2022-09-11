@@ -174,7 +174,7 @@ pub mod __private {
     pub use core::result::Result;
     pub use core::str::FromStr;
     pub use std::string::String;
-    use std::sync::{Arc, RwLock};
+    use std::sync::{Arc, Mutex, RwLock};
     use std::thread::LocalKey;
     pub use std::vec;
     #[cfg(feature = "tui")]
@@ -200,105 +200,81 @@ pub mod __private {
             F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R;
     }
 
-    impl<T> MutableStatic<T> for LocalKey<RefCell<T>> {
-        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-        {
-            self.with(|p| f(h, &p.borrow()))
-        }
+    macro_rules! impl_static {
+        (|$self:ident, $h:ident, $f:ident| <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty: $stmt:stmt, mut $mut_stmt:stmt) => {
+            impl<$($gens $(: $bounds $(+ $others)*)?),*> $crate::__private::MutableStatic<T> for $target {
+                fn map<'hndl, H, R, F>(&'static $self, $h: &'hndl mut H, mut $f: F) -> R
+                where
+                    F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
+                {
+                    $stmt
+                }
 
-        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-        {
-            self.with(|p| f(h, &mut p.borrow_mut()))
-        }
+                fn map_mut<'hndl, H, R, F>(&'static $self, $h: &'hndl mut H, mut $f: F) -> R
+                where
+                    F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
+                {
+                    $mut_stmt
+                }
+            }
+        };
+
+        (@with_borrow <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty) => {
+            impl_static!{
+                |self, h, f| <$($gens $(: $bounds $(+ $others)*)?),*> for $target:
+                self.with(|p| f(h, &p.borrow())), mut self.with(|p| f(h, &mut p.borrow_mut()))
+            }
+        };
+
+        (@with_read$(($unwrap:ident))? <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty) => {
+            impl_static!{
+                |self, h, f| <$($gens $(: $bounds $(+ $others)*)?),*> for $target:
+                self.with(|p| f(h, &p.read()$(.$unwrap())?)), mut self.with(|p| f(h, &mut p.write()$(.$unwrap())?))
+            }
+        };
+
+        (@read$(($unwrap:ident))? <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty) => {
+            impl_static!{
+                |self, h, f| <$($gens $(: $bounds $(+ $others)*)?),*> for $target:
+                f(h, &self.read()$(.$unwrap())?), mut f(h, &mut self.write()$(.$unwrap())?)
+            }
+        };
+
+        (@with_lock$(($unwrap:ident))? <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty) => {
+            impl_static!{
+                |self, h, f| <$($gens $(: $bounds $(+ $others)*)?),*> for $target:
+                self.with(|p| f(h, &p.lock()$(.$unwrap())?)), mut self.with(|p| f(h, &mut p.lock()$(.$unwrap())?))
+            }
+        };
+
+        (@lock$(($unwrap:ident))? <$($gens:ident $(: $bounds:tt $(+ $others:tt)*,)?),*> for $target:ty) => {
+            impl_static!{
+                |self, h, f| <$($gens $(: $bounds $(+ $others)*)?),*> for $target:
+                f(h, &self.lock()$(.$unwrap())?), mut f(h, &mut self.lock()$(.$unwrap())?)
+            }
+        };
     }
 
-    impl<T> MutableStatic<T> for LocalKey<Rc<RefCell<T>>> {
-        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-        {
-            self.with(|p| f(h, &*p.borrow()))
-        }
+    impl_static!(@with_borrow <T> for LocalKey<RefCell<T>>);
+    impl_static!(@with_borrow <T> for LocalKey<Rc<RefCell<T>>>);
+    impl_static!(@with_read(unwrap) <T> for LocalKey<Arc<RwLock<T>>>);
+    impl_static!(@with_read(unwrap) <T> for LocalKey<RwLock<T>>);
+    impl_static!(@read(unwrap) <T> for RwLock<T>);
+    impl_static!(@with_lock(unwrap) <T> for LocalKey<Arc<Mutex<T>>>);
+    impl_static!(@with_lock(unwrap) <T> for LocalKey<Mutex<T>>);
+    impl_static!(@lock(unwrap) <T> for Mutex<T>);
 
-        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-        {
-            self.with(|p| f(h, &mut *p.borrow_mut()))
-        }
-    }
-
-    impl<T> MutableStatic<T> for LocalKey<Arc<RwLock<T>>> {
-        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-        {
-            self.with(|p| f(h, &*p.read().unwrap()))
-        }
-
-        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-        {
-            self.with(|p| f(h, &mut *p.write().unwrap()))
-        }
-    }
-
-    impl<T> MutableStatic<T> for LocalKey<RwLock<T>> {
-        fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-        {
-            self.with(|p| f(h, &p.read().unwrap()))
-        }
-
-        fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-        where
-            F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-        {
-            self.with(|p| f(h, &mut p.write().unwrap()))
-        }
-    }
-
+    /// Implementation of MutableStatic trait for parking_lot and once_cell types.
     #[cfg(feature = "extra-globals")]
     mod custom_impl {
-        use super::{Arc, LocalKey, MutableStatic};
-        use parking_lot::RwLock;
+        use super::{Arc, LocalKey};
+        use parking_lot::{Mutex, RwLock};
 
-        impl<T> MutableStatic<T> for LocalKey<Arc<RwLock<T>>> {
-            fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-            where
-                F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-            {
-                self.with(|p| f(h, &*p.read()))
-            }
-
-            fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-            where
-                F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-            {
-                self.with(|p| f(h, &mut *p.write()))
-            }
-        }
-
-        impl<T> MutableStatic<T> for LocalKey<RwLock<T>> {
-            fn map<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-            where
-                F: for<'obj> FnMut(&'hndl mut H, &'obj T) -> R,
-            {
-                self.with(|p| f(h, &p.read()))
-            }
-
-            fn map_mut<'hndl, H, R, F>(&'static self, h: &'hndl mut H, mut f: F) -> R
-            where
-                F: for<'obj> FnMut(&'hndl mut H, &'obj mut T) -> R,
-            {
-                self.with(|p| f(h, &mut p.write()))
-            }
-        }
+        impl_static!(@with_read <T> for LocalKey<Arc<RwLock<T>>>);
+        impl_static!(@with_read <T> for LocalKey<RwLock<T>>);
+        impl_static!(@read <T> for RwLock<T>);
+        impl_static!(@with_lock <T> for LocalKey<Arc<Mutex<T>>>);
+        impl_static!(@with_lock <T> for LocalKey<Mutex<T>>);
+        impl_static!(@lock <T> for Mutex<T>);
     }
 }
