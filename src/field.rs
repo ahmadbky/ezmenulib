@@ -30,6 +30,8 @@ pub trait UsesFormat {
     fn get_format(&self) -> &Format<'_>;
 }
 
+const PROMPT_ERR_MSG: &str = "error while prompting field";
+
 pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
     type Middle;
 
@@ -43,11 +45,11 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
     fn convert(self, mid: Self::Middle) -> T;
 
     fn get(self) -> T {
-        self.try_get().expect("error while prompting field")
+        self.try_get().expect(PROMPT_ERR_MSG)
     }
 
     fn get_with(self, fmt: &Format<'_>) -> T {
-        self.try_get_with(fmt).expect("error while prompting field")
+        self.try_get_with(fmt).expect(PROMPT_ERR_MSG)
     }
 
     fn try_get(self) -> MenuResult<T> {
@@ -56,6 +58,36 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
 
     fn try_get_with(self, fmt: &Format<'_>) -> MenuResult<T> {
         self.prompt_with(MenuHandle::default(), fmt)
+    }
+
+    fn get_optional(self) -> Option<T> {
+        self.try_get_optional().expect(PROMPT_ERR_MSG)
+    }
+
+    fn get_optional_with(self, fmt: &Format<'_>) -> Option<T> {
+        self.try_get_optional_with(fmt).expect(PROMPT_ERR_MSG)
+    }
+
+    fn try_get_optional(self) -> MenuResult<Option<T>> {
+        self.optional_prompt(MenuHandle::default())
+    }
+
+    fn try_get_optional_with(self, fmt: &Format<'_>) -> MenuResult<Option<T>> {
+        self.optional_prompt_with(MenuHandle::default(), fmt)
+    }
+
+    fn get_or_default(self) -> T
+    where
+        T: Default,
+    {
+        self.prompt_or_default(MenuHandle::default())
+    }
+
+    fn get_or_default_with(self, fmt: &Format<'_>) -> T
+    where
+        T: Default,
+    {
+        self.prompt_or_default_with(MenuHandle::default(), fmt)
     }
 
     fn prompt_with<H: Handle>(self, mut handle: H, fmt: &Format<'_>) -> MenuResult<T> {

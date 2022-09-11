@@ -2,7 +2,7 @@ use std::{fmt::Display, marker::PhantomData};
 
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
-use quote::{format_ident, quote, quote_spanned, ToTokens};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
     parse_quote,
@@ -38,7 +38,7 @@ pub(crate) use to_str;
 ///
 /// ```
 /// const _: () = {
-///     extern crate name_of_crate as _name_of_crate
+///     extern crate name_of_crate as _name_of_crate;
 ///     /* code */
 /// };
 /// ```

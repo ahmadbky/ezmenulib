@@ -1,27 +1,104 @@
 <div style="text-align: center;">
 
-# EZMenuLib &emsp; [![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](./LICENSE) [![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib) [![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
+# Ezmenu library &emsp; [![Crates.io](https://img.shields.io/crates/l/ezmenulib?style=flat-square)](./LICENSE) [![Crates.io](https://img.shields.io/crates/v/ezmenulib?style=flat-square)](https://crates.io/crates/ezmenulib) [![docs.rs](https://img.shields.io/docsrs/ezmenulib?style=flat-square)](https://docs.rs/ezmenulib)
 
 </div>
 
-Fast designing menus for your Rust CLI programs.
+Building menus in Rust becomes easy and fast.
 
-This crate provides a library with structs and traits to easily build menus.
-It includes type-checking from the user input, and a formatting customization.
+This repository contains the source code of the ezmenulib crate. This crate provides a library that allows you to build console menus and other prompted resources such as passwords, boolean values, written and selected values, and more. It includes type-checking from the user input, and a prompt format customization.
 
-This crate is really useful if you use [structopt](https://docs.rs/structopt/)
-or [clap](https://docs.rs/clap/) crates beside this, so you can get the matches safely, and
-build a menu on your own after.
+This crate is useful to put beside [clap](https://docs.rs/clap/) crate, to manage the case where the user hasn't provided any command argument.
 
-It can also be used as a mode selection, for a game for example.
+For now, this crate only helps to draw menus in the console. It allows you to not spend time on printing from scratch any form of prompt from the user. If you're making a console application, you *must* use this crate.
 
-### Note
+The built menus are useful for a game mode selection for example. It allows you to map functions when the user selects the corresponding field. It also let you mutate your code depending on the user input.
 
-If you want to use the `derive(Menu)` macro,
-you must use the [ezmenu](https://docs.rs/ezmenu/) crate instead.
-This crate may however contain features that are not yet available on the ezmenu crate.
+## Provided Cargo features
 
-## Examples
+This crate comes with many features:
+
+* `derive` (enabled by default): provides derive and attribute macros.
+* `password` (enabled by default): provides types to prompt a password from the user.
+* `tui`: provides the `ezmenulib::tui` letting you builting interactive menus.
+* `crossterm` and `termion`: backends to provide beside the `tui` feature.
+* `extra-globals`: allows you to use [parking_lot](https://docs.rs/parking_lot/) types with the `derive(Menu)` macro, thus needs to be provided with the `derive` feature.
+
+Without any feature enabled, the ezmenulib crate is very lightweight and has no dependency. You still can build non-interactive menus and prompt values from the user with simple instructions.
+
+## Basic usage
+
+### Asking values from the user
+
+First, for more convenience, you may want to import the ezmenulib prelude when using the crate:
+
+```rust
+use ezmenulib::prelude::*;
+```
+
+Then, to ask the name of the user for example, you simply need to provide this instruction:
+
+```rust
+let name: String = Written::new("What is your name?").get();
+```
+
+This instruction, when executed, will result to this output:
+
+```text
+--> What is your name?
+>> 
+```
+
+`Written` is a struct that implements the `Promptable` trait. This trait is implemented by all the types that prompts a message to the user, then returns the value he entered. It includes type-checking, and loops until the provided value is correct and not empty.
+
+If you want to get an optional value, meaning an `Option<T>` as the output type, you can use the `Promptable::get_optional` associated function, and it will return `Some(value)` if the user provided a correct value, otherwise it will return `None`.
+If you want to get the default value of the type if the user entered an incorrect value, you can use the `Promptable::get_or_default` associated function.
+
+There exist many promptable types. You can ask the user for specific values by presenting him available responses, so the user only needs to select the desired field:
+
+```rust
+let amount: u8 = Selected::new("How many?", [("only one", 1), ("two", 2), ("none", 0)]).get();
+```
+
+When executed, this instruction will result to this output:
+
+```text
+--> How many?
+[1] - only one
+[2] - two
+[3] - none
+>> 
+```
+
+#### The `Prompted` trait
+
+The `Prompted` trait is implemented on a type that results of a prompt on the console. In general, it is implemented with the `derive(Prompted)` macro. This derive macro can be placed on an enum or a struct to allow it to be built from the user inputs in the console:
+
+```rust
+#[derive(Prompted)]
+enum LicenseType {
+    #[prompted(default)]
+    MIT,
+    GPL,
+    BSD,
+}
+
+let ty = LicenseType::prompt();
+```
+
+This code will result to this output:
+
+```text
+--> License type
+[1] - MIT (default)
+[2] - GPL
+[3] - BSD
+>> 
+```
+
+In this case, the `default` parameter in `#[prompted(default)]` means that if the user enters an incorrect value, then it will return the `LicenseType::MIT` value.
+
+For more information, see the [docs.rs](https://docs.rs/ezmenulib/) documentation.
 
 ### Menus
 
@@ -89,68 +166,6 @@ Basic menu
 >> 1
 PLAYING
 ```
-
-### Retrieve values
-
-You can get values from the user, by asking him to write the value, or to select among valid values. Follow the `gen_license` example, a sample code to get information about a project to generate a license.
-
-```rust
-use ezmenulib::prelude::*;
-
-#[derive(Debug)]
-enum Type {
-    MIT,
-    GPL,
-    BSD,
-}
-
-impl Selectable<3> for Type {
-    fn values() -> [(&'static str, Self); 3] {
-        use Type::*;
-        [("MIT", MIT), ("GPL", GPL), ("BSD", BSD)]
-    }
-
-    fn default() -> Option<usize> {
-        Some(0)
-    }
-}
-
-let mut lic = Values::default();
-
-let authors: Vec<String> =
-    lic.many_written(&Written::from("Authors").example("Ahmad, ..."), ", ")?;
-let name: Option<String> = lic.optional_written(&Written::from("Project name"))?;
-let date: u16 =
-    lic.written(&Written::from("License date").default_value("2022"))?;
-let ty: Type = lic.selected(Selected::from("Select a license type"))?;
-
-println!(
-    "{:?} License, Copyright (C) {} {}\n{}",
-    ty,
-    date,
-    authors.join(", "),
-    if let Some(n) = name { n } else { "".to_owned() },
-);
-```
-
-This sample code prints the standard menu like above:
-
-```text
---> Authors (example: Ahmad, ...)
->> Ahmad Baalbaky, Hello
---> Project name (optional)
->> 
---> License date (default: 2022)
->> 
---> Select a license type
-1 - MIT (default)
-2 - GPL
-3 - BSD
->> 2
-GPL License, Copyright (C) 2022 Ahmad Baalbaky, Hello
-```
-
-The user can skip the prompt if it is optional, otherwise the prompt will be reprinted until the entered value is correct.
 
 ## Formatting customization
 
