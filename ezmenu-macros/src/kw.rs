@@ -1,3 +1,5 @@
+use proc_macro2::Span;
+use proc_macro_error::abort;
 use syn::{
     custom_keyword,
     parse::{Parse, ParseStream},
@@ -9,7 +11,7 @@ use concat_idents::concat_idents as id;
 
 use crate::{
     format::Format,
-    menu::{MapWith, MappedWith},
+    menu::{MapWith, MappedWith, RawBlockAttr},
     prompted::{promptable::RawSelectedField, FunctionExpr},
     utils::Case,
 };
@@ -85,15 +87,45 @@ macro_rules! define_keywords {
     };
 }
 
+#[inline(never)]
+fn _abort_tui_feature(sp: Span) -> ! {
+    abort!(sp, "the `tui` feature must be enabled to use this keyword");
+}
+
+custom_keyword!(tui);
+
+pub(crate) fn parse_tui(input: ParseStream) -> syn::Result<bool> {
+    let _sp = input.parse::<tui>()?.span;
+    if cfg!(not(feature = "tui")) {
+        _abort_tui_feature(_sp);
+    }
+    Ok(true)
+}
+
+pub(crate) fn duplicate_tui(v: &bool) -> bool {
+    *v
+}
+
 define_keywords! {
     'eq: case: Case, title: LitStr, msg: LitStr, example: LitStr, sep: LitStr,
         prefix: LitStr, left_sur: LitStr, right_sur: LitStr, chip: LitStr,
         show_default: LitBool, suffix: LitStr, line_brk: LitBool, path: Path,
+        styled_title: Expr, title_alignment: Expr, border_style: Expr, style: Expr,
+        borders: Expr, border_type: Expr,
     'par: fmt: Format, until: FunctionExpr, or_val: LitStr, or_env: LitStr, map: FunctionExpr,
         mapped_with: MappedWith, map_with: MapWith,
-    'unit: no_title, nodoc, raw, optional, or_default, flatten, tui, basic_example, password,
+    'unit: no_title, nodoc, raw, optional, or_default, flatten, basic_example, password,
         parent, quit, once,
     'else:
+        block(input) -> RawBlockAttr {
+            let _sp = input.parse::<block>()?.span;
+            if cfg!(not(feature = "tui")) {
+                _abort_tui_feature(_sp);
+            }
+            let content;
+            syn::parenthesized!(content in input);
+            content.parse()?
+        },
         back(input) -> Index {
             let id = input.parse::<back>()?;
             if input.peek(syn::token::Paren) {
@@ -101,7 +133,7 @@ define_keywords! {
                 syn::parenthesized!(content in input);
                 content.parse()?
             } else {
-                Index { index: 0, span: id.span }
+                Index { index: 1, span: id.span }
             }
         },
         or_env_with(input) -> (LitStr, LitStr) {

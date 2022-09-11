@@ -1,3 +1,6 @@
+#[cfg(feature = "tui")]
+mod tui;
+
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site, set_dummy};
 use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
@@ -17,9 +20,12 @@ use crate::{
     prompted::FunctionExpr,
     utils::{
         get_attr_with_args, get_first_doc, get_last_seg_of_path, get_lib_root, method_call,
-        method_call_empty, split_ident_camel_case, wrap_in_const, Case,
+        method_call_empty, split_ident_camel_case, wrap_in_const, Case, MethodCall, Sp,
     },
 };
+
+#[cfg(feature = "tui")]
+use self::tui::Block;
 
 define_attr! {
     RawEntryAttr {
@@ -309,8 +315,20 @@ impl ToTokens for EntryField<'_> {
 }
 
 define_attr! {
+    pub(crate) RawBlockAttr {
+        styled_title: Option<Expr>,
+        title_alignment: Option<Expr>,
+        border_style: Option<Expr>,
+        style: Option<Expr>,
+        borders: Option<Expr>,
+        border_type: Option<Expr>,
+    }
+}
+
+define_attr! {
     RootAttr {
-        title: Option<LitStr>,
+        block: Option<RawBlockAttr>; without title,
+        title: Option<LitStr>; without block,
         raw: bool,
         no_title: bool; without title; raw,
         nodoc: bool; without title,
@@ -321,11 +339,50 @@ define_attr! {
     }
 }
 
+enum MenuTitle {
+    Regular(MethodCall<String>),
+    #[cfg(feature = "tui")]
+    Tui(MethodCall<Block>),
+}
+
+impl ToTokens for MenuTitle {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            MenuTitle::Regular(title_fn) => title_fn.to_tokens(tokens),
+            #[cfg(feature = "tui")]
+            MenuTitle::Tui(block_fn) => block_fn.to_tokens(tokens),
+        }
+    }
+}
+
+fn get_title(
+    title: Option<LitStr>,
+    no_title: bool,
+    nodoc: bool,
+    attrs: &[Attribute],
+    raw: bool,
+    name: &Ident,
+) -> Option<String> {
+    (!no_title).then(|| {
+        title
+            .map(|l| l.value())
+            .or_else(|| if nodoc { None } else { get_first_doc(attrs) })
+            .unwrap_or_else(|| {
+                if raw {
+                    name.to_string()
+                } else {
+                    split_ident_camel_case(name)
+                }
+            })
+    })
+}
+
 struct RootData {
-    title: Option<String>,
+    title: Option<MenuTitle>,
     case: Option<Case>,
     fmt: Option<Format>,
     once: bool,
+    #[cfg(feature = "tui")]
     tui: bool,
     fields_path: TokenStream,
     trait_path: TokenStream,
@@ -333,32 +390,45 @@ struct RootData {
 
 impl RootData {
     fn new(name: &Ident, attrs: &[Attribute]) -> Self {
-        let RootAttr {
-            title,
-            raw,
-            no_title,
-            nodoc,
-            fmt,
-            case,
-            once,
-            tui,
-        } = get_attr_with_args(attrs, "menu").unwrap_or_default().val;
+        let Sp {
+            span,
+            val:
+                RootAttr {
+                    block,
+                    title,
+                    raw,
+                    no_title,
+                    nodoc,
+                    fmt,
+                    case,
+                    once,
+                    tui,
+                },
+        } = get_attr_with_args(attrs, "menu").unwrap_or_default();
 
-        let title = if no_title {
-            None
+        let title = if tui {
+            #[cfg(feature = "tui")]
+            {
+                block
+                    .map(From::from)
+                    .or_else(|| {
+                        get_title(title, no_title, nodoc, attrs, raw, name).map(Block::from_title)
+                    })
+                    .map(|b| MenuTitle::Tui(method_call("block", b)))
+            }
+            #[cfg(not(feature = "tui"))]
+            {
+                unreachable!("tui param provided without enabled feature")
+            }
         } else {
-            Some(
-                title
-                    .map(|l| l.value())
-                    .or_else(|| if nodoc { None } else { get_first_doc(attrs) })
-                    .unwrap_or_else(|| {
-                        if raw {
-                            name.to_string()
-                        } else {
-                            split_ident_camel_case(name)
-                        }
-                    }),
-            )
+            if block.is_some() {
+                abort!(
+                    span,
+                    "cannot provide the `block` parameter without the `tui` parameter"
+                );
+            }
+            get_title(title, no_title, nodoc, attrs, raw, name)
+                .map(|title| MenuTitle::Regular(method_call("title", title)))
         };
 
         let root = get_lib_root().1;
@@ -373,6 +443,7 @@ impl RootData {
             case,
             fmt,
             once,
+            #[cfg(feature = "tui")]
             tui,
             fields_path,
             trait_path,
@@ -387,7 +458,12 @@ impl RootData {
     ) -> TokenStream {
         let root = get_lib_root().1;
 
-        let out = if self.tui {
+        fn _get_tui_ts(
+            root: Ident,
+            name: &Ident,
+            fields_ts: TokenStream,
+            menu_ts: TokenStream,
+        ) -> TokenStream {
             quote! {
                 #[automatically_derived]
                 impl #root::tui::Menu for #name {
@@ -402,7 +478,14 @@ impl RootData {
                     }
                 }
             }
-        } else {
+        }
+
+        fn get_reg_ts(
+            root: Ident,
+            name: &Ident,
+            fields_ts: TokenStream,
+            menu_ts: TokenStream,
+        ) -> TokenStream {
             quote! {
                 #[automatically_derived]
                 impl #root::menu::Menu for #name {
@@ -414,6 +497,21 @@ impl RootData {
                         #menu_ts
                     }
                 }
+            }
+        }
+
+        let out = {
+            #[cfg(feature = "tui")]
+            {
+                if self.tui {
+                    _get_tui_ts(root, name, fields_ts, menu_ts)
+                } else {
+                    get_reg_ts(root, name, fields_ts, menu_ts)
+                }
+            }
+            #[cfg(not(feature = "tui"))]
+            {
+                get_reg_ts(root, name, fields_ts, menu_ts)
             }
         };
 
@@ -437,32 +535,39 @@ impl RootData {
         let root = get_lib_root().1;
 
         let fmt_fn = self.fmt.as_ref().map(|f| method_call("format", f));
+        let title_fn = &self.title;
 
-        let menu_ts = if self.tui {
-            let title_fn = self.title.as_ref().map(|title| {
-                method_call(
-                    "block",
-                    quote! {
-                        #root::__private::tui::widgets::Block::default()
-                            .title(#title)
-                            .borders(#root::__private::tui::widgets::Borders::all())
-                    },
-                )
-            });
-
-            quote! {
-                #root::tui::TuiMenu::new(Self::fields())
-                #fmt_fn
-                #title_fn
-            }
-        } else {
-            let title_fn = self.title.as_ref().map(|t| method_call("title", t));
-            let once_fn = self.once.then(|| method_call_empty("once"));
+        fn get_reg_menu_ts(
+            root: Ident,
+            fmt_fn: Option<MethodCall<&Format>>,
+            title_fn: &Option<MenuTitle>,
+            once: bool,
+        ) -> TokenStream {
+            let once_fn = once.then(|| method_call_empty("once"));
             quote! {
                 #root::menu::RawMenu::with_handle(__h, Self::fields())
                 #fmt_fn
                 #title_fn
                 #once_fn
+            }
+        }
+
+        let menu_ts = {
+            #[cfg(feature = "tui")]
+            {
+                if self.tui {
+                    quote! {
+                        #root::tui::TuiMenu::new(Self::fields())
+                        #fmt_fn
+                        #title_fn
+                    }
+                } else {
+                    get_reg_menu_ts(root, fmt_fn, title_fn, self.once)
+                }
+            }
+            #[cfg(not(feature = "tui"))]
+            {
+                get_reg_menu_ts(root, fmt_fn, title_fn, self.once)
             }
         };
 

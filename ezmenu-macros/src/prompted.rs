@@ -270,7 +270,7 @@ enum FieldPrompt {
     /// so we can construct it from the `Prompted::from_values` method.
     Flatten(Span),
     /// The basic prompt, expanded to `vals.next(Promptable)` for example.
-    Basic(Box<MethodCall<Promptable>>),
+    Regular(Box<MethodCall<Promptable>>),
 }
 
 impl FieldPrompt {
@@ -298,9 +298,11 @@ impl FieldPrompt {
         };
 
         if attr.val.flatten {
-            // Flattened prompt, we call `Prompted::from_values` method for this field
+            // Flattened prompt, we call `Prompted::from_values` method for this field,
+            // so it needs to implement the Prompted trait.
             if let Some(id) = get_ty_ident(&field.ty) {
                 let root = get_lib_root().1;
+                // We check if the output value is a generic type.
                 check_for_bound(gens, id, quote!(#root::menu::Prompted));
             }
             Self::Flatten(field.ty.span())
@@ -315,7 +317,7 @@ impl FieldPrompt {
                 Promptable::from_not_until(&field.ty, w, attr.val, gens)
             };
 
-            Self::Basic(kind.call_for(&field.ty, prompt))
+            Self::Regular(kind.call_for(&field.ty, prompt))
         }
     }
 }
@@ -325,10 +327,9 @@ impl ToTokens for FieldPrompt {
         match self {
             FieldPrompt::Flatten(sp) => {
                 let root = get_lib_root_spanned(*sp).1;
-                quote_spanned!(*sp=> #root::menu::Prompted::from_values(__vals)?)
-                    .to_tokens(tokens);
+                quote_spanned!(*sp=> #root::menu::Prompted::from_values(__vals)?).to_tokens(tokens);
             }
-            FieldPrompt::Basic(call) => quote!(__vals #call).to_tokens(tokens),
+            FieldPrompt::Regular(call) => quote!(__vals #call).to_tokens(tokens),
         }
     }
 }
