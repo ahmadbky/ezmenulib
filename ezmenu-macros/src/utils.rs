@@ -34,6 +34,16 @@ macro_rules! to_str {
 
 pub(crate) use to_str;
 
+/// Wraps the code given in the argument into a const expression:
+///
+/// ```
+/// const _: () = {
+///     extern crate name_of_crate as _name_of_crate
+///     /* code */
+/// };
+/// ```
+///
+/// The reexport is used to avoid paths conflicts and hygiene.
 pub(crate) fn wrap_in_const(code: TokenStream) -> TokenStream {
     let (name, reexport) = get_lib_root();
 
@@ -48,11 +58,15 @@ pub(crate) fn wrap_in_const(code: TokenStream) -> TokenStream {
     }
 }
 
+/// Returns the name of the library, and its reexport, to a call-site span,
+/// because I am still not sure of the name of the library xd
 #[inline(always)]
 pub(crate) fn get_lib_root() -> (Ident, Ident) {
     get_lib_root_spanned(Span::call_site())
 }
 
+/// Returns the name of the library, and its reexport, to the given span,
+/// because I am still not sure of the name of the library xd
 #[inline(always)]
 pub(crate) fn get_lib_root_spanned(span: Span) -> (Ident, Ident) {
     let name = Ident::new("ezmenulib", span);
@@ -60,6 +74,10 @@ pub(crate) fn get_lib_root_spanned(span: Span) -> (Ident, Ident) {
     (name, reexport)
 }
 
+/// Represents a spanned type.
+///
+/// This struct is used to save the span of an input code element, and to bind a type to it,
+/// for error handling.
 pub(crate) struct Sp<T> {
     pub(crate) span: Span,
     pub(crate) val: T,
@@ -74,6 +92,14 @@ impl<T: Default> Default for Sp<T> {
     }
 }
 
+/// Convenient function used to only take the value of a spanned item.
+///
+/// # Basic usage
+///
+/// ```
+/// let a: Option<Sp<i32>> = Some(Sp::default());
+/// let a: Option<i32> = a.map(take_val);
+/// ```
 pub(crate) fn take_val<T>(sp: Sp<T>) -> T {
     sp.val
 }
@@ -86,8 +112,7 @@ impl<T> Sp<T> {
 
 impl<T: ToTokens> ToTokens for Sp<T> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let tok = self.val.to_token_stream();
-        quote_spanned!(self.span=> #tok).to_tokens(tokens)
+        self.val.to_tokens(tokens);
     }
 }
 
@@ -119,6 +144,14 @@ pub(crate) fn get_first_doc(attrs: &[Attribute]) -> Option<String> {
     })
 }
 
+/// Represents a method call.
+///
+/// A method call is expanded to `.name::<T0, T1, ...>(arg0, arg1, ...)[?]`
+///
+/// The T generic type parameter is only used for convenience purpose. For a method call that
+/// doesn't take any argument, T is replaced by the unit type `()`. For a single parameter,
+/// T is replaced by the parameter type. Otherwise, T is replaced by a tuple with
+/// the types of the parameters.
 pub(crate) struct MethodCall<T> {
     name: Ident,
     gens: Punctuated<Type, Token![,]>,
@@ -158,10 +191,15 @@ impl<T> MethodCall<T> {
     }
 }
 
+/// Convenient function used to return a method call with a single parameter.
+/// This is used to avoid the redundant `MethodCall::new(...)` call, because there are many
+/// methods that takes only one parameter across the library.
 pub(crate) fn method_call<T: ToTokens>(name: &str, arg: T) -> MethodCall<T> {
     MethodCall::new(Ident::new(name, Span::call_site()), parse_quote!(#arg))
 }
 
+/// Convenient function used to return a method call without any parameter.
+/// Same as [`method_call`], this is used to avoid redundance.
 pub(crate) fn method_call_empty(name: &str) -> MethodCall<()> {
     MethodCall::new(Ident::new(name, Span::call_site()), Punctuated::new())
 }
@@ -215,10 +253,14 @@ impl Parse for Case {
     }
 }
 
+/// Replaces a char of the given string at the given index with the new piece.
 fn replace_char<S: Display>(idx: usize, new: S, buf: &mut String) {
     buf.replace_range(idx..idx + 1, format!("{new}").as_str());
 }
 
+/// Returns the "prettified" version of a snake case ident.
+///
+/// "hello_everyone" => "Hello everyone"
 pub(crate) fn split_ident_snake_case(id: &Ident) -> String {
     let mut out = id.to_string();
     let mut prev_up = false;
@@ -255,6 +297,8 @@ pub(crate) fn split_ident_snake_case(id: &Ident) -> String {
 /// Util function used to get the splitted version of an identifier written in the camel case.
 ///
 /// It turns to lowercase the "tail" of the words inside.
+///
+/// "HelloEveryone" => "Hello everyone"
 pub(crate) fn split_ident_camel_case(id: &Ident) -> String {
     let mut out = id.to_string();
     let mut prev_up = false;
@@ -283,10 +327,12 @@ pub(crate) fn split_ident_camel_case(id: &Ident) -> String {
     out
 }
 
+/// Returns the last path segment of the given path.
 pub(crate) fn get_last_seg_of_path(path: &Path) -> Option<&PathSegment> {
     path.segments.last()
 }
 
+/// Returns the nested generic arguments of a path segment.
 pub(crate) fn get_nested_args(
     seg: &PathSegment,
 ) -> Option<&Punctuated<GenericArgument, Token![,]>> {
@@ -296,12 +342,15 @@ pub(crate) fn get_nested_args(
     }
 }
 
+/// Returns true if the path correponds to the given name, by checking its last segment,
+/// otherwise returns false.
 pub(crate) fn is_path(path: &Path, name: &str) -> bool {
     get_last_seg_of_path(path)
         .filter(|seg| seg.ident == name)
         .is_some()
 }
 
+/// Returns the last path segment of a type.
 pub(crate) fn get_last_seg_of_ty(ty: &Type) -> Option<&PathSegment> {
     match ty {
         Type::Path(TypePath { qself: None, path }) => Some(get_last_seg_of_path(path)?),
@@ -309,6 +358,7 @@ pub(crate) fn get_last_seg_of_ty(ty: &Type) -> Option<&PathSegment> {
     }
 }
 
+/// Returns the identifier of a given type.
 pub(crate) fn get_ty_ident(ty: &Type) -> Option<&Ident> {
     if let Type::Path(TypePath { path, .. }) = ty {
         path.get_ident()
@@ -317,6 +367,7 @@ pub(crate) fn get_ty_ident(ty: &Type) -> Option<&Ident> {
     }
 }
 
+/// Returns true if the type correponds to the given name, otherwise returns false.
 pub(crate) fn is_ty(ty: &Type, name: &str) -> bool {
     get_last_seg_of_ty(ty)
         .filter(|seg| seg.ident == name)

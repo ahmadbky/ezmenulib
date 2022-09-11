@@ -1,3 +1,15 @@
+//! Module used to easily define macro attributes, and the keywords used by them.
+//!
+//! Macro attributes, as meta-item, become pretty closer to each other, because they consist of
+//! many parameters defined in any order by the user. To avoid repetition in the macros definition
+//! code, we use the [`define_attr`] macro, to define a struct that will represent the attribute
+//! of an item, with its fields used as the attribute parameters.
+//!
+//! This macro generates the attribute parsing code that checks if a parameter hasn't been provided
+//! twice, and also if there isn't an other parameter that is in conflict with it, thank to the
+//! `without field0; field1; ...` syntax. Parameters that enter in conflict are for example
+//! `title = "..."` and `no_title`.
+
 use proc_macro2::Span;
 use proc_macro_error::abort;
 use syn::{
@@ -16,11 +28,16 @@ use crate::{
     utils::Case,
 };
 
+/// Util macro used to define the keywords used by the macros attributes.
 macro_rules! define_keywords {
     {
+        // param = value
         'eq: $( $eq:ident: $eq_ty:ty, )*
+        // param(value)
         'par: $( $par:ident: $par_ty:ty, )*
+        // param
         'unit: $( $unit:ident, )*
+        // custom parse
         'else: $( $else:ident($input:ident) -> $else_ty:ty $block:block ),*
     } => {
         $(
@@ -92,6 +109,8 @@ fn _abort_tui_feature(sp: Span) -> ! {
     abort!(sp, "the `tui` feature must be enabled to use this keyword");
 }
 
+// We don't use the define_keywords macro to provide the `tui` unit parameter,
+// because it depends of the `tui` feature.
 custom_keyword!(tui);
 
 pub(crate) fn parse_tui(input: ParseStream) -> syn::Result<bool> {
@@ -169,12 +188,18 @@ define_keywords! {
         }
 }
 
+/// Macro used to define a struct that will contain the data of an macro attribute.
+/// 
+/// See the [module](crate::kw) documentation for more details.
+// FIXME: Maybe forbid the useless commas in `#[attr(,,,,,,, ...)]`?
 macro_rules! define_attr {
     {
+        $(#[$docs:meta])*
         $pub:vis $Attr:ident {$(
             $field:ident: $ty:ty $(; without $($cond:expr);*)?,
         )*}
     } => {
+        $(#[$docs])*
         #[derive(Clone, Default, Debug)]
         $pub struct $Attr {$(
             $field: $ty,

@@ -1,3 +1,5 @@
+//! Contains the expansion types of the promptable types of the library.
+
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::abort;
 use quote::{quote, ToTokens};
@@ -16,6 +18,9 @@ use crate::{
 
 use super::{FunctionExpr, Promptable};
 
+/// Represents a selectable field for the Selected promptable.
+///
+/// A selectable field is expanded to a couple ("msg", bound_value)
 #[derive(Clone, Debug)]
 struct SelectedField {
     lit: LitStr,
@@ -40,6 +45,7 @@ impl Parse for SelectedField {
     }
 }
 
+/// Represents a selectable field given in an attribute.
 #[derive(Clone, Debug)]
 pub(crate) struct RawSelectedField {
     raw: SelectedField,
@@ -62,6 +68,7 @@ impl Parse for RawSelectedField {
     }
 }
 
+/// Returns the `default` method call for the selected promptable.
 fn get_default_fn<I: Iterator<Item = RawSelectedField>>(input: I) -> Option<MethodCall<Index>> {
     let mut default = None;
 
@@ -78,6 +85,7 @@ fn get_default_fn<I: Iterator<Item = RawSelectedField>>(input: I) -> Option<Meth
     default.map(|i| method_call("default", i))
 }
 
+/// Represents the Selected promptable construction expansion.
 pub(super) struct Selected {
     msg: String,
     entries: Punctuated<SelectedField, Token![,]>,
@@ -86,6 +94,8 @@ pub(super) struct Selected {
 }
 
 impl Selected {
+    /// Returns the Selected promptable expansion handle from the selectable field found in
+    /// the prompted attribute.
     pub(super) fn new(
         msg: String,
         fmt: Option<MethodCall<Format>>,
@@ -118,6 +128,7 @@ impl ToTokens for Selected {
     }
 }
 
+/// Represents the Written promptable construction expansion.
 pub(super) struct Written {
     pub(super) msg: String,
     pub(super) fmt: Option<MethodCall<Format>>,
@@ -141,6 +152,7 @@ impl ToTokens for Written {
     }
 }
 
+/// Represents the Until promptable construction expansion.
 pub(super) struct Until {
     pub(super) inner: Box<Promptable>,
     pub(super) til: FunctionExpr,
@@ -155,6 +167,7 @@ impl ToTokens for Until {
     }
 }
 
+/// Represents the Separated promptable construction expansion.
 pub(super) struct Separated {
     pub(super) w: Written,
     pub(super) sep: LitStr,
@@ -171,6 +184,7 @@ impl ToTokens for Separated {
     }
 }
 
+/// Represents the Bool promptable construction expansion.
 pub(super) struct Bool {
     pub(super) w: Written,
     pub(super) basic_example: Option<MethodCall<()>>,
@@ -185,6 +199,7 @@ impl ToTokens for Bool {
     }
 }
 
+/// Represents the Password promptable construction expansion.
 pub(super) struct Password {
     pub(super) msg: String,
     pub(super) fmt: Option<MethodCall<Format>>,

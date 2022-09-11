@@ -1,3 +1,5 @@
+//! Module that defines the expansion of the Format struct construction.
+
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{
@@ -9,8 +11,11 @@ use crate::{kw::define_attr, utils::get_lib_root};
 
 macro_rules! impl_fmt {
     ($( $field:ident: $ty:ty ),*) => {
+        // We save the format attribute parameter into the `FormatInner` struct,
         define_attr! ( FormatInner {$( $field: $ty, )*} );
 
+        // so that we can check if some format parameters have been omitted,
+        // to avoid clippy::needless_update warning.
         #[derive(Clone, Debug)]
         pub(crate) struct Format {
             inner: FormatInner,

@@ -1,3 +1,5 @@
+//! Module that manages the expansion of the Prompted derive macro for an enum.
+
 use proc_macro2::{Delimiter, Group, Punct, Spacing, Span, TokenStream};
 use proc_macro_error::{abort, set_dummy};
 use quote::{quote, ToTokens, TokenStreamExt};
@@ -20,6 +22,10 @@ use crate::{
 };
 
 define_attr! {
+    /// Represents the prompted attribute of a unit variant.
+    ///
+    /// We save the default parameter keyword span to check at the end
+    /// if there are many default values, to span the error.
     UnitAttr {
         msg: Option<LitStr>,
         default: Option<Span>,
@@ -323,6 +329,7 @@ impl Select {
 }
 
 define_attr! {
+    /// Represents the prompted attribute of the enum.
     RootAttr {
         msg: Option<LitStr>,
         fmt: Option<Format>,

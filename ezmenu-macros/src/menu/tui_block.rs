@@ -1,3 +1,7 @@
+//! Contains the tui::widgets::Block struct construction expansion.
+//! It is placed on a module apart from the menu module for more convenience
+//! for the `tui` feature conditional compilation.
+
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{parse_quote, Expr, ExprLit, Lit, LitStr};
@@ -6,6 +10,8 @@ use crate::utils::{get_lib_root, method_call, MethodCall};
 
 use super::RawBlockAttr;
 
+/// Represents the expansion of the tui::widgets::Block struct construction.
+/// Its fields represents the optional calls of its methods.
 #[derive(Default)]
 pub(super) struct Block {
     styled_title: Option<MethodCall<Expr>>,

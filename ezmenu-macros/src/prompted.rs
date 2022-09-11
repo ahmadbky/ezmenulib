@@ -1,3 +1,7 @@
+//! Module that manages the expansion of the Prompted trait.
+//!
+//! If the item is an enum, the expansion will be managed by the [`prompted::select`] submodule.
+
 pub(crate) mod promptable;
 mod select;
 
@@ -33,13 +37,14 @@ use self::{
 };
 
 define_attr! {
+    /// Represents the prompted attribute of a struct that contains named or unnamed fields.
     RootFieldsAttr {
         case: Option<Case>,
         fmt: Option<Format>,
         title: Option<LitStr>,
         nodoc: bool,
-        raw: bool,
-        no_title: bool,
+        raw: bool; without title,
+        no_title: bool; without title,
     }
 }
 
@@ -52,6 +57,7 @@ impl From<&[Attribute]> for RootFieldsAttr {
 }
 
 define_attr! {
+    /// Represents the prompted attribute of an unit struct.
     RootUnitAttr {
         raw: bool,
     }
@@ -86,6 +92,7 @@ impl ToTokens for FunctionExpr {
 }
 
 define_attr! {
+    /// Represents the raw prompted attribute of a named or unnamed struct field.
     RawFieldAttr {
         msg: Option<LitStr>,
         fmt: Option<Format>,
@@ -190,6 +197,18 @@ enum Promptable {
 }
 
 impl Promptable {
+    /// Returns the promptable corresponding to the field and its context.
+    ///
+    /// This method must be called after checking that it must not be the `until` promptable
+    /// at this point.
+    ///
+    /// # Arguments
+    ///
+    /// * ty: The type of the field.
+    /// * w: We use the `Written` type as a container of the information we need,
+    /// for example the message.
+    /// * attr: The prompted attribute of the field.
+    /// * gens: The generics of the field struct, used to insert new trait bounds if we need to.
     fn from_not_until(ty: &Type, w: Written, attr: RawFieldAttr, gens: &mut Generics) -> Self {
         if let Some(entries) = attr.select {
             Promptable::Selected(Selected::new(w.msg, w.fmt, entries).unwrap_or_abort())
@@ -199,12 +218,13 @@ impl Promptable {
                 fmt: w.fmt,
             })
         } else if is_ty(ty, "bool") {
-            // Bool promptable
             let basic_example = attr
                 .basic_example
                 .then(|| method_call_empty("with_basic_example"));
             Promptable::Bool(Bool { w, basic_example })
         } else {
+            // At this point, the promptable must either be `Separated` or `Written`.
+
             if let Some(id) = get_ty_ident(ty) {
                 check_for_bound(gens, id, quote!(::core::str::FromStr));
             }
@@ -237,6 +257,10 @@ impl ToTokens for Promptable {
     }
 }
 
+/// Function used to insert the type of the argument of a closure, to avoid redundance.
+///
+/// This is used to avoid the user to reprecise the type of the argument in the closure,
+/// while it is already specified by the type of the field.
 fn insert_type_for(ExprClosure { inputs, .. }: &mut ExprClosure, ty: &Type) {
     fn insert_type(inputs: &mut Punctuated<Pat, Token![,]>, ty: &Type) {
         let pat = Box::new(inputs[0].clone());
@@ -309,14 +333,18 @@ impl FieldPrompt {
         } else {
             let prompt = if let Some(mut til) = attr.val.until.take() {
                 if let FunctionExpr::Closure(expr) = &mut til {
+                    // This is placed to avoid the user to provide the type
+                    // of the argument in the closure.
                     insert_type_for(expr, &field.ty);
                 }
+
                 let inner = Box::new(Promptable::from_not_until(&field.ty, w, attr.val, gens));
                 Promptable::Until(Until { inner, til })
             } else {
                 Promptable::from_not_until(&field.ty, w, attr.val, gens)
             };
 
+            // We call the `next` method with the promptable as argument.
             Self::Regular(kind.call_for(&field.ty, prompt))
         }
     }
@@ -326,6 +354,8 @@ impl ToTokens for FieldPrompt {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
             FieldPrompt::Flatten(sp) => {
+                // We span the call expansion because the output type may not implement
+                // the `Prompted` trait, and rustc will span the entire function call path.
                 let root = get_lib_root_spanned(*sp).1;
                 quote_spanned!(*sp=> #root::menu::Prompted::from_values(__vals)?).to_tokens(tokens);
             }

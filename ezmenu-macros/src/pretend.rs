@@ -1,3 +1,11 @@
+//! Module used to generate code used to pretend that fields or variants of the input
+//! are used, to avoid rustc warnings of unused fields or variants.
+//!
+//! This module is based on the serde_derive::pretend module. See its [documentation]
+//! for more details on how this works.
+//!
+//! [documentation]: https://docs.rs/serde_derive/latest/src/serde_derive/pretend.rs.html
+
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -8,6 +16,10 @@ use syn::{
 
 use crate::utils::{get_attr_with_args, get_lib_root, take_val};
 
+/// Returns the code that is pretending to use the fields or variants of the input code,
+/// to suppress the useless rustc warnings.
+///
+/// See the [module documentation](crate::pretend) for more information.
 pub(crate) fn pretend_used(input: &DeriveInput) -> TokenStream {
     match &input.data {
         Data::Enum(DataEnum { variants, .. }) => used_enum(input, variants),
@@ -16,6 +28,7 @@ pub(crate) fn pretend_used(input: &DeriveInput) -> TokenStream {
     }
 }
 
+/// Returns the code that is pretending to use the variants of the input enum.
 fn used_enum(input: &DeriveInput, variants: &Punctuated<Variant, Token![,]>) -> TokenStream {
     let name = &input.ident;
     let ty_gens = input.generics.split_for_impl().1;
@@ -74,6 +87,8 @@ mod kw {
     custom_keyword!(packed);
 }
 
+/// Struct used to represent the `#[packed]` attribute on a struct (I am not sure
+/// of the utility of this but we never know, serde checks for it so 🤷‍♂️).
 #[derive(Default)]
 struct Packed(bool);
 
@@ -89,6 +104,9 @@ impl Parse for Packed {
     }
 }
 
+/// Returns the code that is pretending to use the fields of the input struct.
+/// 
+/// It checks if the struct is declared as packed or not.
 fn used_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     if !matches!(fields, Fields::Named(_)) {
         return TokenStream::new();
@@ -101,6 +119,7 @@ fn used_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     }
 }
 
+/// Returns the code that is pretending to use the fields of a packed struct.
 fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     let name = &input.ident;
     let ty_gens = input.generics.split_for_impl().1;
@@ -117,6 +136,7 @@ fn used_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     }
 }
 
+/// Returns the code that is pretending to use the fields of a non-packed struct.
 fn used_not_packed_struct(input: &DeriveInput, fields: &Fields) -> TokenStream {
     let name = &input.ident;
     let ty_gens = input.generics.split_for_impl().1;

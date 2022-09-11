@@ -1,5 +1,7 @@
+//! Module used to manage the expansion of the `Menu` derive macro, with its attribute.
+
 #[cfg(feature = "tui")]
-mod tui;
+mod tui_block;
 
 use proc_macro2::{Delimiter, Group, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site, set_dummy};
@@ -25,7 +27,7 @@ use crate::{
 };
 
 #[cfg(feature = "tui")]
-use self::tui::Block;
+use self::tui_block::Block;
 
 define_attr! {
     RawEntryAttr {

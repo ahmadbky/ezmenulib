@@ -1,3 +1,11 @@
+//! Module that basically turns a function into a bound function to be called by a menu.
+//!
+//! A bound function means a function that takes a `<H> &mut H` first parameter for a raw menu,
+//! or a `<B: Backend> &mut Terminal<B>` first parameter for a tui menu.
+//!
+//! So this module inserts this parameter if not already present,
+//! according to its `tui` argument.
+
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::{abort, set_dummy};
 use quote::{quote, ToTokens};
@@ -12,10 +20,17 @@ use crate::{
     utils::{get_last_seg_of_path, get_lib_root, get_nested_args, is_path},
 };
 
+/// Util function used to abort when the user tries to bind an invalid function,
+/// because its signature contains the `kw` keyword.
 fn abort_invalid_fn(span: Span, kw: &str) -> ! {
     abort!(span, "bound function cannot be {}", kw);
 }
 
+/// Returns the identifier of the first generic parameter that is bound to the
+/// Handle trait for a raw menu or the Backend trait for a tui menu.
+///
+/// This is used to avoid redundance in the expansion, in case there is already a specified
+/// generic argument.
 fn get_h_gen(tui: bool, gens: &mut Generics) -> Option<&Ident> {
     let id = if tui { "Backend" } else { "Handle" };
     gens.type_params().find_map(|param| {
@@ -32,6 +47,9 @@ fn get_h_gen(tui: bool, gens: &mut Generics) -> Option<&Ident> {
     })
 }
 
+/// Returns the identifier of the first generics parameter that is bound to the
+/// Handle trait for a raw menu or the Backend trait for a tui menu,
+/// or pushes a new generic type parameter with the trait bound then return its ident.
 fn get_or_push_h_gen(tui: bool, gens: &mut Generics) -> Ident {
     if let Some(id) = get_h_gen(tui, gens) {
         id.clone()
@@ -51,6 +69,7 @@ fn get_or_push_h_gen(tui: bool, gens: &mut Generics) -> Ident {
     }
 }
 
+/// Checks the signature of the function and aborts if it is invalid.
 fn check_sig(sig: &Signature) {
     if let Some(uns) = sig.unsafety {
         abort_invalid_fn(uns.span, "unsafe");
@@ -61,6 +80,8 @@ fn check_sig(sig: &Signature) {
     }
 }
 
+/// Returns true if the given path segment corresponds to the first argument of a function
+/// bound for a tui menu, meaning that it is wrote as `Terminal<id>`, otherwise returns false.
 fn is_tui_seg(id: &Ident, seg: &PathSegment) -> bool {
     get_nested_args(seg)
         .filter(|p| {
@@ -76,10 +97,14 @@ fn is_tui_seg(id: &Ident, seg: &PathSegment) -> bool {
         && seg.ident == "Terminal"
 }
 
+/// Returns true if the given path segment corresponds to the first argument of a function
+/// bound for a raw menu, meaning that it is wrote as `id`, otherwise returns false.
 fn is_reg_seg(id: &Ident, seg: &PathSegment) -> bool {
     seg.ident == *id
 }
 
+/// Returns true if the arguments of the function needs an insert for the bound argument,
+/// otherwise returns false.
 fn needs_insert(tui: bool, id: &Ident, args: &Punctuated<FnArg, Token![,]>) -> bool {
     let cmp = if tui { is_tui_seg } else { is_reg_seg };
 
@@ -102,6 +127,7 @@ fn needs_insert(tui: bool, id: &Ident, args: &Punctuated<FnArg, Token![,]>) -> b
     }
 }
 
+/// Appends the necessary argument to the signature of the function.
 fn append_handle(tui: bool, input: &mut Signature) {
     check_sig(input);
 
@@ -118,6 +144,7 @@ fn append_handle(tui: bool, input: &mut Signature) {
     }
 }
 
+/// Entry point for the `bound` attribute macro.
 pub(crate) fn build_bound(args: BoundArgs, mut input: ItemFn) -> TokenStream {
     set_dummy(input.to_token_stream());
     append_handle(args.tui, &mut input.sig);
@@ -126,6 +153,7 @@ pub(crate) fn build_bound(args: BoundArgs, mut input: ItemFn) -> TokenStream {
 }
 
 define_attr! {
+    /// Defines the arguments of the [`bound`] attribute macro.
     pub(crate) BoundArgs {
         tui: bool,
     }
