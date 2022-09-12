@@ -66,7 +66,10 @@
 
 ### Other changes
 
+<<<<<<< HEAD
 * New traits: `UsesFormat` and `MenuDisplay`.
+=======
+>>>>>>> 3582d1848bf4312c2f78c4594ee9444de7e6421b
 * Removed `GetStream` trait.
 * Removed `SelectTitle` and `TitlePos` types.
 * Changed `MenuError` variants:
