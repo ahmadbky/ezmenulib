@@ -1,5 +1,4 @@
-use ezmenulib::{menu::Handle, prelude::*};
-use std::io;
+use ezmenulib::prelude::*;
 
 mod hehe {
     use super::*;
@@ -39,7 +38,7 @@ fn play() {
 }
 
 #[bound]
-fn edit_name( span: &str) {
+fn edit_name(span: &str) {
     println!("Editing {span}stname");
 }
 
