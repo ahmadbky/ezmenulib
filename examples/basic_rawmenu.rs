@@ -33,12 +33,14 @@ enum MainMenu {
     Quit,
 }
 
-fn play<H: Handle>(s: &mut H) -> io::Result<()> {
-    writeln!(s, "Now playing.")
+#[bound]
+fn play() {
+    println!("Now playing.");
 }
 
-fn edit_name<H: Handle>(s: &mut H, span: &str) -> io::Result<()> {
-    writeln!(s, "Editing {span}stname")
+#[bound]
+fn edit_name( span: &str) {
+    println!("Editing {span}stname");
 }
 
 fn main() {

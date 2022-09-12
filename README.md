@@ -4,7 +4,7 @@
 
 </div>
 
-Building menus in Rust becomes easy and fast.
+Building CLI menus in Rust becomes easy and fast.
 
 This repository contains the source code of the ezmenulib crate. This crate provides a library that allows you to build console menus and other prompted resources such as passwords, boolean values, written and selected values, and more. It includes type-checking from the user input, and a prompt format customization.
 
@@ -20,7 +20,7 @@ This crate comes with many features:
 
 * `derive` (enabled by default): provides derive and attribute macros.
 * `password` (enabled by default): provides types to prompt a password from the user.
-* `tui`: provides the `ezmenulib::tui` letting you builting interactive menus.
+* `tui`: provides the `ezmenulib::tui` letting you build interactive menus.
 * `crossterm` and `termion`: backends to provide beside the `tui` feature.
 * `extra-globals`: allows you to use [parking_lot](https://docs.rs/parking_lot/) types with the `derive(Menu)` macro, thus needs to be provided with the `derive` feature.
 
@@ -102,74 +102,113 @@ For more information, see the [docs.rs](https://docs.rs/ezmenulib/) documentatio
 
 ### Menus
 
-You can construct CLI menus with the library:
+A basic example of how to build a CLI menu in Rust is to modelize a game main menu, with a first "Play" button, a button for the "Settings", and an other used to "Quit" the program.
+
+The "Play" button will call a function when selected to begin the game loop.
+The "Settings" button will run a nested menu with a "Name" button used to edit the name of the user, a "Main menu" button used to return back to the main menu, and a "Quit" button used to quit the program.
+
+The "Name" nested field in the Settings menu will itself lead to an other nested menu, with a "Firstname" button used to run the program that edits the firstname of the current player, a "Lastname" button for his lastname, and a "Main menu" button to return to the main menu.
+
+With `ezmenulib`, this menu is very easy to build:
 
 ```rust
-use ezmenulib::prelude::*;
-use std::io::Write;
+use ezmenulib::{bound, menu::Menu};
 
-fn playing(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "PLAYING")?;
-    Ok(())
+#[bound]
+fn edit_name(span: &str) -> {
+    println!("Editing {span}name");
+    // edit the name...
 }
 
-fn firstnaming(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "EDITING FIRSTNAME")?;
-    Ok(())
+#[derive(Menu)]
+enum Name {
+    #[menu(mapped(edit_name, "first"))]
+    Firstname,
+    #[menu(mapped(edit_name, "last"))]
+    Lastname,
+    #[menu(back(2))]
+    MainMenu,
 }
 
-fn lastnaming(s: &mut MenuStream) -> MenuResult {
-    writeln!(s, "EDITING LASTNAME")?;
-    Ok(())
+#[derive(Menu)]
+enum Settings {
+    #[menu(parent)]
+    Name,
+    // Elided index means it goes back to the previous depth
+    // Equivalent to #[menu(back(1))]
+    #[menu(back)]
+    MainMenu,
+    Quit,
 }
 
-RawMenu::from(&[
-    ("Play", Kind::Map(playing)),
-    (
-        "Settings",
-        Kind::Parent(&[
-            ("Name", Kind::Parent(&[
-                ("Firstname", Kind::Map(firstnaming)),
-                ("Lastname", Kind::Map(lastnaming)),
-                ("Main menu", Kind::Back(2)),
-            ]))
-            ("Go back", Kind::Back(1)),
-        ]),
-    ),
-    ("Quit", Kind::Quit),
-])
-.title("Basic menu")
-.run()?;
+#[bound]
+fn play() {
+    println!("Now playing");
+    // loop { ... }
+}
+
+#[derive(Menu)]
+enum MainMenu {
+    #[menu(map(play))]
+    Play,
+    #[menu(parent)]
+    Settings,
+    Quit,
+}
+
+MainMenu::run();
 ```
 
-This sample code prints the standard menu like above:
+Then, a sample of the resulted output of this code would be:
 
 ```text
-Basic menu
-1 - Play
-2 - Settings
-3 - Quit
+--> Main menu
+[1] - Play
+[2] - Settings
+[3] - Quit
+>> 1
+Now playing
+--> Main menu
+[1] - Play
+[2] - Settings
+[3] - Quit
 >> 2
-Settings
-1 - Name
-2 - Go back
+--> Settings
+[1] - Name
+[2] - Main menu
+[3] - Quit
 >> 1
-Name
-1 - Firstname
-2 - Lastname
-3 - Main Menu
+--> Name
+[1] - Firstname
+[2] - Lastname
+[3] - Main menu
+>> 1
+Editing firstname
+--> Name
+[1] - Firstname
+[2] - Lastname
+[3] - Main menu
 >> 3
-Basic menu
-1 - Play
-2 - Settings
-3 - Quit
->> 1
-PLAYING
+--> Main menu
+[1] - Play
+[2] - Settings
+[3] - Quit
+>> 3
 ```
+
+However, this menu remains very simple and looks like ["raw" menus](https://docs.rs/ezmenulib/1.0.0/ezmenulib/menu/struct.RawMenu.html).
+
+So, this raw menu may be transformed into an interactive menu that can be drawn by the [`tui`](https://docs.rs/tui/0.19.0) library. The menu will then appear like so, depending on your code context:
+
+![A dynamic tui-menu built with ezmenulib](assets/dynamic_tuimenu.png)
+
+This output corresponds to the ["dynamic tui-menu"](examples/dynamic_tuimenu.rs) example.
+
+For more information about the `ezmenulib` menus, see the [docs.rs](https://docs.rs/ezmenulib/1.0.0/ezmenulib/menu/trait.Menu.html) documentation.
 
 ## Formatting customization
 
-The library allows you to customize the text format behavior in many ways. The rules are defined in the [`Format` ](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Format.html) struct.
+The library allows you to customize the text format behavior in many ways. The rules are defined in the [`Format` ](https://docs.rs/ezmenulib/1.0.0/ezmenulib/field/struct.Format.html) struct.
 
 You may remove the line break between the prompt and the suffix before the user input for example:
 
@@ -182,12 +221,18 @@ let name: String = Written::from("Name")
         suffix: ": ",
         ..Default::default()
     })
-    .prompt(&mut MenuStream::default())?;
+    .get();
 ```
 
-The format can be global and inherited by the [`Values`](https://docs.rs/ezmenulib/latest/ezmenulib/menu/struct.Values.html) container on the following prompts ([`Written`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Written.html) and [`Selected`](https://docs.rs/ezmenulib/latest/ezmenulib/field/struct.Selected.html)).
+This custom format specification results to this output:
+
+```text
+--> Name:
+```
+
+The format can be global and inherited by the [`Values`](https://docs.rs/ezmenulib/1.0.0/ezmenulib/menu/struct.Values.html) container on the called promptable types (written, selected, etc). If a promptable has its own custom format specification, the container will save it.
 
 ## Documentation
 
-You can find all the crate documentation on [Docs.rs](https://docs.rs/ezmenulib).
+You can find all the crate documentation on [docs.rs](https://docs.rs/ezmenulib).
 You can also check the [examples](examples) to learn with a practical way.
