@@ -41,7 +41,7 @@ pub use ezmenu_macros::Prompted;
 #[cfg_attr(nightly, doc(cfg(feature = "derive")))]
 pub use ezmenu_macros::bound;
 
-pub mod customs;
+mod customs;
 pub mod field;
 pub mod menu;
 

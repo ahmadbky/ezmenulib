@@ -20,7 +20,7 @@ This crate comes with many features:
 
 * `derive` (enabled by default): provides derive and attribute macros.
 * `password` (enabled by default): provides types to prompt a password from the user.
-* `tui`: provides the `ezmenulib::tui` letting you build interactive menus.
+* `tui`: opens the `ezmenulib::tui` module letting you build interactive menus.
 * `crossterm` and `termion`: backends to provide beside the `tui` feature.
 * `extra-globals`: allows you to use [parking_lot](https://docs.rs/parking_lot/) types with the `derive(Menu)` macro, thus needs to be provided with the `derive` feature.
 
