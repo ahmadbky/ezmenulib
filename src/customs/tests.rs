@@ -16,10 +16,3 @@ fn bool_parse() {
         Ok(vec![true, true, true, false, true, false, false, false])
     );
 }
-
-#[cfg(feature = "expr")]
-#[test]
-fn math_expr() {
-    let opt: MenuNumber = "5+3-6*3".parse().unwrap();
-    assert_eq!(*opt, -10.);
-}

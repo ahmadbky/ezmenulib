@@ -41,7 +41,7 @@ use self::{
 /// on the same variant. Generics are not allowed for a prompted enum.
 ///
 /// For a struct item, the prompt will follow the fields declaration order.
-/// Each struct field will have its own behavior based on its menu attribute.
+/// Each struct field will have its own behavior based on its `prompted` attribute.
 /// The default behavior is a written field, so the field type
 /// must implement the [`FromStr`] trait.
 ///
