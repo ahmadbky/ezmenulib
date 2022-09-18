@@ -113,6 +113,22 @@ pub fn derive_menu(item: TokenStream) -> TokenStream {
 ///
 /// However, the inserted parameter from the `bound` attribute will thus be unusable
 /// in the body of the function.
+///
+/// # Example
+///
+/// For a raw menu:
+///
+/// ```
+/// #[ezmenulib::bound]
+/// fn play() { /* ... */ }
+/// ```
+/// 
+/// For a tui-menu:
+/// 
+/// ```
+/// #[ezmenulib::bound(tui)]
+/// fn play() { /* ... */ }
+/// ```
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn bound(attr: TokenStream, item: TokenStream) -> TokenStream {

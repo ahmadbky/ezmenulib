@@ -1,6 +1,10 @@
 //! Module defining the types for the `tui` feature.
 //!
 //! This module is mainly used to generate menu using the [`tui`](https://docs.rs/tui/) crate.
+//!
+//! # Fields kinds
+//!
+//! Blablabla
 
 use std::{cell::RefCell, fmt, io::Write, rc::Rc};
 
@@ -301,7 +305,7 @@ pub trait Menu {
     fn tui_menu<'a, B: Backend + Write + 'static>() -> TuiMenu<'a, B>;
 }
 
-/// A tui menu field.
+/// A [tui menu](TuiMenu) field.
 ///
 /// The string slice corersponds to the message displayed in the list,
 /// and the kind corresponds to its behavior.
@@ -309,16 +313,18 @@ pub trait Menu {
 /// See [`TuiKind`] for more information.
 pub type TuiField<'a, B> = (&'a str, TuiKind<'a, B>);
 
-/// The tui menu fields.
+/// The [tui menu](TuiMenu) fields.
 ///
-/// It simply corresponds to a slice of fields.
+/// It simply corresponds to a vector of fields.
 /// It is used for more convenience in the library.
+/// 
+/// To accept any type of collection, the library uses the [`IntoTuiFields`] trait.
 pub type TuiFields<'a, B> = Vec<TuiField<'a, B>>;
 
-/// Corresponds to the function mapped to a field.
+/// Corresponds to the function mapped to a field for a [tui menu](TuiMenu).
 ///
 /// It can be viewed as a callback for a menu button.
-/// This function is called right after the user selected the corresponding field.
+/// This function is supposed to be called right after the user selected the corresponding field.
 pub type TuiCallback<B> = Rc<RefCell<dyn FnMut(&mut Terminal<B>) -> MenuResult>>;
 
 /// Defines the behavior of a [tui field](TuiField).
@@ -348,6 +354,24 @@ impl<'a, B: Backend> fmt::Debug for TuiKind<'a, B> {
     }
 }
 
+/// Utility macro for calling a mapped function for a [tui-menu](crate::tui::TuiMenu)
+/// by filling the corresponding parameters.
+///
+/// It has the same utility as the [`mapped!`](crate::mapped) macro.
+///
+/// # Example
+///
+/// ```
+/// #[bound(tui)]
+/// fn play_with(name: &str) {
+///     println!("Playing with {name}");
+/// }
+///
+/// let game = TuiMenu::from([
+///     ("Play with Ahmad", tui_mapped!(play_with, "Ahmad")),
+///     ("Play with Jacques", tui_mapped!(play_with, "Jacques")),
+/// ]);
+/// ```
 #[macro_export]
 macro_rules! tui_mapped {
     ($f:expr, $($s:expr),* $(,)?) => {{
@@ -355,16 +379,23 @@ macro_rules! tui_mapped {
     }};
 }
 
-pub fn map<'a, B, F, Res>(mut f: F) -> TuiKind<'a, B>
+/// Returns the [`TuiKind::Map`] variant.
+///
+/// The mapped function must either return the unit `()` type, or a `Result<T, E>`
+/// where `E` can be converted into a [`MenuError`](crate::MenuError).
+///
+/// It must take a single parameter. For other usage, consider using the [`tui_mapped!`] macro.
+pub fn map<'a, B, F, R>(mut f: F) -> TuiKind<'a, B>
 where
     B: Backend,
-    F: FnMut(&mut Terminal<B>) -> Res + 'static,
-    Res: IntoResult,
+    F: FnMut(&mut Terminal<B>) -> R + 'static,
+    R: IntoResult,
 {
     let f = move |s: &mut Terminal<B>| f(s).into_result();
     TuiKind::Map(Rc::new(RefCell::new(f)) as _)
 }
 
+/// Returns the [`TuiKind::Parent`] variant by converting the input collection into tui fields.
 #[inline(always)]
 pub fn parent<'a, I, B>(f: I) -> TuiKind<'a, B>
 where
@@ -374,17 +405,24 @@ where
     TuiKind::Parent(Rc::new(f.into_tui_fields()))
 }
 
+/// Returns the [`TuiKind::Back`] variant.
 #[inline(always)]
 pub fn back<'a, B: Backend>(i: usize) -> TuiKind<'a, B> {
     TuiKind::Back(i)
 }
 
+/// Returns the [`TuiKind::Quit`] variant.
 #[inline(always)]
 pub fn quit<'a, B: Backend>() -> TuiKind<'a, B> {
     TuiKind::Quit
 }
 
+/// Utility trait for converting a collection object into fields
+/// for a [tui menu](TuiMenu).
+///
+/// It is a shortcut to an implementation of the `IntoIterator<Item = `[`TuiField`]`<'a, B>>` trait.
 pub trait IntoTuiFields<'a, B: Backend> {
+    /// Converts the collection object into the tui fields.
     fn into_tui_fields(self) -> TuiFields<'a, B>;
 }
 

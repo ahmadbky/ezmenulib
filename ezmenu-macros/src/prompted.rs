@@ -157,9 +157,9 @@ impl PromptKind {
     /// It unwraps the nested type inside the `Option<...>` if so.
     fn call_for(self, ty: &Type, val: Promptable) -> Box<MethodCall<Promptable>> {
         let s = match self {
-            Self::Next => "next",
+            Self::Next => "try_next",
             Self::NextOrDefault => "next_or_default",
-            Self::NextOptional => "next_optional",
+            Self::NextOptional => "try_next_optional",
         };
 
         let ty = match self {

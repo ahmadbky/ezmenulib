@@ -19,7 +19,7 @@ fn one_field() -> Res {
     let output = test_values! {
         values,
         "Ahmad\n",
-        let name: String = values.next(Written::from("your name please"))?,
+        let name: String = values.try_next(Written::from("your name please"))?,
         assert_eq!(name, "Ahmad"),
     }?;
 
@@ -31,9 +31,9 @@ fn retrieve_value() -> Res {
     let output = test_values! {
         menu,
         "Ahmad\n19\n",
-        let name: String = menu.next(Written::from("your name please"))?,
+        let name: String = menu.try_next(Written::from("your name please"))?,
         assert_eq!(name, "Ahmad"),
-        let age: u8 = menu.next(Written::from("how old are you"))?,
+        let age: u8 = menu.try_next(Written::from("how old are you"))?,
         assert_eq!(age, 19),
     }?;
 
@@ -49,7 +49,7 @@ fn loop_ask() -> Res {
     let output = test_values! {
         menu,
         "zmelkfjz\n86\n",
-        let age: u8 = menu.next(Written::from("your age please"))?,
+        let age: u8 = menu.try_next(Written::from("your age please"))?,
         assert_eq!(age, 86),
     }?;
 
@@ -101,8 +101,8 @@ fn incorrect_default_value() {
     let _output = test_values! {
         menu,
         "Ahmad\nno",
-        let _name: MenuResult<String> = menu.next(Written::from("name")),
-        let _age: MenuResult<u8> = menu.next(Written::from("age").default_value("yep")),
+        let _name: MenuResult<String> = menu.try_next(Written::from("name")),
+        let _age: MenuResult<u8> = menu.try_next(Written::from("age").default_value("yep")),
     };
 }
 
@@ -111,7 +111,7 @@ fn ask_until() -> Res {
     let output = test_values! {
         menu,
         "402385\nAhmad\n",
-        let name = menu.next(WrittenUntil::new("Author name", |s: &String| !s.parse::<i32>().is_ok()))?,
+        let name = menu.try_next(WrittenUntil::new("Author name", |s: &String| !s.parse::<i32>().is_ok()))?,
         assert_eq!(name, "Ahmad"),
     }?;
 
@@ -120,7 +120,7 @@ fn ask_until() -> Res {
     let output = test_values! {
         menu,
         "-54\n-34\n0\n23\n",
-        let age = menu.next(WrittenUntil::new("age", |n: &i32| *n > 0))?,
+        let age = menu.try_next(WrittenUntil::new("age", |n: &i32| *n > 0))?,
         assert_eq!(age, 23),
     }?;
 
@@ -134,7 +134,7 @@ fn optional_written() -> Res {
     let output = test_values! {
         menu,
         "38\n",
-        let age: Option<u8> = menu.next_optional(written.clone())?,
+        let age: Option<u8> = menu.try_next_optional(written.clone())?,
         assert_eq!(age, Some(38)),
     }?;
 
@@ -143,7 +143,7 @@ fn optional_written() -> Res {
     let output = test_values! {
         menu,
         "\n",
-        let age: Option<u8> = menu.next_optional(written)?,
+        let age: Option<u8> = menu.try_next_optional(written)?,
         assert_eq!(age, None),
     }?;
 
@@ -162,7 +162,7 @@ fn optional_select() -> Res {
     let output = test_values! {
         menu,
         "2",
-        let amount: Option<u8> = menu.next_optional(sel.clone())?,
+        let amount: Option<u8> = menu.try_next_optional(sel.clone())?,
         assert_eq!(amount, Some(2)),
     }?;
 
@@ -171,7 +171,7 @@ fn optional_select() -> Res {
     let output = test_values! {
         menu,
         "zemklfj\n",
-        let amount: Option<u8> = menu.next_optional(sel)?,
+        let amount: Option<u8> = menu.try_next_optional(sel)?,
         assert_eq!(amount, None),
     }?;
 
@@ -184,7 +184,7 @@ fn select_no_field() {
     let _output = test_values! {
         menu,
         "hello",
-        let _msg: MenuResult = menu.next(Selected::new("hey", [])),
+        let _msg: MenuResult = menu.try_next(Selected::new("hey", [])),
     };
 }
 
@@ -198,7 +198,7 @@ fn select_one_field() -> Res {
     let output = test_values! {
         menu,
         "3\n-4\n340\n1\n",
-        let name = menu.next(Selected::new("select the type", [("mit", Type1::MIT)]))?,
+        let name = menu.try_next(Selected::new("select the type", [("mit", Type1::MIT)]))?,
         assert_eq!(name, Type1::MIT),
     }?;
 
@@ -235,7 +235,7 @@ fn selectable() -> Res {
     let output = test_values! {
         menu,
         "2",
-        let name = menu.next(Type2::select())?,
+        let name = menu.try_next(Type2::select())?,
         assert_eq!(name, Type2::GPL),
     }?;
 

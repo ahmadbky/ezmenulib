@@ -13,12 +13,7 @@
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut project = Values::default();
-//!
-//! # #[cfg(feature = "expr")] {
-//! let calc: MenuNumber = project.written(&Written::from("Calculate"))?;
-//! # }
-//!
-//! let is_sure: MenuBool = project.written(&Written::from("Are you sure?"))?;
+//! let is_sure: MenuBool = project.next(Written::from("Are you sure?"))?;
 //! # Ok(()) }
 //! ```
 

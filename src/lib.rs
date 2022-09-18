@@ -426,11 +426,15 @@ pub enum MenuError {
     Other(Box<dyn Debug>),
 }
 
-#[cfg(test)]
 impl PartialEq for MenuError {
     fn eq(&self, other: &Self) -> bool {
-        // We are simply checking that the variants are the same.
-        std::mem::discriminant(self) == std::mem::discriminant(other)
+        match (self, other) {
+            (Self::IOError(l0), Self::IOError(r0)) => l0.kind() == r0.kind(),
+            (Self::EnvVar(l0, l1), Self::EnvVar(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::Format(l0), Self::Format(r0)) => l0 == r0,
+            (Self::Other(l0), Self::Other(r0)) => format!("{l0:?}") == format!("{r0:?}"),
+            _ => false,
+        }
     }
 }
 

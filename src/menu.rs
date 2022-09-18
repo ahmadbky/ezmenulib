@@ -143,7 +143,14 @@ impl<'a, H> Values<'a, H> {
 /// Associated functions that concerns retrieving values from the user,
 /// thus using the reader and writer stream.
 impl<H: Handle> Values<'_, H> {
-    pub fn next<T, P>(&mut self, p: P) -> MenuResult<T>
+    pub fn next<T, P>(&mut self, p: P) -> T
+    where
+        P: Promptable<T>,
+    {
+        self.try_next(p).expect(PROMPT_ERR_MSG)
+    }
+
+    pub fn try_next<T, P>(&mut self, p: P) -> MenuResult<T>
     where
         P: Promptable<T>,
     {
@@ -158,7 +165,14 @@ impl<H: Handle> Values<'_, H> {
         p.prompt_or_default_with(&mut self.handle, &self.fmt)
     }
 
-    pub fn next_optional<T, P>(&mut self, p: P) -> MenuResult<Option<T>>
+    pub fn next_optional<T, P>(&mut self, p: P) -> Option<T>
+    where
+        P: Promptable<T>,
+    {
+        self.try_next_optional(p).expect(PROMPT_ERR_MSG)
+    }
+
+    pub fn try_next_optional<T, P>(&mut self, p: P) -> MenuResult<Option<T>>
     where
         P: Promptable<T>,
     {

@@ -1,4 +1,4 @@
-//! Module that defines several types about retrieving values from the user.
+//! Module that defines several types for retrieving values from the user.
 
 #[cfg(test)]
 mod tests;
@@ -15,9 +15,27 @@ use std::{
     str::FromStr,
 };
 
+/// The "ezmenulib" version of the [`Display`] trait.
+///
+/// It is used to print out a promptable to the buffer with some context.
+/// The context corresponds to the [format](Format) and if the prompt is set as optional or not,
+/// defined by the `opt` parameter.
 pub trait MenuDisplay {
+    /// Writes the promptable trait to the `W` buffer with the given format.
+    ///
+    /// # Arguments
+    ///
+    /// * f: The buffer to write to.
+    /// * fmt: The prompt format used to print the promptable.
+    /// * opt: Defines if the prompted is optional or not.
     fn fmt_with<W: fmt::Write>(&self, f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result;
 
+    /// Writes the promptable trait to the `W` buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * f: The buffer to write to.
+    /// * opt: Defines if the prompted is optional or not.
     fn fmt<W: fmt::Write>(&self, f: W, opt: bool) -> fmt::Result
     where
         Self: UsesFormat,
@@ -26,15 +44,35 @@ pub trait MenuDisplay {
     }
 }
 
+/// Defines a promptable that contains its own [`Format`].
 pub trait UsesFormat {
+    /// Returns the format used by the promptable.
     fn get_format(&self) -> &Format<'_>;
 }
 
-const PROMPT_ERR_MSG: &str = "error while prompting field";
+pub(crate) const PROMPT_ERR_MSG: &str = "error while prompting field";
 
+/// Represents an object that returns a `T` value entered by the user.
 pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
+    /// The type corresponding to the user text input.
+    ///
+    /// Usually, it corresponds to the `T` type.
+    /// It is mainly declared for the [`Selected<T>`] promptable type, because the middle type
+    /// is the `usize` index, while the final output type correponds to the `T` type pointed at this index.
+    ///
+    /// To convert from this type to the `T` type, the trait uses the
+    /// [`convert`](Promptable::convert) method.
     type Middle;
 
+    /// Prompts the struct once to the user, corresponding to a single try of parsing the entered value.
+    ///
+    /// If the parsing was a success, it returns `Some(output)`, otherwise it returns `None`.
+    ///
+    /// # Arguments
+    ///
+    /// * handle: The handle used to write the promptable to and retrieve the input from.
+    /// * fmt: The format used for the prompt.
+    /// * opt: Defines if the prompt is optional or not.
     fn prompt_once<H: Handle>(
         &self,
         handle: H,
@@ -42,40 +80,99 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
         opt: bool,
     ) -> MenuResult<Option<Self::Middle>>;
 
+    /// Converts the middle type to the output `T` type.
+    ///
+    /// Usually, it immediately returns the `mid` value.
+    /// For the [`Selected<T>`] promptable, it returns the value pointed at the middle index
+    /// (which is an usize).
     fn convert(self, mid: Self::Middle) -> T;
 
+    /// Prompts to the user and returns the value he entered.
+    ///
+    /// It loops the prompt until he enters a correct value.
+    ///
+    /// # Panic
+    ///
+    /// This method panics if an [error](MenuError) occurred.
     fn get(self) -> T {
         self.try_get().expect(PROMPT_ERR_MSG)
     }
 
+    /// Prompts to the user with the given format and returns the value he entered.
+    ///
+    /// It loops the prompt until he enters a correct value.
+    ///
+    /// # Panic
+    ///
+    /// This method panics if an [error](MenuError) occurred.
     fn get_with(self, fmt: &Format<'_>) -> T {
         self.try_get_with(fmt).expect(PROMPT_ERR_MSG)
     }
 
+    /// Prompts to the user and returns the value he entered safely.
+    ///
+    /// It loops the prompt until he enters a correct value.
     fn try_get(self) -> MenuResult<T> {
         self.prompt(MenuHandle::default())
     }
 
+    /// Prompts to the user with the given format and returns the value he entered safely.
+    ///
+    /// It loops the prompt until he enters a correct value.
     fn try_get_with(self, fmt: &Format<'_>) -> MenuResult<T> {
         self.prompt_with(MenuHandle::default(), fmt)
     }
 
+    /// Prompts to the user and returns the value he entered
+    /// in an optional way.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
+    ///
+    /// # Panic
+    ///
+    /// This method panics if an [error](MenuError) occurred.
     fn get_optional(self) -> Option<T> {
         self.try_get_optional().expect(PROMPT_ERR_MSG)
     }
 
+    /// Prompts to the user with the given format and returns the value he entered
+    /// in an optional way.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
+    ///
+    /// # Panic
+    ///
+    /// This method panics if an [error](MenuError) occurred.
     fn get_optional_with(self, fmt: &Format<'_>) -> Option<T> {
         self.try_get_optional_with(fmt).expect(PROMPT_ERR_MSG)
     }
 
+    /// Prompts safely to the user and returns the value he entered
+    /// in an optional way.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
     fn try_get_optional(self) -> MenuResult<Option<T>> {
         self.optional_prompt(MenuHandle::default())
     }
 
+    /// Prompts safely to the user with the given format and returns the value he entered
+    /// in an optional way.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
     fn try_get_optional_with(self, fmt: &Format<'_>) -> MenuResult<Option<T>> {
         self.optional_prompt_with(MenuHandle::default(), fmt)
     }
 
+    /// Prompts to the user and returns the value he entered
+    /// or the default value of the type.
+    ///
+    /// If the entered value is correct, then the function will
+    /// return it, otherwise if the user skipped the prompt or entered an incorrect value
+    /// or if an [error](MenuError) occurred, it will return `Default::default()`.
     fn get_or_default(self) -> T
     where
         T: Default,
@@ -83,6 +180,12 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
         self.prompt_or_default(MenuHandle::default())
     }
 
+    /// Prompts to the user and returns the value he entered
+    /// or the default value of the type.
+    ///
+    /// If the entered value is correct, then the function will
+    /// return it, otherwise if the user skipped the prompt or entered an incorrect value
+    /// or if an [error](MenuError) occurred, it will return `Default::default()`.
     fn get_or_default_with(self, fmt: &Format<'_>) -> T
     where
         T: Default,
@@ -90,6 +193,10 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
         self.prompt_or_default_with(MenuHandle::default(), fmt)
     }
 
+    /// Prompts to the user with the given format and returns the value he entered, by using the
+    /// given handle.
+    ///
+    /// It loops the prompt until he enters a correct value.
     fn prompt_with<H: Handle>(self, mut handle: H, fmt: &Format<'_>) -> MenuResult<T> {
         let fmt = self.get_format().merged(fmt);
         handle.show(&self, &fmt, false)?;
@@ -101,6 +208,10 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
         }
     }
 
+    /// Prompts to the user and returns the value he entered, by using the
+    /// given handle.
+    ///
+    /// It loops the prompt until he enters a correct value.
     fn prompt<H: Handle>(self, mut handle: H) -> MenuResult<T> {
         handle.show(&self, self.get_format(), false)?;
         loop {
@@ -111,6 +222,11 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
         }
     }
 
+    /// Prompts to the user with the given format and returns the value he entered
+    /// in an optional way, by using the given handle.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
     fn optional_prompt_with<H: Handle>(
         self,
         mut handle: H,
@@ -122,12 +238,23 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
             .map(|opt| opt.map(|m| self.convert(m)))
     }
 
+    /// Prompts to the user and returns the value he entered
+    /// in an optional way, by using the given handle.
+    ///
+    /// The optional way means that if the entered value is correct, then the function will
+    /// return `Some(value)`, or `None` if he skipped the prompt or if he entered an incorrect input.
     fn optional_prompt<H: Handle>(self, mut handle: H) -> MenuResult<Option<T>> {
         handle.show(&self, self.get_format(), true)?;
         self.prompt_once(handle, self.get_format(), true)
             .map(|opt| opt.map(|m| self.convert(m)))
     }
 
+    /// Prompts to the user with the given format and returns the value he entered
+    /// or the default value of the type, by using the given handle.
+    ///
+    /// If the entered value is correct, then the function will
+    /// return it, otherwise if the user skipped the prompt or entered an incorrect value
+    /// or if an [error](MenuError) occurred, it will return `Default::default()`.
     fn prompt_or_default_with<H: Handle>(self, handle: H, fmt: &Format<'_>) -> T
     where
         T: Default,
@@ -137,6 +264,12 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
             .unwrap_or_default()
     }
 
+    /// Prompts to the user and returns the value he entered
+    /// or the default value of the type, by using the given handle.
+    ///
+    /// If the entered value is correct, then the function will
+    /// return it, otherwise if the user skipped the prompt or entered an incorrect value
+    /// or if an [error](MenuError) occurred, it will return `Default::default()`.
     fn prompt_or_default<H: Handle>(self, handle: H) -> T
     where
         T: Default,
@@ -190,34 +323,95 @@ macro_rules! impl_fmt {
 }
 
 impl_fmt!(
-    /// Defines the formatting of a value-menu field.
+    /// Defines the prompt formatting specifications.
     ///
-    /// The final text format for a written field looks literally like above:
-    /// ```md
-    /// <prefix><message>[ ({[default: <default>]}, [example: <example>])]{\n}<suffix>
+    /// To understand the role of each format specification, let's say that:
+    ///
+    /// * `[...]` means that the content is displayed if at least one of its elements is provided.
+    /// * `{spec:...}` means that the content is displayed only if the spec `spec` is set at true.
+    /// * `<...>` means a provided string slice (that might be missing, for example <default_value>).
+    /// * Otherwise, everything is provided literally "as-is".
+    ///
+    /// For a written value, the format specifications can be summarized as:
+    ///
+    /// ```text
+    /// <prefix><message>[ ({disp_default:default: <default_value>}, example: <example>)]{line_brk:\n}<suffix>
     /// ```
-    /// For a selectable value, it looks like above:
-    /// ```md
+    ///
+    /// If a default value is provided and the `show_default` format spec has been set to `false`,
+    /// or the prompt is declared as optional, it will show `optional` in instead of `default: ...`.
+    ///
+    /// If the `line_brk` spec is set to `true`, each loop iteration to force him to enter a correct value
+    /// will only show the suffix, because it will be on a separate line. Otherwise,
+    /// if `line_brk` is set to false, it will reprint the whole line at each loop iteration.
+    ///
+    /// For a selected value and the [raw menu](crate::menu::RawMenu), the format specifications follows this pattern:
+    ///
+    /// ```text
     /// <prefix><message>
-    /// X<chip><field message>{[ (default)]}
-    /// X<chip><field message>{[ (default)]}
+    /// <left_sur><X0><right_sur><chip><field0>[{show_default: (default)}]
+    /// <left_sur><X1><right_sur><chip><field1>[{show_default: (default)}]
     /// ...
     /// <suffix>
     /// ```
-    /// where:
-    /// - `<...>` means a given string slice.
-    /// - `{...}` means that the value inside is chose to be displayed or not (boolean).
-    /// - `[...]` means that the value inside is displayed if it is available.
-    prefix: &'a str,
-    /// Sets the prefix of the formatting (`"--> "` by default).
     ///
-    /// It corresponds to the string slice displayed at the beginning of the field message.
+    /// The `line_brk` of the selected/raw menu prompt cannot be turned to `false`.
+    /// If so, it will use the default suffix spec (`">> "`).
+    ///
+    /// Same as the written values, if a default index is given to the selected promptable,
+    /// but with the `show_default` spec set as `false`, or if the prompt is declared as optional,
+    /// then the `" (default)"` next to the default field will be removed and an `" (optional)"`
+    /// label will appear nex to the `<message>`.
+    ///
+    /// # Examples
+    ///
+    /// This written promptable:
+    ///
+    /// ```
+    /// Written::new("hehe")
+    ///     .format(Format {
+    ///         suffix: ": ",
+    ///         line_brk: false,
+    ///         ..Default::default()
+    ///     })
+    ///     .default_value("hoho")
+    ///     .example("huhu")
+    /// ```
+    ///
+    /// will result to this output when prompted:
+    ///
+    /// ```text
+    /// --> hehe (default: hoho, example: huhu):
+    /// ```
+    ///
+    /// This selected promptable:
+    ///
+    /// ```
+    /// // If a specification is provided alone, the Format struct can be constructed from it.
+    /// let fmt = Format::show_default(false);
+    /// Selected::new("hehe", [("hoho", 0), ("huhu", 1), ("haha", 2)])
+    ///     .default(1)
+    ///     .format(fmt)
+    /// ```
+    ///
+    /// will result to this output when prompted:
+    ///
+    /// ```text
+    /// --> hehe (optional)
+    /// [1] - hoho
+    /// [2] - huhu
+    /// [3] - haha
+    /// ```
+    prefix: &'a str,
+    /// Sets the prefix of the format (`"--> "` by default).
+    ///
+    /// It corresponds to the string slice displayed at the beginning of the prompt line.
     left_sur: &'a str,
-    /// Defines the left "surrounding" of the index when displaying a list ("[" by default).
+    /// Defines the left "surrounding" of the index when displaying a list (`"["` by default).
     ///
     /// It is displayed between at the beginning of the list field line, before the index.
     right_sur: &'a str,
-    /// Defines the right "surrounding" of the index when displaying a list ("]" by default).
+    /// Defines the right "surrounding" of the index when displaying a list (`"]"` by default).
     ///
     /// It is displayed between the index and the chip.
     chip: &'a str,
@@ -228,7 +422,10 @@ impl_fmt!(
     /// Defines if it displays the default value or not (`true` by default).
     ///
     /// If an example is provided in the current written field,
-    /// the latter will always be displayed.
+    /// it will always be displayed.
+    ///
+    /// If a promptable has a default value but this spec is set as `false`, the prompt will be
+    /// shown as `"(optional)"`.
     suffix: &'a str,
     /// Sets the prefix of the formatting (`">> "` by default).
     ///
@@ -240,23 +437,33 @@ impl_fmt!(
     /// but only the suffix. Otherwise, because it is on the same line, it will display
     /// the whole message again.
     ///
-    /// For selectable fields, if `new_line` format specification is set as `false`,
+    /// For selected prompt, if this specification is set as `false`,
     /// it will use the default suffix, and always use a line break, for more convenience.
 );
 
-/// Default formatting for a field is `"--> "` as a chip and `">> "` as prefix.
+/// The default format uses:
 ///
-/// This being, the field is printed like above (text between `[` and `]` is optional
-/// depending on default value providing:
-/// ```md
-/// * <message>[ (default: <default>)]:
-/// ```
+/// * `"--> "` as prefix
+/// * `"["` as left surrounding
+/// * `"]"` as right surrounding
+/// * `" - "` as chip
+/// * `true` to show the default value
+/// * `">> "` as suffix
+/// * `true` to put a line break
 impl<'a> Default for Format<'a> {
     fn default() -> Self {
         DEFAULT_FMT
     }
 }
 
+/// Represents a boolean promptable.
+///
+/// The boolean is useful to ask the user a dichotomous question, so he can answer by yes or no.
+/// In fact, this promptable is a shortcut for a written prompt that only accepts a boolean value.
+/// It returns a `bool` when prompted.
+///
+/// The input parsing is flexible and accepts pretty much every form of boolean reply,
+/// such as "yes", "Y", "yep", etc.
 #[derive(Debug, Clone)]
 pub struct Bool<'a> {
     inner: Written<'a>,
@@ -269,31 +476,39 @@ impl<'a> From<&'a str> for Bool<'a> {
 }
 
 impl<'a> Bool<'a> {
+    /// Returns the boolean promptable from its inner written promptable.
     pub fn from_written(inner: Written<'a>) -> Self {
         Self { inner }
     }
 
+    /// Creates the boolean promptable from the message displayed to the user.
     pub fn new(msg: &'a str) -> Self {
         Self::from_written(From::from(msg))
     }
 
+    /// Sets the format of the prompt.
     pub fn format(self, fmt: Format<'a>) -> Self {
         Self::from_written(self.inner.format(fmt))
     }
 
+    /// Sets the custom example of the boolean promptable.
     pub fn example(self, example: &'a str) -> Self {
         Self::from_written(self.inner.example(example))
     }
 
+    /// Sets `"yes/no"` as example for the boolean promptable.
     pub fn with_basic_example(self) -> Self {
         self.example("yes/no")
     }
 
+    /// Sets the default value for the boolean promptable.
     pub fn default_value(self, default: bool) -> Self {
         let val = if default { "yes" } else { "no" };
         Self::from_written(self.inner.default_value(val))
     }
 
+    /// Sets the default value from the given environment variable
+    /// for the boolean promptable.
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
         Ok(Self::from_written(self.inner.default_env(var)?))
     }
@@ -335,15 +550,23 @@ impl Promptable<bool> for Bool<'_> {
     }
 }
 
+/// Represents a list of values of type `T`, collected into an `I` type.
+///
+/// It uses a separator to parse the input string entered by the user.
+/// Thus, it has the same behavior as a written prompt.
+/// It can use a special separator for an environment variable that contains many values.
+///
+/// For example, the type `Separated<Vec<i32>, i32> will return a `Vec<i32>` when prompted.
 #[derive(Debug, Clone)]
 pub struct Separated<'a, I, T> {
     inner: Written<'a>,
     sep: &'a str,
     env_sep: Option<&'a str>,
-    _marker: PhantomData<&'a (I, T)>,
+    _marker: PhantomData<(I, T)>,
 }
 
 impl<'a, I, T> Separated<'a, I, T> {
+    /// Returns the separated promptable from its inner written promptable.
     pub fn from_written(inner: Written<'a>, sep: &'a str) -> Self {
         Self {
             inner,
@@ -353,30 +576,46 @@ impl<'a, I, T> Separated<'a, I, T> {
         }
     }
 
+    /// Creates the separated promptable from the message displayed to the user,
+    /// and the separator for parsing his input.
     pub fn new(msg: &'a str, sep: &'a str) -> Self {
         Self::from_written(From::from(msg), sep)
     }
 
+    /// Sets the format of the prompt.
     pub fn format(self, fmt: Format<'a>) -> Self {
         let inner = self.inner.format(fmt);
         Self { inner, ..self }
     }
 
+    /// Sets the custom example of the separated promptable.
     pub fn example(self, example: &'a str) -> Self {
         let inner = self.inner.example(example);
         Self { inner, ..self }
     }
 
+    /// Sets the default value for the separated promptable.
     pub fn default_value(self, default: &'a str) -> Self {
         let inner = self.inner.default_value(default);
         Self { inner, ..self }
     }
 
+    /// Sets the default value for the separated promptable from the
+    /// given environment variable.
+    ///
+    /// # Note
+    ///
+    /// It will parse its content to collect the separated values, by using
+    /// the same separator of the user input. If you want to use a special separator
+    /// for the environment variable, consider using the
+    /// [`default_env_with`](Separated::default_env_with) method.
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
         let inner = self.inner.default_env(var)?;
         Ok(Self { inner, ..self })
     }
 
+    /// Sets the default value for the separated promptable from the
+    /// environment variable, with its custom separator.
     pub fn default_env_with(mut self, var: &'a str, sep: &'a str) -> MenuResult<Self> {
         self.env_sep = Some(sep);
         self.default_env(var)
@@ -441,21 +680,55 @@ where
     }
 }
 
+/// Corresponds to a promptable that checks that the given `F` predicate is applied to the
+/// separated prompt.
+///
+/// The function must take a reference to the collection type and return a [`bool`].
+/// The collection type correspond to the `I` generic type, that must implement [`FromIterator`] trait.
+///
+/// # Example
+///
+/// ```no_run
+/// let date: Vec<i32> =
+///     Until::from_promptable(Separated::new("enter a date", "/"), |v| v.len() == 3).get();
+/// ```
 pub type SeparatedUntil<'a, I, T, F> = Until<Separated<'a, I, T>, F>;
 
+/// Represents the `P` promptable, filtered by the `F` predicate.
+///
+/// This promptable has many derived type definitions, such as [`SeparatedUntil`],
+/// [`WrittenUntil`], etc.
+///
+/// At each request from the user, it maps the output value to the `F` function to keep or not
+/// the input value.
+///
+/// To retrieve values from the user, the `P` parameter must implement the [`Promptable`] type,
+/// and the `F` parameter must correspond to the `fn(&T)` function signature, where
+/// `T` is the [middle output value type](Promptable::Middle) of the `P` implementation
+/// (usually corresponding directly to the output value type).
 #[derive(Debug, Clone)]
 pub struct Until<P, F> {
     inner: P,
     til: F,
 }
 
-impl<'a, P: From<&'a str> + 'a, F> Until<P, F> {
+impl<'a, P: From<&'a str>, F> Until<P, F> {
+    /// Creates the promptable from the message displayed to the user,
+    /// and the predicate used to filter the output value.
+    ///
+    /// This function can be used only if the promptable implements [`From<&str>`], such as
+    /// [`Written`] or [`Password`].
     pub fn new(msg: &'a str, til: F) -> Self {
         Self::from_promptable(From::from(msg), til)
     }
 }
 
 impl<P, F> Until<P, F> {
+    /// Creates the promptable from its inner promptable and the predicate used to filter
+    /// the output value.
+    ///
+    /// If the inner promptable type implements [`From<&str>`], such as [`Written`], or [`Password`],
+    /// consider using the [`Until::new`](Until::new) function.
     pub fn from_promptable(inner: P, til: F) -> Self {
         Self { inner, til }
     }
@@ -502,11 +775,17 @@ where
     }
 }
 
+/// Represents a password prompt.
+///
+/// The password data is stored as a [`String`].
+///
+/// The prompt consists of hiding the text when the user enters his password.
 #[cfg(feature = "password")]
 #[cfg_attr(nightly, doc(cfg(feature = "password")))]
 #[derive(Debug)]
 pub struct Password<'a> {
     msg: &'a str,
+    /// The format used by the prompt.
     pub fmt: Format<'a>,
 }
 
@@ -535,6 +814,7 @@ impl<'a> Password<'a> {
         Ok(())
     }
 
+    /// Returns the password promptable from the message displayed to the user.
     pub fn new(msg: &'a str) -> Self {
         Self {
             msg,
@@ -542,6 +822,7 @@ impl<'a> Password<'a> {
         }
     }
 
+    /// Sets the format of the prompt.
     pub fn format(self, fmt: Format<'a>) -> Self {
         Self { fmt, ..self }
     }
@@ -610,37 +891,34 @@ impl Promptable<String> for Password<'_> {
     }
 }
 
+/// Correponds to a promptable that checks that the given `F` predicate is applied to the
+/// password prompt.
+///
+/// The function must take a reference to a [`String`], or an `&`[`str`], and return a [`bool`].
+///
+/// # Example
+///
+/// ```no_run
+/// let date: String = PasswordUntil::new("enter your password", |s| s.len() >= 5).get();
+/// ```
 #[cfg(feature = "password")]
 #[cfg_attr(nightly, doc(cfg(feature = "password")))]
 pub type PasswordUntil<'a, F> = Until<Password<'a>, F>;
 
-/// Defines the behavior for a written value provided by the user.
-///
-/// Like the [selected](Selected) values, it contains its own [format](Format),
-/// and it can be inherited, saving the custom format specifications.
+/// Represents a written prompt.
 ///
 /// It displays the message, with a given example and default value if it is provided
 /// (see [`Written::example`] or [`Written::default_value`] functions).
 ///
-/// It provides functions to define how to retrieve the value from the user.
-/// You have to provide a mutable reference to a [`MenuStream`] to retrieve the value.
-///
 /// # Example
 ///
-/// For a make-license CLI program for example, you can use it like below:
-///
 /// ```no_run
-/// use ezmenulib::prelude::*;
-///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let author: Vec<String> = Written::from("Give the authors of the license")
-///     .many_values(&mut MenuStream::default(), ", ")?;
-/// # Ok(()) }
+/// let author: String = Written::new("What is your name?").get();
 /// ```
 #[derive(Debug, Clone)]
 pub struct Written<'a> {
     msg: &'a str,
-    /// The format of the written field value.
+    /// The format used by the prompt.
     pub fmt: Format<'a>,
     example: Option<&'a str>,
     default: Option<Cow<'a, str>>,
@@ -679,11 +957,11 @@ impl<T: FromStr> Promptable<T> for Written<'_> {
         }
 
         if fmt.line_brk {
-            // Write only suffix on next line
+            // Writes only suffix on next line
             handle.write_all(fmt.suffix.as_bytes())?;
             handle.flush()?;
         } else {
-            // Write the whole prompt (message + suffix)
+            // Writes the whole prompt (message + suffix)
             let mut s = String::new();
             self.fmt_with_(&mut s, fmt, opt)?;
             handle.write_all(s.as_bytes())?;
@@ -720,7 +998,6 @@ impl Display for Written<'_> {
     }
 }
 
-/// Constructor methods defining how the field behaves
 impl<'a> Written<'a> {
     fn fmt_with_<W: fmt::Write>(&self, mut f: W, fmt: &Format<'_>, opt: bool) -> fmt::Result {
         f.write_str(fmt.prefix)?;
@@ -758,6 +1035,7 @@ impl<'a> Written<'a> {
         Ok(())
     }
 
+    /// Returns the written promptable from the message displayed to the user.
     pub fn new(msg: &'a str) -> Self {
         Self {
             msg,
@@ -767,7 +1045,7 @@ impl<'a> Written<'a> {
         }
     }
 
-    /// Gives a custom formatting for the written field.
+    /// Sets the format of the prompt.
     ///
     /// # Example
     ///
@@ -779,10 +1057,10 @@ impl<'a> Written<'a> {
         Self { fmt, ..self }
     }
 
-    /// Gives the default value accepted by the field.
+    /// Sets the default value for the written promptable.
     ///
-    /// If the value type is incorrect, the [`Written::prompt`] function and its variations
-    /// will panic at runtime.
+    /// If the string content is incorrect, the related call to the [`Promptable`] associated
+    /// functions will panic at runtime.
     ///
     /// The default value and the example (see the [`example`](Written::example) method documentation)
     /// will be displayed inside parenthesis according to its formatting (see [`Format`]
@@ -792,25 +1070,20 @@ impl<'a> Written<'a> {
         Self { default, ..self }
     }
 
-    /// Gives the default value of the field, passed by an environment variable.
+    /// Sets the default value for the written promptable from the
+    /// given environment variable.
     ///
     /// If the provided environment variable is incorrect, it will return an error
     /// (See [`MenuError::EnvVar`] variant).
     ///
-    /// If the value type of the variable is incorrect, the [`Written::prompt`] function
-    /// and its variations will panic at runtime.
+    /// If the string content of the variable is incorrect, the related call to
+    /// the [`Promptable`] associated functions will panic at runtime.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use ezmenulib::prelude::*;
-    /// # use std::error::Error;
-    /// # fn main() -> Result<(), Box<dyn Error>> {
-    /// let user: String = Written::from("What is your name?")
-    ///     .default_env("USERNAME")?
-    ///     .prompt(&mut MenuStream::default())?;
-    /// # Ok(())
-    /// # }
+    /// let user: String = Written::from("What is your name?").default_env("USERNAME").get();
     /// ```
     pub fn default_env(self, var: &'a str) -> MenuResult<Self> {
         let default = env::var(var).map_err(|e| MenuError::EnvVar(var.to_owned(), e))?;
@@ -818,34 +1091,43 @@ impl<'a> Written<'a> {
         Ok(Self { default, ..self })
     }
 
-    /// Gives an example of correct value for the field.
+    /// Sets the custom example of the written promptable.
     ///
     /// Obviously, it is better to give a correct value for the user as example,
     /// but if the value is incorrect, it will only mislead the user,
     /// and unlike the default value providing, the program will not panic at runtime
     /// to emphasize the problem.
     ///
-    /// The example will be shown inside parenthesis according to its formatting
-    /// (see [`Format`] for more information).
+    /// The example will be shown inside parenthesis according to its [format](Format).
     pub fn example(self, example: &'a str) -> Self {
         let example = Some(example);
         Self { example, ..self }
     }
 }
 
+/// Corresponds to a promptable that checks that the given `F` predicate is applied
+/// to the written prompt.
+///
+/// The function must take a reference to the output type and return a [`bool`].
+///
+/// # Example
+///
+/// ```no_run
+/// let name: u8 = WrittenUntil::new("How old are you?", |i| *i >= 10);
+/// ```
 pub type WrittenUntil<'a, F> = Until<Written<'a>, F>;
 
-/// Used to define a selectable type.
+/// Defines a selectable type.
 ///
-/// It provides the fields, corresponding to a message and the return value.
-/// It is used by the [`Selected`] struct with its `From<&str>` implementation.
-///
+/// It returns the associated selected prompt of the type.
 /// The `N` const generic parameter represents the amount of available selectable values.
+///
+/// Usually, consider using the `derive(`[`Prompted`]`)` macro to implement this trait on your type.
 ///
 /// # Example
 ///
 /// ```
-/// # use ezmenulib::field::Selectable;
+/// # use ezmenulib::prelude::*;
 /// enum Type {
 ///     MIT,
 ///     GPL,
@@ -853,65 +1135,81 @@ pub type WrittenUntil<'a, F> = Until<Written<'a>, F>;
 /// }
 ///
 /// impl Selectable<3> for Type {
-///     fn values() -> [(&'static str, Self); 3] {
-///         [
+///     fn select() -> Selected<'static, Self, 3> {
+///         Selected::new("License type", [
 ///             ("MIT", Self::MIT),
 ///             ("GPL", Self::GPL),
 ///             ("BSD", Self::BSD),
-///         ]
+///         ])
 ///     }
 /// }
+///
+/// #[derive(Prompted)]
+/// enum Amount {
+///     One,
+///     #[prompted(default)]
+///     Two,
+///     Three,
+///     #[prompted(("Four", 4), ("Five", 5))]
+///     More(u8),
+/// }
+///
+/// let mut values = Values::default();
+/// let ty = values.next(Type::select());
+/// let amount = values.next(Amount::select());
 /// ```
+///
+/// This sample code will result to this output:
+///
+/// ```text
+/// --> License type
+/// [1] - MIT
+/// [2] - GPL
+/// [3] - BSD
+/// >> 2
+/// --> Amount
+/// [1] - One
+/// [2] - Two (default)
+/// [3] - Three
+/// [4] - Four
+/// [5] - Five
+/// >> 4
+/// ```
+///
+/// Then, the variable `ty` will be bound to `Type::GPL`, and `amount` to `Amount::More(4)`.
 pub trait Selectable<const N: usize>: Sized {
     /// Provides the fields, corresponding to a message and the return value.
     fn select() -> Selected<'static, Self, N>;
 }
 
-/// Defines the behavior for a selected value provided by the user.
+/// Represents a selected prompt.
 ///
-/// Like the [written](Written) values, it contains its own [format](Format),
-/// and it can be inherited, saving the custom format specifications.
+/// It contains the selectable fields, with their associated `T` values.
 ///
 /// It displays the message with the available fields to select, with the
 /// default field marked as "(default)" if it is provided (see [`Selected::default`] function).
-/// You have to provide a mutable reference to a [`MenuStream`] to retrieve the selected value.
 ///
-/// You can use beside it the [`Selectable`] trait to list the available values to select.
-///
-/// The `N` const generic parameter represents the amount of available selectable values.
+/// The `N` const generic parameter correponds to the amount of selectable values.
 ///
 /// # Example
 ///
-/// For a make-license CLI program for example, you can use it like below:
-///
 /// ```no_run
-/// use ezmenulib::prelude::*;
+/// # use ezmenulib::prelude::*;
 ///
-/// enum Type {
-///     MIT,
-///     GPL,
-///     BSD,
-/// }
-///
-/// impl Selectable<3> for Type {
-///     fn values() -> [(&'static str, Self); 3] {
-///         use Type::*;
-///         [
-///             ("MIT", MIT),
-///             ("GPL", GPL),
-///             ("BSD", BSD),
-///         ]
-///     }
-/// }
-///
-/// let s: Type = Selected::from("Select the license type")
-///     .select(&mut MenuStream::default())
-///     .unwrap();
+/// let adult: bool = Selected::new(
+///     "how old are you?",
+///     [
+///         ("more than 18", true),
+///         ("less than 18", false),
+///     ],
+/// ).get();
 /// ```
-// Clone is implemented on it because it is moved once the user selected the value.
+///
+/// For more complex types, consider using the [`Selectable`] trait or the
+/// `derive(`[`Prompted`]`)` macro.
 #[derive(Debug, Clone)]
 pub struct Selected<'a, T, const N: usize> {
-    /// The format used by the selected field value.
+    /// The format used by the prompt.
     pub fmt: Format<'a>,
     msg: &'a str,
     fields: [(&'a str, T); N],
@@ -979,13 +1277,10 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         }
     }
 
-    /// Returns the Selected wrapper using the given message and
-    /// selectable fields.
+    /// Returns the selected prompt from the message displayed to the user
+    /// and its the selectable fields.
     ///
     /// # Note
-    ///
-    /// If `T` implements `Selectable`, you may use the `From<&str>` implementation
-    /// for `Selected`, to not write again the available selectable fields.
     ///
     /// # Panic
     ///
@@ -996,25 +1291,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         Self::new_(msg, fields, None)
     }
 
-    /// Gives a custom formatting for the selected value.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use ezmenulib::field::{Selected, Format, Selectable};
-    /// enum Type {
-    ///     MIT,
-    ///     GPL,
-    ///     BSD,
-    /// }
-    ///
-    /// let w = Selected::new("Select the license type", [
-    ///     ("MIT", Type::MIT),
-    ///     ("GPL", Type::GPL),
-    ///     ("BSD", Type::BSD),
-    /// ])
-    /// .format(Format::prefix("==> "));
-    /// ```
+    /// Sets the format of the prompt.
     pub fn format(mut self, fmt: Format<'a>) -> Self {
         self.fmt = fmt;
         // Saves the default suffix if asked to break the line,
@@ -1026,7 +1303,7 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
         self
     }
 
-    /// Defines the default value among the the selectable values, by its index.
+    /// Sets the default value for the selected prompt, from its index.
     ///
     /// # Note
     ///
@@ -1054,34 +1331,49 @@ pub type Field<'a, H = MenuHandle> = (&'a str, Kind<'a, H>);
 
 /// The menu fields.
 ///
-/// It simply corresponds to a slice of fields.
+/// It simply corresponds to a vector of fields.
 /// It is used for more convenience in the library.
+///
+/// Actually, the library uses the [`IntoFields`] trait to accept more collection types,
+/// such as arrays.
 pub type Fields<'a, H = MenuHandle> = Vec<Field<'a, H>>;
 
 /// Corresponds to the function mapped to a field.
 ///
 /// This function is called right after the user selected the corresponding field.
-///
 /// See [`Kind::Map`] for more information.
-// pub type Binding<R = In, W = Out> = fn(&mut MenuStream<R, W>) -> MenuResult;
 pub type Callback<H = MenuHandle> = Box<dyn FnMut(&mut H) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
+/// 
+/// When constructing a [raw menu](RawMenu), you need to bind to each field its behavior.
+/// In general, you don't have to call directly the variants. Consider using the
+/// [corresponding functions](kinds), for more convenience and syntax sugar.
 pub enum Kind<'a, H = MenuHandle> {
-    /// Maps a function to call right after the user selects the field.
+    /// Binds a function to call right after the user selects the field.
     Map(Callback<H>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
+    /// 
+    /// The sub-menu will take the field message of the parent menu as title.
     Parent(Fields<'a, H>),
     /// Allows the user to go back to the given depth level from the current running prompt.
     ///
     /// The depth level of the current running prompt is at `0`, meaning it will stay at
-    /// the current level if the index is at `0` when the user will select the field.
+    /// the current level if the index is at `0` when the user selects the field.
+    /// 
+    /// If the index is at 1, it will return to the previous parent menu, and so on.
     Back(usize),
-    /// Closes all the nested menus to the top when the user selects the field.
+    /// Closes all the nested menus to the top when the user selects the field, and finishes
+    /// the execution of the menu.
     Quit,
 }
 
+/// Utility trait for converting a collection object into fields
+/// for a [raw menu](crate::menu::RawMenu).
+///
+/// It is a shortcut to an implementation of the `IntoIterator<Item = `[`Field`]`<'a, H>>` trait.
 pub trait IntoFields<'a, H = MenuHandle> {
+    /// Converts the collection object into the fields.
     fn into_fields(self) -> Fields<'a, H>;
 }
 
@@ -1106,9 +1398,36 @@ impl<'a, H> fmt::Debug for Kind<'a, H> {
     }
 }
 
+/// Small module used to gather the utility functions to get the desired field kind.
+///
+/// The functions are useful to generate menus without the `derive(Menu)` macro.
+/// To distinguish them from the [tui fields kinds](crate::tui), they are placed
+/// on a separate module. To use them, you need to import the prelude, and the kinds:
+///
+/// ```
+/// use ezmenulib::{prelude::*, field::kinds::*};
+/// ```
+///
+/// The function calls are shortcuts to the [`Kind`] variants call, for syntactic sugar.
 pub mod kinds {
     use super::*;
 
+    /// Utility macro for calling a mapped function for a [raw menu](crate::menu::RawMenu)
+    /// by filling the corresponding parameters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// #[bound]
+    /// fn play_with(name: &str) {
+    ///     println!("Playing with {name}");
+    /// }
+    ///
+    /// let game = RawMenu::from([
+    ///     ("Play with Ahmad", mapped!(play_with, "Ahmad")),
+    ///     ("Play with Jacques", mapped!(play_with, "Jacques")),
+    /// ]);
+    /// ```
     #[macro_export]
     macro_rules! mapped {
         ($f:expr, $($s:expr),* $(,)?) => {{
@@ -1116,6 +1435,12 @@ pub mod kinds {
         }};
     }
 
+    /// Returns the [`Kind::Map`] variant.
+    ///
+    /// The mapped function must either return the unit `()` type, or a `Result<T, E>`
+    /// where `E` can be converted into a [`MenuError`].
+    ///
+    /// It must take a single parameter. For other usage, consider using the [`mapped!`] macro.
     pub fn map<'a, F, R, H>(mut f: F) -> Kind<'a, H>
     where
         F: FnMut(&mut H) -> R + 'static,
@@ -1124,7 +1449,7 @@ pub mod kinds {
         Kind::Map(Box::new(move |d| f(d).into_result()))
     }
 
-    #[inline(always)]
+    /// Returns the [`Kind::Parent`] variant by converting the input collection into fields.
     pub fn parent<'a, I, H>(fields: I) -> Kind<'a, H>
     where
         I: IntoFields<'a, H>,
@@ -1132,11 +1457,13 @@ pub mod kinds {
         Kind::Parent(fields.into_fields())
     }
 
+    /// Returns the [`Kind::Back`] variant.
     #[inline(always)]
     pub fn back<'a, H>(i: usize) -> Kind<'a, H> {
         Kind::Back(i)
     }
 
+    /// Returns the [`Kind::Quit`] variant.
     #[inline(always)]
     pub fn quit<'a, H>() -> Kind<'a, H> {
         Kind::Quit

@@ -456,8 +456,10 @@ pub(crate) fn build_select(
     wrap_in_const(quote! {
         #[automatically_derived]
         impl #root::menu::Prompted for #name {
-            fn from_values<__H: #root::menu::Handle>(__vals: &mut #root::menu::Values<__H>) -> #root::MenuResult<Self> {
-                __vals.next(#root::field::Selectable::select())
+            fn from_values<__H: #root::menu::Handle>(
+                __vals: &mut #root::menu::Values<__H>
+            ) -> #root::MenuResult<Self> {
+                __vals.try_next(#root::field::Selectable::select())
             }
         }
 
