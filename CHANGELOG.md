@@ -63,6 +63,7 @@
 
 * New derive macros in line with their trait: `ezmenulib::[menu/tui]::Menu` and `ezmenulib::menu::Prompted`.
 * New attribute macro: `bound`.
+* New function-like macros for menus: `mapped!` and `tui_mapped!`.
 
 ### Other changes
 
