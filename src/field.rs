@@ -1,10 +1,115 @@
-//! Module that defines several types for retrieving values from the user.
+//! Module that defines several types for retrieving values from the user and interact with him.
+//!
+//! It contains the main aspects of the library:
+//!
+//! * The [`Promptable`] trait, to characterize the behavior of a prompt.
+//! * The [`Format`] struct, to customize the format of a prompt.
+//! * The [raw menu fields](Fields), to describe the type of a menu field.
+//!
+//! # The `Promptable` trait
+//!
+//! The `Promptable` trait serves to get an input value from the user, in any manner. The main way
+//! is to loop the prompt to the user until he enters a correct value, which corresponds to the
+//! [`Promptable::get`] method.
+//!
+//! You can also choose to prompt the user for an optional value,
+//! with the [`Promptable::get_optional`] method. The latter returns an `Option<T>` where
+//! `T` correponds to the output value. Thus, it will not loop the prompt to the user, but only
+//! display to him once. If the user enters an incorrect input, or skips the prompt, it will return
+//! `None`. Otherwise, it will return `Some(value)`.
+//!
+//! For syntactic sugar, there also exists the [`Promptable::get_or_default`] method,
+//! which has the same behavior as the `get_optional`, but calls for the [`Default`]`::default`
+//! method on the output type if `None` is returned.
+//!
+//! ```no_run
+//! use ezmenulib::prelude::*;
+//! let age: u8 = Written::new("how old are you?").get();
+//! let age: Option<u8> = Written::new("how old are you?").get_optional();
+//! // assuming the user entered a correct value:
+//! assert!(age.is_some());
+//! let age: u8 = Written::new("how old are you?").get_or_default();
+//! // assuming the user hasn't entered a correct value or skipped the prompt:
+//! assert_eq!(age, 0);
+//! ```
+//!
+//! ## The promptable types
+//!
+//! There exists many promptable types that implement this trait. The most common one is [`Written`],
+//! which correponds to a value written by the user. There is also the [`Selected`] one, which
+//! asks the user to enter an index, to select a field among the provided selectable fields.
+//!
+//! Each type has its own behavior, defined by its name. You can retrieve [passwords](Password),
+//! [boolean values](Bool), or a [list of values](Separated) from the user input.
+//!
+//! ## The `Values` struct
+//!
+//! The `Promptable` trait is also used by the [`Values`] struct. It is a simple container of a
+//! [format](Format) and a [handle](Handle), and shares them to the promptable type that is
+//! provided as argument to its associated functions. This helps to use a global format and handle
+//! accross all the prompts.
+//!
+//! ```no_run
+//! let mut vals = Values::from_format(Format::suffix("> "));
+//! let age: u8 = vals.next(Written::new("how old are you?"));
+//! ```
+//!
+//! # Customize the format of a prompt
+//!
+//! Every method of the `Promptable` trait is combined with its sibling, which accepts a provided
+//! [format](Format) as argument to customize the prompt. For example, to provide a custom format
+//! when calling the [`Promptable::prompt`] method, you may use the
+//! [`prompt_with`](Promptable::prompt_with) method:
+//!
+//! ```no_run
+//! let custom = Bool::new("should we use a custom format for the next prompt?").get();
+//! let w = Written::new("how old are you?").format(Format::suffix("> "));
+//! let age: u8 = if custom {
+//!     w.get_with(&Format::prefix("-> "))
+//! } else {
+//!     w.get()
+//! };
+//! ```
+//!
+//! When calling the `*_with` methods, the provided format will be merged into the format used by
+//! the promptable type, by saving its custom format specifications. So here, the suffix of the
+//! [`Written`] prompt will be saved as `"> "`, but the prefix will de facto be `"-> "`:
+//!
+//! ```text
+//! --> should we use a custom format for the next prompt?
+//! >> yes
+//! -> how old are you?
+//! >
+//! ```
+//!
+//! # Raw menu fields
+//!
+//! When constructing a [raw menu](RawMnu), you provide the fields of the menu. These fields
+//! will be selected by the user, and thus will call predefined instructions bound on it.
+//!
+//! These instructions correponds to the [kind](Kind) of a [raw menu field](Field). Each kind has
+//! its own behavior, to dynamize the menu. It allows you to make a field defined as a parent field
+//! of a sub-menu, or to make it quit the menu.
+//!
+//! The most common kind is the [`Kind::Map`] variant. It is defined to provide a function or closure
+//! to call right after the user selected the bound field. The function must take a
+//! `<H> fn(&mut H) -> R` where `R` is the unit type `()`, or a [`Result<T, E>`] type where `E`
+//! can be converted into a [`MenuError`]. You can use the [`bound`] attribute macro on your function
+//! to transform its signature into an usable one for a raw menu.
+//!
+//! ```
+//! use ezmenulib::prelude::*;
+//!
+//! #[bound]
+//! fn greetings() {
+//!     println!("hi!");
+//! }
+//!
+//! let just_hi = RawMenu::from([("hello", kinds::map(greetings))]).run_once();
+//! ```
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(feature = "password")]
-use rpassword::read_password;
 
 use crate::{customs::MenuBool, menu::Handle, prelude::*, utils::*, DEFAULT_FMT};
 use std::{
@@ -70,9 +175,9 @@ pub trait Promptable<T>: Sized + MenuDisplay + UsesFormat {
     ///
     /// # Arguments
     ///
-    /// * handle: The handle used to write the promptable to and retrieve the input from.
-    /// * fmt: The format used for the prompt.
-    /// * opt: Defines if the prompt is optional or not.
+    /// * `handle`: The [handle](Handle) used to write the promptable to and retrieve the input from.
+    /// * `fmt`: The format used for the prompt.
+    /// * `opt`: Defines if the prompt is optional or not.
     fn prompt_once<H: Handle>(
         &self,
         handle: H,
@@ -556,7 +661,7 @@ impl Promptable<bool> for Bool<'_> {
 /// Thus, it has the same behavior as a written prompt.
 /// It can use a special separator for an environment variable that contains many values.
 ///
-/// For example, the type `Separated<Vec<i32>, i32> will return a `Vec<i32>` when prompted.
+/// For example, the type `Separated<Vec<i32>, i32>` will return a `Vec<i32>` when prompted.
 #[derive(Debug, Clone)]
 pub struct Separated<'a, I, T> {
     inner: Written<'a>,
@@ -878,7 +983,7 @@ impl Promptable<String> for Password<'_> {
             handle.flush()?;
         }
 
-        let s = read_password()?;
+        let s = rpassword::read_password()?;
         if s.is_empty() {
             return Ok(None);
         }
@@ -1187,7 +1292,7 @@ pub trait Selectable<const N: usize>: Sized {
 /// It contains the selectable fields, with their associated `T` values.
 ///
 /// It displays the message with the available fields to select, with the
-/// default field marked as "(default)" if it is provided (see [`Selected::default`] function).
+/// default field marked as `(default)` if it is provided (see [`Selected::default`] function).
 ///
 /// The `N` const generic parameter correponds to the amount of selectable values.
 ///
@@ -1195,7 +1300,6 @@ pub trait Selectable<const N: usize>: Sized {
 ///
 /// ```no_run
 /// # use ezmenulib::prelude::*;
-///
 /// let adult: bool = Selected::new(
 ///     "how old are you?",
 ///     [
@@ -1280,8 +1384,6 @@ impl<'a, T, const N: usize> Selected<'a, T, N> {
     /// Returns the selected prompt from the message displayed to the user
     /// and its the selectable fields.
     ///
-    /// # Note
-    ///
     /// # Panic
     ///
     /// If the fields array is empty, this function will panic. Indeed,
@@ -1345,22 +1447,26 @@ pub type Fields<'a, H = MenuHandle> = Vec<Field<'a, H>>;
 pub type Callback<H = MenuHandle> = Box<dyn FnMut(&mut H) -> MenuResult>;
 
 /// Defines the behavior of a menu [field](Field).
-/// 
+///
 /// When constructing a [raw menu](RawMenu), you need to bind to each field its behavior.
 /// In general, you don't have to call directly the variants. Consider using the
 /// [corresponding functions](kinds), for more convenience and syntax sugar.
 pub enum Kind<'a, H = MenuHandle> {
     /// Binds a function to call right after the user selects the field.
+    ///
+    /// See [`kinds::map`] for more documentation.
     Map(Callback<H>),
     /// Defines the current field as a parent menu of a sub-menu defined by the given fields.
-    /// 
+    ///
     /// The sub-menu will take the field message of the parent menu as title.
+    ///
+    /// See [`kinds::parent`] for more documentation.
     Parent(Fields<'a, H>),
     /// Allows the user to go back to the given depth level from the current running prompt.
     ///
     /// The depth level of the current running prompt is at `0`, meaning it will stay at
     /// the current level if the index is at `0` when the user selects the field.
-    /// 
+    ///
     /// If the index is at 1, it will return to the previous parent menu, and so on.
     Back(usize),
     /// Closes all the nested menus to the top when the user selects the field, and finishes
@@ -1398,7 +1504,7 @@ impl<'a, H> fmt::Debug for Kind<'a, H> {
     }
 }
 
-/// Small module used to gather the utility functions to get the desired field kind.
+/// Small module used to gather the utility functions to get the desired field kind for a [raw menu](RawMenu).
 ///
 /// The functions are useful to generate menus without the `derive(Menu)` macro.
 /// To distinguish them from the [tui fields kinds](crate::tui), they are placed
