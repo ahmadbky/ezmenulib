@@ -10,7 +10,7 @@ This repository contains the source code of the ezmenulib crate. This crate prov
 
 This crate is useful to put beside [clap](https://docs.rs/clap/) crate, to manage the case where the user hasn't provided any command argument.
 
-For now, this crate only helps to draw menus in the console. It allows you to not spend time on printing from scratch any form of prompt from the user. If you're making a console application, you *must* use this crate.
+For now, this crate only helps to draw menus in the console. It allows you to not spend time on printing from scratch any form of prompt to the user. If you're making a console application, you *must* use this crate.
 
 The built menus are useful for a game mode selection for example. It allows you to map functions when the user selects the corresponding field. It also let you mutate your code depending on the user input.
 
